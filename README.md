@@ -69,6 +69,7 @@ The temperature parameter controls a spectrum between two reasoning modes: at $T
 
 #### **SVD/Tucker decomposition:** 
 Lambert uses a standard compression technique to represent entities in a lower-dimensional space. This technique was designed for arithmetic algebra and is not a perfect fit for logical algebra — a known limitation left for future work. 
+
 SVD's optimality guarantee (minimum Frobenius-norm reconstruction error) does not transfer, as the Frobenius norm is not the natural metric for max-min algebra. Tropical analogues of matrix decomposition exist but have fundamentally different properties [(Develin, Santos & Sturmfels, 2005)](https://arxiv.org/abs/math/0312114); a proper lattice-based factorization would be more principled and is left as future work.
 
 These limitations have been reviewed and are considered acceptable for the current stage of the project.
