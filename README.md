@@ -19,7 +19,7 @@ For each output pair (x, z), this finds the best intermediate "witness" y by com
 
 This equation can be expressed using different algebraic structures called semirings. We use the logical semiring — Disjunction (∨ = max) and Conjunction (∧ = min) — rather than the standard arithmetic semiring. This makes the model's internal logic semantically transparent and directly interpretable.
 
-This also eliminates a technical overhead present in Domingos's original formulation. Standard Tensor Logic operates on $\{0, 1\}$ and must apply a Heaviside step function after each join to convert continuous sums back to Boolean values: $A[x,z] = H\!\left(\sum_y S[x,y] \cdot P[y,z]\right)$. In UA, using $\top/\bot = \pm\infty$ with min/max, Boolean operations are closed by construction — the max or min of values from $\{-\infty, +\infty\}$ is always in $\{-\infty, +\infty\}$. No thresholding is needed. This means making the model "soft" (continuous, learnable) is not a separate mode switch; it is the same framework with a temperature parameter controlling how sharp the min/max operations are.
+This also eliminates a technical overhead present in Domingos's original formulation. Standard Tensor Logic operates on $\{0, 1\}$ and must apply a Heaviside step function after each join to convert continuous sums back to Boolean values: $A[x,z] = H\left(\sum_y S[x,y] \cdot P[y,z]\right)$. In UA, using $\top/\bot = \pm\infty$ with min/max, Boolean operations are closed by construction — the max or min of values from $\{-\infty, +\infty\}$ is always in $\{-\infty, +\infty\}$. No thresholding is needed. This means making the model "soft" (continuous, learnable) is not a separate mode switch; it is the same framework with a temperature parameter controlling how sharp the min/max operations are.
 
 ### Mathematical Foundations
 
@@ -31,7 +31,7 @@ The underlying algebraic structure $([0,1], \max, \min)$ is a valid distributive
 
 **Smoothing.** SmoothMin and SmoothMax are implemented via LogSumExp, a well-established smoothing technique (Nesterov, 2005). The approximation error is controllable:
 
-$$|\text{SmoothMax}(\mathbf{x}) - \max(\mathbf{x})| \leq \frac{\log n}{\alpha}$$
+$$\left|\text{SmoothMax}(\mathbf{x}) - \max(\mathbf{x})\right| \leq \frac{\log n}{\alpha}$$
 
 where $\alpha$ is the temperature parameter. A known consequence is that smoothing breaks the distributivity and idempotency of the exact semiring; algebraic guarantees of the crisp max-min semiring do not transfer, and error accumulates with composition depth.
 
@@ -39,7 +39,7 @@ where $\alpha$ is the temperature parameter. A known consequence is that smoothi
 
 **Fixed-point convergence.** The iteration $A_{n+1} = \text{Join}(A_n, B)$ has guaranteed fixed-point existence via the Knaster-Tarski theorem (1955): any monotone function on a complete lattice has fixed points, and $([0,1]^N, \leq)$ is a complete lattice. At positive temperature, SmoothMax/SmoothMin are locally contractive, giving geometric convergence near a fixed point:
 
-$$\|x_n - x^*\| \leq q^n \|x_0 - x^*\|, \quad q < 1$$
+$$\lVert x_n - x^* \rVert \leq q^n \lVert x_0 - x^* \rVert, \quad q < 1$$
 
 Whether the map is globally contractive — and thus whether the iteration always converges to the same fixed point regardless of initialization — is an open question.
 
