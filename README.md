@@ -26,7 +26,7 @@ This also eliminates a technical overhead present in Domingos's original formula
 #### **Fuzzy relational composition:** 
 The core inference step is a smooth approximation of [Zadeh's max-min relational composition (1971)](https://www.sciencedirect.com/science/article/pii/0020025571900165):
 
-$$R[x,z] = \text{SmoothMax}_y\bigl(\text{SmoothMin}(A[x,y],\; B[y,z])\bigr)$$
+$$R[x,z] = \text{SmoothMax}_y\bigl(\text{SmoothMin}(A[x,y], B[y,z])\bigr)$$
 
 The underlying algebraic structure $([0,1], \max, \min)$ is a valid distributive lattice and semiring, with over 50 years of theoretical grounding in fuzzy set theory and relational algebra [(Sanchez, 1976)](https://www.sciencedirect.com/science/article/pii/S0019995876904460).
 
