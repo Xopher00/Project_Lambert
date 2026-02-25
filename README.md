@@ -29,7 +29,7 @@ $$R[x,z] = \text{SmoothMax}_y\bigl(\text{SmoothMin}(A[x,y],\; B[y,z])\bigr)$$
 
 The underlying algebraic structure $([0,1], \max, \min)$ is a valid distributive lattice and semiring, with over 50 years of theoretical grounding in fuzzy set theory and relational algebra [(Sanchez, 1976)](https://www.sciencedirect.com/science/article/pii/S0019995876904460).
 
-**Smoothing.** SmoothMin and SmoothMax are implemented via LogSumExp, [a well-established smoothing technique (Nesterov, 2005)](https://link.springer.com/article/10.1007/s10107-004-0552-5). The approximation error is controllable:
+**Smoothing.** SmoothMin and SmoothMax are implemented via LogSumExp, a well-established smoothing technique [(Nesterov, 2005)](https://link.springer.com/article/10.1007/s10107-004-0552-5). The approximation error is controllable:
 
 $$\left|\text{SmoothMax}(\mathbf{x}) - \max(\mathbf{x})\right| \leq \frac{\log n}{\alpha}$$
 
@@ -47,7 +47,7 @@ Whether the map is globally contractive — and thus whether the iteration alway
 
 $$F = \sum (A_n - A)^2$$
 
-measures the squared change between successive iterates, analogous to monitoring a [Lyapunov function ([Hopfield, 1982](https://www.pnas.org/doi/10.1073/pnas.79.8.2554);  [Ramsauer et al., 2021](https://arxiv.org/abs/2008.02217)). It relates to [variational free energy (Friston et al. 2010)](https://www.nature.com/articles/nrn2787) under restrictive assumptions but omits precision weighting, an explicit generative model, and the entropy term. It is best understood as a fixed-point residual rather than a formal evidence lower bound.
+measures the squared change between successive iterates, analogous to monitoring a Lyapunov function ([Hopfield, 1982](https://www.pnas.org/doi/10.1073/pnas.79.8.2554);  [Ramsauer et al., 2021](https://arxiv.org/abs/2008.02217)). It relates to variational free energy [(Friston et al., 2010)](https://www.nature.com/articles/nrn2787) under restrictive assumptions but omits precision weighting, an explicit generative model, and the entropy term. It is best understood as a fixed-point residual rather than a formal evidence lower bound.
 
 **Temperature schedule.** The adaptive cooling formula:
 
