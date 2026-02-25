@@ -27,7 +27,7 @@ This also eliminates a technical overhead present in Domingos's original formula
 
 $$R[x,z] = \text{SmoothMax}_y\bigl(\text{SmoothMin}(A[x,y],\; B[y,z])\bigr)$$
 
-The underlying algebraic structure $([0,1], \max, \min)$ is a valid distributive lattice and semiring, with over 50 years of theoretical grounding in [fuzzy set theory and relational algebra (Sanchez, 1976)](https://www.sciencedirect.com/science/article/pii/S0019995876904460).
+The underlying algebraic structure $([0,1], \max, \min)$ is a valid distributive lattice and semiring, with over 50 years of theoretical grounding in fuzzy set theory and relational algebra [(Sanchez, 1976)](https://www.sciencedirect.com/science/article/pii/S0019995876904460).
 
 **Smoothing.** SmoothMin and SmoothMax are implemented via LogSumExp, [a well-established smoothing technique (Nesterov, 2005)](https://link.springer.com/article/10.1007/s10107-004-0552-5). The approximation error is controllable:
 
@@ -35,7 +35,7 @@ $$\left|\text{SmoothMax}(\mathbf{x}) - \max(\mathbf{x})\right| \leq \frac{\log n
 
 where $\alpha$ is the temperature parameter. A known consequence is that smoothing breaks the distributivity and idempotency of the exact semiring; algebraic guarantees of the crisp max-min semiring do not transfer, and error accumulates with composition depth.
 
-**Witness tracking and provenance.** During each Join, all intermediate indices $y =  \min(A[x,y], B[y,z])$ — the entity that "witnesses" the inference — above a contribution threshold are recorded along with their contribution score. [Green, Karvounarakis & Tannen (2007, PODS)](https://dl.acm.org/doi/10.1145/1265530.1265535) proved that query annotations propagate through relational algebra via semiring operations. Under the fuzzy semiring, Lambert's composition is exactly relational composition with provenance: the witness is the provenance certificate. These recorded witnesses are then used to reconstruct a human-readable proof tree tracing exactly which intermediate entities justified each conclusion — the concrete mechanism behind the provenance goal described above. 
+**Witness tracking and provenance.** During each Join, all intermediate indices $y =  \min(A[x,y], B[y,z])$ — the entities that "witness" the inference — above a contribution threshold are recorded along with their contribution score. [Green, Karvounarakis & Tannen (2007, PODS)](https://dl.acm.org/doi/10.1145/1265530.1265535) proved that query annotations propagate through relational algebra via semiring operations. Under the fuzzy semiring, Lambert's composition is exactly relational composition with provenance: the witness is the provenance certificate. These recorded witnesses are then used to reconstruct a human-readable proof tree tracing exactly which intermediate entities justified each conclusion — the concrete mechanism behind the provenance goal described above. 
 
 **Fixed-point convergence.** The iteration $A_{n+1} = \text{Join}(A_n, B)$ has guaranteed fixed-point existence via the [Knaster-Tarski theorem (1955)](https://projecteuclid.org/journals/pacific-journal-of-mathematics/volume-5/issue-2/A-lattice-theoretical-fixpoint-theorem-and-its-applications/pjm/1103044538.full): any monotone function on a complete lattice has fixed points, and $([0,1]^N, \leq)$ is a complete lattice. At positive temperature, SmoothMax/SmoothMin are locally contractive, giving geometric convergence near a fixed point:
 
@@ -47,7 +47,7 @@ Whether the map is globally contractive — and thus whether the iteration alway
 
 $$F = \sum (A_n - A)^2$$
 
-measures the squared change between successive iterates, analogous to [monitoring a Lyapunov function (Hopfield, 1982)](https://www.pnas.org/doi/10.1073/pnas.79.8.2554). It relates to variational free energy under restrictive assumptions but omits precision weighting, an explicit generative model, and the entropy term. It is best understood as a fixed-point residual rather than a formal evidence lower bound.
+measures the squared change between successive iterates, analogous to monitoring a [Lyapunov function (Hopfield, 1982)](https://www.pnas.org/doi/10.1073/pnas.79.8.2554). It relates to variational free energy under restrictive assumptions but omits precision weighting, an explicit generative model, and the entropy term. It is best understood as a fixed-point residual rather than a formal evidence lower bound.
 
 **Temperature schedule.** The adaptive cooling formula:
 
