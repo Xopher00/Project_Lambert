@@ -48,14 +48,10 @@ $$\lVert x_n - x^* \rVert \leq q^n \lVert x_0 - x^* \rVert, \quad q < 1$$
 Whether the map is globally contractive — and thus whether the iteration always converges to the same fixed point regardless of initialization — is an open question.
 
 #### **Free energy:** 
-The convergence diagnostic:    $$F = \sum (A_n - A)^2$$
-
-measures the squared change between successive iterates, analogous to monitoring a Lyapunov function ([Hopfield, 1982](https://www.pnas.org/doi/10.1073/pnas.79.8.2554);  [Ramsauer et al., 2021](https://arxiv.org/abs/2008.02217)). It relates to variational free energy [(Friston et al., 2010)](https://www.nature.com/articles/nrn2787) under restrictive assumptions but omits precision weighting, an explicit generative model, and the entropy term. It is best understood as a fixed-point residual rather than a formal evidence lower bound.
+The convergence diagnostic:    $$F = \sum (A_n - A)^2$$   measures the squared change between successive iterates, analogous to monitoring a Lyapunov function ([Hopfield, 1982](https://www.pnas.org/doi/10.1073/pnas.79.8.2554);  [Ramsauer et al., 2021](https://arxiv.org/abs/2008.02217)). It relates to variational free energy [(Friston et al., 2010)](https://www.nature.com/articles/nrn2787) under restrictive assumptions but omits precision weighting, an explicit generative model, and the entropy term. It is best understood as a fixed-point residual rather than a formal evidence lower bound.
 
 #### **Temperature schedule:** 
-The adaptive cooling formula:     $$T = \frac{-E}{N \cdot \overline{\log A}}$$
-
-is derived by analogy from thermodynamics ($F = U - TS$). It produces qualitatively correct behavior — temperature drops as $E \to 0$, hardening soft operations toward crisp boolean logic — but uses a non-standard entropy definition and has boundary singularities when any $A_i = 0$ or all $A_i = 1$.
+The adaptive cooling formula:     $$T = \frac{-E}{N \cdot \overline{\log A}}$$   is derived by analogy from thermodynamics ($F = U - TS$). It produces qualitatively correct behavior — temperature drops as $E \to 0$, hardening soft operations toward crisp boolean logic — but uses a non-standard entropy definition and has boundary singularities when any $A_i = 0$ or all $A_i = 1$.
 
 The temperature parameter controls a spectrum between two reasoning modes: at $T \to 0$, SmoothMax approaches hard max and SmoothMin approaches hard min, recovering exact crisp Boolean logic; at $T \gg 0$, operations become nearly linear and all evidence contributes proportionally, enabling analogical reasoning. The system can operate anywhere on this spectrum without changing the underlying framework.
 
