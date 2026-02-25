@@ -24,7 +24,7 @@ This also eliminates a technical overhead present in Domingos's original formula
 ### Mathematical Foundations
 
 #### **Fuzzy relational composition:** 
-The core inference step is a smooth approximation of [Zadeh's max-min relational composition (1971)](https://www.sciencedirect.com/science/article/pii/0020025571900165):
+The core inference step is a smooth approximation of [Zadeh's max-min relational composition (1965)](https://www.sciencedirect.com/science/article/pii/S001999586590241X):
 
 $$R[x,z] = \text{SmoothMax}_y\bigl(\text{SmoothMin}(A[x,y], B[y,z])\bigr)$$
 
