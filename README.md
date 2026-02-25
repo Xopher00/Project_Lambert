@@ -47,7 +47,7 @@ Whether the map is globally contractive — and thus whether the iteration alway
 
 $$F = \sum (A_n - A)^2$$
 
-measures the squared change between successive iterates, analogous to monitoring a [Lyapunov function (Hopfield, 1982)](https://www.pnas.org/doi/10.1073/pnas.79.8.2554). It relates to variational free energy under restrictive assumptions but omits precision weighting, an explicit generative model, and the entropy term. It is best understood as a fixed-point residual rather than a formal evidence lower bound.
+measures the squared change between successive iterates, analogous to monitoring a [Lyapunov function ([Hopfield, 1982](https://www.pnas.org/doi/10.1073/pnas.79.8.2554);  [Ramsauer et al., 2021](https://arxiv.org/abs/2008.02217)). It relates to [variational free energy (Friston et al. 2010)](https://www.nature.com/articles/nrn2787) under restrictive assumptions but omits precision weighting, an explicit generative model, and the entropy term. It is best understood as a fixed-point residual rather than a formal evidence lower bound.
 
 **Temperature schedule.** The adaptive cooling formula:
 
@@ -57,7 +57,7 @@ is derived by analogy from thermodynamics ($F = U - TS$). It produces qualitativ
 
 The temperature parameter controls a spectrum between two reasoning modes: at $T \to 0$, SmoothMax approaches hard max and SmoothMin approaches hard min, recovering exact crisp Boolean logic; at $T \gg 0$, operations become nearly linear and all evidence contributes proportionally, enabling analogical reasoning. The system can operate anywhere on this spectrum without changing the underlying framework.
 
-**SVD/Tucker decomposition.** The most significant known gap. Standard SVD and Tucker decomposition rely on additive inverses, multiplicative inverses, and inner products that have no natural counterparts in the max-min semiring. SVD's optimality guarantee (minimum Frobenius-norm reconstruction error) does not transfer, as the Frobenius norm is not the natural metric for max-min algebra. Tropical analogues of matrix decomposition exist but have fundamentally different properties [(Develin, Santos & Sturmfels, 2005)](https://arxiv.org/abs/math/0309164); a proper lattice-based factorization would be more principled and is left as future work.
+**SVD/Tucker decomposition.** The most significant known gap. Standard SVD and Tucker decomposition rely on additive inverses, multiplicative inverses, and inner products that have no natural counterparts in the max-min semiring. SVD's optimality guarantee (minimum Frobenius-norm reconstruction error) does not transfer, as the Frobenius norm is not the natural metric for max-min algebra. Tropical analogues of matrix decomposition exist but have fundamentally different properties [(Develin, Santos & Sturmfels, 2005)](https://arxiv.org/abs/math/0312114); a proper lattice-based factorization would be more principled and is left as future work.
 
 These limitations have been reviewed and are considered acceptable for the current stage of the project.
 
