@@ -24,18 +24,14 @@ This also eliminates a technical overhead present in Domingos's original formula
 ### Mathematical Foundations
 
 #### **Fuzzy relational composition:** 
-At its core, Lambert reasons by asking: "given that X relates to Y, and Y relates to Z, how strongly does X relate to Z?" This is relational composition, implemented with logical min and max rather than arithmetic multiplication and addition.
-
-The core inference step is a smooth approximation of [Zadeh's max-min relational composition (1965)](https://www.sciencedirect.com/science/article/pii/S001999586590241X):
+At its core, Lambert reasons by asking: "given that X relates to Y, and Y relates to Z, how strongly does X relate to Z?" This is relational composition, implemented with logical min and max rather than arithmetic multiplication and addition. The core inference step is a smooth approximation of [Zadeh's max-min relational composition (1965)](https://www.sciencedirect.com/science/article/pii/S001999586590241X):
 
 $$R[x,z] = \text{SmoothMax}_y\bigl(\text{SmoothMin}(A[x,y], B[y,z])\bigr)$$
 
 The underlying algebraic structure $([0,1], \max, \min)$ is a valid distributive lattice and semiring, with over 50 years of theoretical grounding in fuzzy set theory and relational algebra [(Sanchez, 1976)](https://www.sciencedirect.com/science/article/pii/S0019995876904460).
 
 #### **Smoothing:** 
-Pure min and max have sharp corners that make learning difficult. LogSumExp smooths them into differentiable approximations, with temperature controlling how tight the approximation is.
-
-SmoothMin and SmoothMax are implemented via LogSumExp, a well-established smoothing technique [(Nesterov, 2005)](https://link.springer.com/article/10.1007/s10107-004-0552-5). The approximation error is controllable:
+Pure min and max have sharp corners that make learning difficult. LogSumExp smooths them into differentiable approximations, with temperature controlling how tight the approximation is. SmoothMin and SmoothMax are implemented via LogSumExp, a well-established smoothing technique [(Nesterov, 2005)](https://link.springer.com/article/10.1007/s10107-004-0552-5). The approximation error is controllable:
 
 $$\left|\text{SmoothMax}(\mathbf{x}) - \vee(\mathbf{x})\right| \leq \frac{\log n}{\alpha}$$
 
