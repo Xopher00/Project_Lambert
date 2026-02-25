@@ -10,6 +10,8 @@ This project was initially inspired by the work of mathematician Eric Hehner. Er
 
 We also take inspiration from Tensor Logic, a framework for creative an AI programming language proposed by Pedro Domingos https://arxiv.org/pdf/2510.12269. To summarize Domingos paper, every single operation an AI model does can be reduced down to the same equation, Einstein's Sum, also called the tensor equation. This is normally expressed as <insert traditional notation here>
 
+https://claude.ai/public/artifacts/b7d90d74-2625-4334-866e-0cba53b8f689
+
 However there are other ways to represent this equation using different so-called 'semirings'. We decided to use the logical semirings for Disjunction and Conjunction instead. By representing the core equation of the model this way, we can make it semantially and programmatically easier to see exactly how the model's internal logic works. That is the theory anyway. 
 
 ## Status
