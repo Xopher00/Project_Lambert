@@ -37,7 +37,7 @@ Pure min and max have sharp corners that make learning difficult. LogSumExp smoo
 
 SmoothMin and SmoothMax are implemented via LogSumExp, a well-established smoothing technique [(Nesterov, 2005)](https://link.springer.com/article/10.1007/s10107-004-0552-5). The approximation error is controllable:
 
-$$\left|\text{SmoothMax}(\mathbf{x}) - \max(\mathbf{x})\right| \leq \frac{\log n}{\alpha}$$
+$$\left|\text{SmoothMax}(\mathbf{x}) - \vee(\mathbf{x})\right| \leq \frac{\log n}{\alpha}$$
 
 where $\alpha$ is the temperature parameter. A known consequence is that smoothing breaks the distributivity and idempotency of the exact semiring; algebraic guarantees of the crisp max-min semiring do not transfer, and error accumulates with composition depth.
 
