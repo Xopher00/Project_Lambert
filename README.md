@@ -23,41 +23,50 @@ This also eliminates a technical overhead present in Domingos's original formula
 
 ### Mathematical Foundations
 
-**Fuzzy relational composition.** The core inference step is a smooth approximation of Zadeh's max-min relational composition (1971):
+#### **Fuzzy relational composition:** 
+At its core, Lambert reasons by asking: "given that X relates to Y, and Y relates to Z, how strongly does X relate to Z?" This is relational composition, implemented with logical min and max rather than arithmetic multiplication and addition. The core inference step is a smooth approximation of [Zadeh's max-min relational composition (1965)](https://www.sciencedirect.com/science/article/pii/S001999586590241X):
 
-$$R[x,z] = \text{SmoothMax}_y\bigl(\text{SmoothMin}(A[x,y],\; B[y,z])\bigr)$$
+$$R[x,z] = \text{SmoothMax}_y\bigl(\text{SmoothMin}(A[x,y], B[y,z])\bigr)$$
 
-The underlying algebraic structure $([0,1], \max, \min)$ is a valid distributive lattice and semiring, with over 50 years of theoretical grounding in fuzzy set theory and relational algebra (Sanchez, 1976).
+The underlying algebraic structure $([0,1], \max, \min)$ is a valid distributive lattice and semiring, with over 50 years of theoretical grounding in fuzzy set theory and relational algebra [(Sanchez, 1976)](https://www.sciencedirect.com/science/article/pii/S0019995876904460).
 
-**Smoothing.** SmoothMin and SmoothMax are implemented via LogSumExp, a well-established smoothing technique (Nesterov, 2005). The approximation error is controllable:
+#### **Smoothing:** 
+Pure min and max have sharp corners that make learning difficult. LogSumExp smooths them into differentiable approximations, with temperature controlling how tight the approximation is. SmoothMin and SmoothMax are implemented via LogSumExp, a well-established smoothing technique [(Nesterov, 2005)](https://link.springer.com/article/10.1007/s10107-004-0552-5). The approximation error is controllable:
 
-$$\left|\text{SmoothMax}(\mathbf{x}) - \max(\mathbf{x})\right| \leq \frac{\log n}{\alpha}$$
+$$\left|\text{SmoothMax}(\mathbf{x}) - \vee(\mathbf{x})\right| \leq \frac{\log n}{\alpha}$$
 
 where $\alpha$ is the temperature parameter. A known consequence is that smoothing breaks the distributivity and idempotency of the exact semiring; algebraic guarantees of the crisp max-min semiring do not transfer, and error accumulates with composition depth.
 
-**Witness tracking and provenance.** During each Join, the intermediate index $y^* = \arg\max_y \min(A[x,y], B[y,z])$ — the entity that "witnesses" the inference — is recorded alongside its contribution score. [Green, Karvounarakis & Tannen (2007, PODS)](https://dl.acm.org/doi/10.1145/1265530.1265535) proved that query annotations propagate through relational algebra via semiring operations. Under the fuzzy semiring, Lambert's composition is exactly relational composition with provenance: the witness is the provenance certificate. These recorded witnesses are then used to reconstruct a human-readable proof tree tracing exactly which intermediate entities justified each conclusion — the concrete mechanism behind the provenance goal described above. 
+#### **Witness tracking and provenance:** 
+When Lambert draws a conclusion, it records exactly which intermediate facts justified it — these are called witnesses. This is not a post-hoc explanation added after the fact; it is a direct readout of the computation itself.
 
-**Fixed-point convergence.** The iteration $A_{n+1} = \text{Join}(A_n, B)$ has guaranteed fixed-point existence via the Knaster-Tarski theorem (1955): any monotone function on a complete lattice has fixed points, and $([0,1]^N, \leq)$ is a complete lattice. At positive temperature, SmoothMax/SmoothMin are locally contractive, giving geometric convergence near a fixed point:
+During each Join, all intermediate indices y such that  $y = A[x,y] \wedge B[y,z]$ — the entities that "witness" the inference — above a contribution threshold are recorded along with their contribution score. [Green, Karvounarakis & Tannen (2007, PODS)](https://dl.acm.org/doi/10.1145/1265530.1265535) proved that query annotations propagate through relational algebra via semiring operations. Under the fuzzy semiring, Lambert's composition is exactly relational composition with provenance: the witness is the provenance certificate. These recorded witnesses are then used to reconstruct a human-readable proof tree tracing exactly which intermediate entities justified each conclusion — the concrete mechanism behind the provenance goal described above. 
+
+#### **Fixed-point convergence:** 
+Lambert trains by repeating the same join operation until the result stops changing — this stable state is called a fixed point. The following guarantees this process terminates.
+
+The iteration $A_{n+1} = \text{Join}(A_n, B)$ has guaranteed fixed-point existence via the [Knaster-Tarski theorem (1955)](https://projecteuclid.org/journals/pacific-journal-of-mathematics/volume-5/issue-2/A-lattice-theoretical-fixpoint-theorem-and-its-applications/pjm/1103044538.full): any monotone function on a complete lattice has fixed points, and $([0,1]^N, \leq)$ is a complete lattice. At positive temperature, SmoothMax/SmoothMin are locally contractive, giving geometric convergence near a fixed point:
 
 $$\lVert x_n - x^* \rVert \leq q^n \lVert x_0 - x^* \rVert, \quad q < 1$$
 
 Whether the map is globally contractive — and thus whether the iteration always converges to the same fixed point regardless of initialization — is an open question.
 
-**Free energy.** The convergence diagnostic:
+#### **Free energy:** 
+To know when to stop iterating, Lambert measures how much the model changed on the last step. When this change approaches zero, the model has converged.
 
-$$F = \sum (A_n - A)^2$$
+The convergence diagnostic:    $$F = \sum (A_n - A)^2$$   measures the squared change between successive iterates, analogous to monitoring a Lyapunov function ([Hopfield, 1982](https://www.pnas.org/doi/10.1073/pnas.79.8.2554);  [Ramsauer et al., 2021](https://arxiv.org/abs/2008.02217)). It relates to variational free energy [(Friston et al., 2010)](https://www.nature.com/articles/nrn2787) under restrictive assumptions but omits precision weighting, an explicit generative model, and the entropy term. It is best understood as a fixed-point residual rather than a formal evidence lower bound.
 
-measures the squared change between successive iterates, analogous to monitoring a Lyapunov function (Hopfield, 1982). It relates to variational free energy under restrictive assumptions but omits precision weighting, an explicit generative model, and the entropy term. It is best understood as a fixed-point residual rather than a formal evidence lower bound.
+#### **Temperature schedule:** 
+As the model converges and free energy drops, temperature drops with it — hardening fuzzy reasoning toward crisp boolean logic. The formula governing this: $$T = \frac{-E}{N \cdot \overline{\log A}}$$  is borrowed by analogy from thermodynamics ($F = U - TS$). 
 
-**Temperature schedule.** The adaptive cooling formula:
+It produces qualitatively correct behavior — temperature drops as $E \to 0$, hardening soft operations toward crisp boolean logic — but uses a non-standard entropy definition and has boundary singularities when any $A_i = 0$ or all $A_i = 1$. 
 
-$$T = \frac{-E}{N \cdot \overline{\log A}}$$
+The temperature parameter controls a spectrum between two reasoning modes: at $T \to 0$, SmoothMax approaches hard max and SmoothMin approaches hard min, recovering exact crisp Boolean logic; at $T = 0$, operations become nearly linear and all evidence contributes proportionally, enabling analogical reasoning. The system can operate anywhere on this spectrum without changing the underlying framework.
 
-is derived by analogy from thermodynamics ($F = U - TS$). It produces qualitatively correct behavior — temperature drops as $E \to 0$, hardening soft operations toward crisp boolean logic — but uses a non-standard entropy definition and has boundary singularities when any $A_i = 0$ or all $A_i = 1$.
+#### **SVD/Tucker decomposition:** 
+Lambert uses a standard compression technique to represent entities in a lower-dimensional space. This technique was designed for arithmetic algebra and is not a perfect fit for logical algebra — a known limitation left for future work. 
 
-The temperature parameter controls a spectrum between two reasoning modes: at $T \to 0$, SmoothMax approaches hard max and SmoothMin approaches hard min, recovering exact crisp Boolean logic; at $T \gg 0$, operations become nearly linear and all evidence contributes proportionally, enabling analogical reasoning. The system can operate anywhere on this spectrum without changing the underlying framework.
-
-**SVD/Tucker decomposition.** The most significant known gap. Standard SVD and Tucker decomposition rely on additive inverses, multiplicative inverses, and inner products that have no natural counterparts in the max-min semiring. SVD's optimality guarantee (minimum Frobenius-norm reconstruction error) does not transfer, as the Frobenius norm is not the natural metric for max-min algebra. Tropical analogues of matrix decomposition exist but have fundamentally different properties (Develin, Santos & Sturmfels, 2005); a proper lattice-based factorization would be more principled and is left as future work.
+SVD's optimality guarantee (minimum Frobenius-norm reconstruction error) does not transfer, as the Frobenius norm is not the natural metric for max-min algebra. Tropical analogues of matrix decomposition exist but have fundamentally different properties [(Develin, Santos & Sturmfels, 2005)](https://arxiv.org/abs/math/0312114); a proper lattice-based factorization would be more principled and is left as future work.
 
 These limitations have been reviewed and are considered acceptable for the current stage of the project.
 
