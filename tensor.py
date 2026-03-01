@@ -89,7 +89,7 @@ class Tensor(Activations):
         return B
             
     def Closure(self, E, R=None, temp=None, max_iters=100, eps=1e-3, 
-                return_witnesses=False, step_fn=None):  
+                return_witnesses=False, step_fn=None, use_residuate=False):  
         if R is None: R = E.copy() if hasattr(E, 'copy') else E
         last_witnesses = None
 
@@ -101,9 +101,19 @@ class Tensor(Activations):
 
             Rn = self.SmoothMax((J, E), temp, axis=0)
             np.fill_diagonal(Rn, 0) 
-            # Hopfield Energy Minimization
-            Energy = Sum(Abs(Rn - R) ** 2)
-            # E = -self.SmoothMax(R, temp, axis=-1).sum() + 0.5 * Sum(R**2)
+
+            # Backward constraint propagation
+            if use_residuate:
+                R_allowed = self.Residuate(Rn, E, temp)
+                Rn = self.SmoothMin((Rn, R_allowed), temp, axis=0)
+                Rn_corrected = Rn
+                # Prediction error (how much correction was needed)
+                prediction_error = Sum(Abs(Rn - Rn_corrected) ** 2)
+                # Total free energy
+                Energy = Sum(Abs(Rn_corrected - R) ** 2) + prediction_error
+            else:
+                Energy = Sum(Abs(Rn - R) ** 2)
+
             temp = -Energy / (R.size * np.mean(Log(np.clip(R, eps, 1))))
 
             n_new = Sum((Rn > eps) & (R <= eps))
