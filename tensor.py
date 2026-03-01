@@ -56,8 +56,38 @@ class Tensor(Activations):
             self._cache_witnesses(witnesses)
 
         return result, witnesses
-            
+    
+    def Residuate(self, Tensor_A, Tensor_C, temp):
+        """
+        Right residuation / relational division (Sánchez):
+            B[j,k] = min_i Implies(A[i,j], C[i,k])
 
+        A: (n, m)
+        C: (n, p)
+        returns B: (m, p)
+
+        No (n,m,p) allocation.
+        """
+        A, C = Tensor_A, Tensor_C
+        n, m = A.shape
+        n2, p = C.shape
+        assert n == n2, "Shared (row) dimension mismatch"
+
+        # min-reduction identity is Top (e.g., 1.0)
+        B = np.full((m, p), Top, dtype=float)
+
+        for i in range(n):
+            # A[i,:] is (m,), C[i,:] is (p,)
+            qi = A[i, :][:, None]    # (m,1)
+            ti = C[i, :][None, :]    # (1,p)
+
+            contrib = Implies(qi, ti)  # (m,p)
+
+            # elementwise smooth-min between current best and new contrib
+            B = self.SmoothMin((B, contrib), temp, axis=0)
+
+        return B
+            
     def Closure(self, E, R=None, temp=None, max_iters=100, eps=1e-3, 
                 return_witnesses=False, step_fn=None):  
         if R is None: R = E.copy() if hasattr(E, 'copy') else E
@@ -73,12 +103,13 @@ class Tensor(Activations):
             np.fill_diagonal(Rn, 0) 
             # Hopfield Energy Minimization
             Energy = Sum(Abs(Rn - R) ** 2)
+            # E = -self.SmoothMax(R, temp, axis=-1).sum() + 0.5 * Sum(R**2)
             temp = -Energy / (R.size * np.mean(Log(np.clip(R, eps, 1))))
 
             n_new = Sum((Rn > eps) & (R <= eps))
-            #print(f"iteration {k+1}: discovered {n_new} new relations, temperature is {temp:.10f}")
+            print(f"iteration {k+1}: discovered {n_new} new relations, temperature is {temp:.10f}")
             if Energy <= eps:
-                #print(f"✓ CONVERGED at iteration {k + 1}")
+                print(f"✓ CONVERGED at iteration {k + 1}")
                 break
             R = Rn
         return (R, last_witnesses) if return_witnesses else R

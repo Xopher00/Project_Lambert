@@ -36,6 +36,14 @@ def Min(*args, axis=None, keepdims=False):
         return np.min(args[0], axis=axis, keepdims=keepdims)
     return np.minimum.reduce(args)
 
+def Implies(a, b):
+    """
+    Pseudocomplement for the min t-norm (Gödel implication):
+        a α b = 1 if a <= b else b
+    Works elementwise on numpy arrays.
+    """
+    return np.where(a <= b, 1.0, b)
+
 def Sum(args, axis=None, keepdims=False):
     """Sum over domain"""
     return np.sum(args, axis=axis, keepdims=keepdims)
