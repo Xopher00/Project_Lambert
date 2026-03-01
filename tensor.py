@@ -105,12 +105,12 @@ class Tensor(Activations):
             # Backward constraint propagation
             if use_residuate:
                 R_allowed = self.Residuate(Rn, E, temp)
-                Rn = self.SmoothMin((Rn, R_allowed), temp, axis=0)
-                Rn_corrected = Rn
+                Rn_corrected = self.SmoothMin((Rn, R_allowed), temp, axis=0)
                 # Prediction error (how much correction was needed)
                 prediction_error = Sum(Abs(Rn - Rn_corrected) ** 2)
                 # Total free energy
                 Energy = Sum(Abs(Rn_corrected - R) ** 2) + prediction_error
+                Rn = Rn_corrected
             else:
                 Energy = Sum(Abs(Rn - R) ** 2)
 
