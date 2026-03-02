@@ -57,7 +57,7 @@ class Tensor(Activations):
 
         return result, witnesses
     
-    def Residuate(self, Tensor_A, Tensor_C, temp):
+    def Residuate(self, Tensor_A, Tensor_C, temp, threshold=1e-6):
         """
         Right residuation / relational division (Sánchez):
             B[j,k] = min_i Implies(A[i,j], C[i,k])
@@ -70,23 +70,24 @@ class Tensor(Activations):
         """
         A, C = Tensor_A, Tensor_C
         n, m = A.shape
-        n2, p = C.shape
-        assert n == n2, "Shared (row) dimension mismatch"
-
+        o, p = C.shape
+        assert n == o, "Shared (row) dimension mismatch"
         # min-reduction identity is Top (e.g., 1.0)
         B = np.full((m, p), Top, dtype=float)
 
         for i in range(n):
-            # A[i,:] is (m,), C[i,:] is (p,)
-            qi = A[i, :][:, None]    # (m,1)
-            ti = C[i, :][None, :]    # (1,p)
+            # Find non-zero columns in A[i,:] and C[i,:]
+            js = np.where(Abs(A[i, :]) > threshold)[0]  # Active columns in A
+            ks = np.where(Abs(C[i, :]) > threshold)[0]  # Active columns in C
+            if not (len(js) and len(ks)): continue
 
-            contrib = Implies(qi, ti)  # (m,p)
-
-            # elementwise smooth-min between current best and new contrib
-            B = self.SmoothMin((B, contrib), temp, axis=0)
+            a_row = A[i, js]  # (len(js),)
+            c_row = C[i, ks]  # (len(ks),)
+            contrib = Implies(a_row[:, None], c_row[None, :])  # (len(js), len(ks))
+            B[np.ix_(js, ks)] = self.SmoothMin((B[np.ix_(js, ks)], contrib), temp, axis=0)
 
         return B
+    
             
     def Closure(self, E, R=None, temp=None, max_iters=100, eps=1e-3, 
                 return_witnesses=False, step_fn=None, use_residuate=False):  

@@ -12,29 +12,15 @@ import numpy as np
 
 Top = 1e9
 Bottom = -1e9
-eps = np.finfo(float).eps
-
-def divide_by_zero(x, y):
-    x = np.asarray(x)
-    y = np.asarray(y)
-    safe_y = np.where(y == 0, eps, y)
-    out = x / safe_y
-    return np.where(y == 0, (x > 0).astype(float), out)
-
-def __truediv__(self, other):
-    return divide_by_zero(self, other)
 
 def Max(*args, axis=None, keepdims=False):
     """Max: binary (x,y) or quantifier (f, axis=...)"""
     if len(args) == 1:
         return np.max(args[0], axis=axis, keepdims=keepdims)
-    return np.maximum.reduce(args)
-
-def Min(*args, axis=None, keepdims=False):
-    """Min: binary (x,y) or quantifier (f, axis=...)"""
-    if len(args) == 1:
-        return np.min(args[0], axis=axis, keepdims=keepdims)
-    return np.minimum.reduce(args)
+    elif len(args) == 2:
+        return np.maximum(args[0], args[1])
+    else:
+        np.maximum.reduce(np.array(args))
 
 def Implies(a, b):
     """
@@ -47,10 +33,6 @@ def Implies(a, b):
 def Sum(args, axis=None, keepdims=False):
     """Sum over domain"""
     return np.sum(args, axis=axis, keepdims=keepdims)
-
-def Product(args, axis=None, keepdims=False):
-    """Product over domain"""
-    return np.prod(args, axis=axis, keepdims=keepdims)
 
 def Log(args):
     """Log over args"""
