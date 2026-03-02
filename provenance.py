@@ -18,17 +18,17 @@ import audit
 class Provenance(t):
 
     def _select_candidates(self, u, v, threshold, error=None):
-        candidates_scores = {
-            y: score 
-            for (x, y, z), score in self._witnesses.items() 
-            if x == u and z == v and score > threshold
-        }
-        candidates = np.array(list(candidates_scores.keys()), dtype=int)
+        # Direct lookup instead of filtering
+        polynomial = self._witnesses.get((u, v), {})        
+        candidates = np.array([
+            y for y, score in polynomial.items() 
+            if score > threshold
+        ], dtype=int)        
         if len(candidates) == 0:
-            return candidates
+            return candidates            
         if error is not None:
             gaps = error[u, :] > threshold
-            candidates = candidates[~gaps[candidates]]
+            candidates = candidates[~gaps[candidates]]            
         return candidates[(candidates != v) & (candidates != u)]
 
     def _recurse(self, E, u, v, candidates, threshold, seen):
