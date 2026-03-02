@@ -3,12 +3,11 @@ Embedding layer. Compresses relations into a lower-dimensional space via
 SVD-based Tucker decomposition (Project), allowing the tensor logic
 operations from tensor.py to run on compact representations rather than
 full N×N matrices — enabling the system to scale to larger graphs.
-Extracy inverts this to recover entity-space relations, and
- ReEmbed snaps intermediate closure states back to clean
-relations to prevent error accumulation across iterations. GramMatrix and
-EmbedSet lay the groundwork for future analogical reasoning, where similar
-entities will be able to borrow inferences from one another proportionally
-to their embedding similarity.
+LearnEmbedding refines SVD-initialised embeddings via alternating Residuate:
+fixing emb to solve for EmbR, then fixing EmbR to solve for emb, until the
+underprediction error Refutes(Join(emb, EmbR), R) vanishes. GramMatrix and
+EmbedSet support analogical reasoning, where similar entities borrow
+inferences from one another proportionally to their embedding similarity.
 """
 
 import numpy as np
@@ -49,4 +48,4 @@ class Embed(Tensor):
     # Finds embedding dimensions d shared between entities x and x'.
     # λx. λy. λz.  (x z)(y z)
     def GramMatrix(self, M, temp, semiring='fuzzy'):
-        return self.Join(M, M.T, temp, semiring=semiring)    
+        return self.Join(M, M.T, temp, semiring=semiring)

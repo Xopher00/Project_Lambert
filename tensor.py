@@ -28,7 +28,7 @@ class Tensor(Activations):
     def _clear_witnesses(self):
         self._witnesses = {}
 
-
+    # v (y: A[x,y] ∧ B[y,z])
     def Join(self, Tensor_A, Tensor_B, temp, semiring='fuzzy', threshold=1e-6):
         if semiring == "arithmetic":
             return Tensor_A @ Tensor_B, None
@@ -53,7 +53,7 @@ class Tensor(Activations):
 
         return result
     
-    
+    # ∧ (A[x,y]-¹ α C[x,z]) <= B[y,z]
     def Residuate(self, Tensor_A, Tensor_C, temp, threshold=1e-6):
 
         A, C = Tensor_A, Tensor_C
@@ -76,7 +76,7 @@ class Tensor(Activations):
 
         return B
     
-            
+
     def Closure(self, E, R=None, temp=None, max_iters=100, eps=1e-3):  
         if R is None: R = E.copy() if hasattr(E, 'copy') else E
 
