@@ -16,19 +16,17 @@ from activations import Activations
 
 class Tensor(Activations):       
 
-    def _record_witnesses(self, xs, y, zs, contrib, th):
+    def _track_witnesses(self, xs, y, zs, contrib, th):
+        """Record witnesses for current y and merge into accumulated witnesses"""
         i, j = np.where(contrib > th)
-        return {(xs[ii], y, zs[jj]): contrib[ii, jj] for ii, jj in zip(i, j)}
-    
-    def _cache_witnesses(self, witnesses):
-        if witnesses:
-            self._witness_cache.append(witnesses)
-            self._witnesses.update(witnesses)
+        for ii, jj in zip(i, j):
+            key = (xs[ii], zs[jj])
+            if key not in self._witnesses:
+                self._witnesses[key] = {}
+            self._witnesses[key][y] = contrib[ii, jj]
 
-    def clear_witness_cache(self):
-        self._witness_cache = []
+    def _clear_witnesses(self):
         self._witnesses = {}
-        self._block_counter = 0 
 
 
     def Join(self, Tensor_A, Tensor_B, temp, semiring='fuzzy', threshold=1e-6):
@@ -40,7 +38,6 @@ class Tensor(Activations):
         n, m = A.shape
         _, p = B.shape
         result    = np.full((n, p), Bottom, dtype=float)
-        witnesses = {}
 
         for y in range(m):
             xs = np.where(Abs(A[:, y]) > th)[0]
@@ -52,22 +49,13 @@ class Tensor(Activations):
             contrib = self.SmoothMin((a_col[xs, None], b_row[None, zs]), temp, axis=0)
             result[np.ix_(xs, zs)] = self.SmoothMax((result[np.ix_(xs, zs)], contrib), temp, axis=0)
 
-            witnesses.update(self._record_witnesses(xs, y, zs, contrib, th))
-            self._cache_witnesses(witnesses)
+            self._track_witnesses(xs, y, zs, contrib, th)
 
-        return result, witnesses
+        return result
+    
     
     def Residuate(self, Tensor_A, Tensor_C, temp, threshold=1e-6):
-        """
-        Right residuation / relational division (Sánchez):
-            B[j,k] = min_i Implies(A[i,j], C[i,k])
 
-        A: (n, m)
-        C: (n, p)
-        returns B: (m, p)
-
-        No (n,m,p) allocation.
-        """
         A, C = Tensor_A, Tensor_C
         n, m = A.shape
         o, p = C.shape
@@ -89,32 +77,19 @@ class Tensor(Activations):
         return B
     
             
-    def Closure(self, E, R=None, temp=None, max_iters=100, eps=1e-3, 
-                return_witnesses=False, step_fn=None, use_residuate=False):  
+    def Closure(self, E, R=None, temp=None, max_iters=100, eps=1e-3):  
         if R is None: R = E.copy() if hasattr(E, 'copy') else E
-        last_witnesses = None
 
         for k in range(max_iters):
-            if step_fn is not None:
-                J, last_witnesses = step_fn(R, E, temp, k)
-            else:
-                J, last_witnesses = self.Join(R, E, temp)
-
+            J = self.Join(R, E, temp)
             Rn = self.SmoothMax((J, E), temp, axis=0)
             np.fill_diagonal(Rn, 0) 
 
             # Backward constraint propagation
-            if use_residuate:
-                R_allowed = self.Residuate(Rn, E, temp)
-                Rn_corrected = self.SmoothMin((Rn, R_allowed), temp, axis=0)
-                # Prediction error (how much correction was needed)
-                prediction_error = Sum(Abs(Rn - Rn_corrected) ** 2)
-                # Total free energy
-                Energy = Sum(Abs(Rn_corrected - R) ** 2) + prediction_error
-                Rn = Rn_corrected
-            else:
-                Energy = Sum(Abs(Rn - R) ** 2)
+            R_allowed = self.Residuate(Rn, E, temp)
+            Rn_corrected = self.SmoothMin((Rn, R_allowed), temp, axis=0)
 
+            Energy = Sum(Abs(Rn_corrected - R) ** 2) + Sum(Abs(Rn - Rn_corrected) ** 2)
             temp = -Energy / (R.size * np.mean(Log(np.clip(R, eps, 1))))
 
             n_new = Sum((Rn > eps) & (R <= eps))
@@ -122,8 +97,10 @@ class Tensor(Activations):
             if Energy <= eps:
                 print(f"✓ CONVERGED at iteration {k + 1}")
                 break
-            R = Rn
-        return (R, last_witnesses) if return_witnesses else R
+
+            R = Rn_corrected
+
+        return R
     
 
     def ChainJoin(self, *EmbRs, temp=0.0, semiring='fuzzy'):
