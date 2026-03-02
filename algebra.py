@@ -33,14 +33,14 @@ def Implies(a, b):
     a α b = 1 if a <= b else b
     Works elementwise on numpy arrays.
     """
-    return np.where(a <= b, 1.0, b)
+    return np.where(a <= b, Top, b)
 
 def Refutes(a, b):
     """
     Greatest Lower bound, also called dual pseudocomplement
     a eps b = 0 if b <= a else b
     """
-    return np.where(a >= b, 0.0, b)
+    return np.where(a >= b, Bottom, b)
 
 def Log(args):
     """Log over args"""
