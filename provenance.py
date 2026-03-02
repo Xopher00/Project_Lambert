@@ -13,31 +13,40 @@ of the tensor operations themselves.
 import numpy as np
 from tree import Tree
 from tensor import Tensor as t
-import audit
+from audit import format_proof
+from algebra import Implies, Refutes
 
 class Provenance(t):
 
     def _select_candidates(self, u, v, threshold, error=None):
-        # Direct lookup instead of filtering
-        polynomial = self._witnesses.get((u, v), {})        
-        candidates = np.array([
-            y for y, score in polynomial.items() 
-            if score > threshold
-        ], dtype=int)        
+        polynomial = self._witnesses.get((u, v), {})
+        # Grade each witness by how much it exceeds the threshold
+        graded = sorted(
+            [(y, Refutes(threshold, score)) for y, score in polynomial.items()],
+            key=lambda x: x[1], reverse=True
+        )
+        candidates = np.array([y for y, g in graded if g > 0], dtype=int)
         if len(candidates) == 0:
-            return candidates            
+            return candidates
         if error is not None:
             gaps = error[u, :] > threshold
-            candidates = candidates[~gaps[candidates]]            
+            candidates = candidates[~gaps[candidates]]
         return candidates[(candidates != v) & (candidates != u)]
 
     def _recurse(self, E, u, v, candidates, threshold, seen):
+        # Sort by directional coherence: Implies(E[u,y], E[y,v]) is Top when
+        # the path strengthens (u→y weaker than y→v), suspect otherwise
+        ordered = sorted(
+            [y for y in candidates if y not in seen],
+            key=lambda y: Implies(E[u, y], E[y, v]),
+            reverse=True
+        )
         branches = [
             Tree.Pair(
                 self.Prove(E, u, y, threshold, seen | {y}) or Tree.Pair(u, y),
                 self.Prove(E, y, v, threshold, seen | {y})
             )
-            for y in candidates if y not in seen
+            for y in ordered
         ]
         branches = [b for b in branches if b is not None]
         return {"node": (u, v), "branches": branches} if branches else None
@@ -65,7 +74,7 @@ class Provenance(t):
     def Query(self, W, src, dst, names, relation="related to", threshold=0.05, temp=0.05, return_proof=False):
         R_star = self.Witnesses(W, temp=temp)
         proof = self.Prove(R_star, src, dst, threshold=threshold)
-        formatted = audit.format_proof(proof, R_star, names, relation)
+        formatted = format_proof(proof, R_star, names, relation)
         if return_proof:
             return formatted, proof
         return formatted
