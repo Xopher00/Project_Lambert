@@ -22,17 +22,25 @@ def Max(*args, axis=None, keepdims=False):
     else:
         np.maximum.reduce(np.array(args))
 
+def Sum(args, axis=None, keepdims=False):
+    """Sum over domain"""
+    return np.sum(args, axis=axis, keepdims=keepdims)
+
 def Implies(a, b):
     """
     Pseudocomplement for the min t-norm (Gödel implication):
-        a α b = 1 if a <= b else b
+    Least upper bound
+    a α b = 1 if a <= b else b
     Works elementwise on numpy arrays.
     """
     return np.where(a <= b, 1.0, b)
 
-def Sum(args, axis=None, keepdims=False):
-    """Sum over domain"""
-    return np.sum(args, axis=axis, keepdims=keepdims)
+def Refutes(a, b):
+    """
+    Greatest Lower bound, also called dual pseudocomplement
+    a eps b = 0 if b <= a else b
+    """
+    return np.where(a >= b, 0.0, b)
 
 def Log(args):
     """Log over args"""
