@@ -89,7 +89,10 @@ class Tensor(Activations):
             R_allowed = self.Residuate(Rn, E, temp)
             Rn_corrected = self.SmoothMin((Rn, R_allowed), temp, axis=0)
 
-            Energy = Sum(Abs(Rn_corrected - R) ** 2) + Sum(Abs(Rn - Rn_corrected) ** 2)
+            dynamic_error = Sum(Abs(Rn_corrected - R) ** 2)  # ε_x
+            sensory_error = Sum(Abs(Rn - Rn_corrected) ** 2) # ε_y 
+            prior_error = Sum(Abs(Rn_corrected - E) ** 2)    # ε_v
+            Energy = dynamic_error + sensory_error + prior_error
             temp = -Energy / (R.size * np.mean(Log(np.clip(R, eps, 1))))
 
             n_new = Sum((Rn > eps) & (R <= eps))
