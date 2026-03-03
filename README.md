@@ -61,7 +61,7 @@ As the model converges and free energy drops, temperature drops with it — hard
 
 It produces qualitatively correct behavior — temperature drops as $E \to 0$, hardening soft operations toward crisp boolean logic — but uses a non-standard entropy definition and has boundary singularities when any $A_i = 0$ or all $A_i = 1$. 
 
-The temperature parameter controls a spectrum between two reasoning modes: at $T \to 0$, SmoothMax approaches hard max and SmoothMin approaches hard min, recovering exact crisp Boolean logic; at $T = 0$, operations become nearly linear and all evidence contributes proportionally, enabling analogical reasoning. The system can operate anywhere on this spectrum without changing the underlying framework.
+The temperature parameter controls a spectrum between two reasoning modes: at $T \to 0$, SmoothMax approaches hard max and SmoothMin approaches hard min, recovering exact crisp Boolean logic; as $T increases, the logical operations become fuzzier and all evidence contributes proportionally, enabling analogical reasoning. The system can operate anywhere on this spectrum without changing the underlying framework.
 
 #### **SVD/Tucker decomposition:** 
 Lambert uses a standard compression technique to represent entities in a lower-dimensional space. This technique was designed for arithmetic algebra and is not a perfect fit for logical algebra — a known limitation left for future work. 
