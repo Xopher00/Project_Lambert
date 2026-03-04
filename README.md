@@ -96,10 +96,9 @@ SVD's optimality guarantee (minimum Frobenius-norm reconstruction error) does no
 These limitations have been reviewed and are considered acceptable for the current stage of the project.
 
 ## Status
-The core components prescribed by Domingos, grounded in Unified Algebra rather than typical statistics, have been assembled and debugged. The UA-based formulation is significantly cleaner and more interpretable than a statistical equivalent would be.
+Most of the core components of a tensor logic based system (described by Pedro Domingos) have been assembled and debugged. These are based on Unified Algebra and Fuzzy logic, rather than typical statistics. The UA-based formulation is significantly cleaner and more interpretable than a statistical equivalent would be.
 
 Remaining work:
-- Build a full end-to-end pipeline that traces a complete logic path for a moderately complex task or query
-- Assess and simplify the mathematics of individual components where possible
-- Develop proof-guided training: using witness records from inference to update only the weights that actually contributed to a conclusion, rather than all parameters
-
+- Build a full end-to-end pipeline that traces a complete logic path for a moderately complex task or query - a diagnosis or recommendation based on a medical knowledge graph, for example.
+- Iterate and improve components based on research, or simplify if mathematics allow, both to improve performance and be more theoretically grounded
+- Embedding module still needs work
