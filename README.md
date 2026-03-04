@@ -29,15 +29,24 @@ The provenance pipeline was tested against the [BradyStephenson/bible-data](http
 
 A provenance query was then run asking whether Adam is an ancestor of Abram. The system returned the following proof chain at full confidence:
 
-> [Query] Adam → Abram  relation='ancestor of'  threshold=0.05  temp=0.05
-> . . . 
-> [Query] proof found
-> --- Adam → Abram ---
-> {'node': 'Adam ancestor of Abram because:', 'branches': ['Adam (1.000) ancestor of → Seth (1.000) ancestor of → Enosh (1.000) ancestor of → Kenan (1.000) ancestor of → Mahalalel (1.000) ancestor of → Jared (1.000) ancestor of → Enoch (1.000) ancestor of → Methuselah (1.000) ancestor of → Lamech (1.000) ancestor of → Noah (1.000) ancestor of → Shem (1.000) ancestor of → Arpachshad (1.000) ancestor of → Shelah (1.000) ancestor of → Eber (1.000) ancestor of → Peleg (1.000) ancestor of → Reu (1.000) ancestor of → Serug (1.000) ancestor of → Nahor (1.000) ancestor of → Terah (1.000) ancestor of → Abram']}
+```
+[Query] Adam → Abram  relation='ancestor of'  threshold=0.05  temp=0.05
+. . .
+[Query] proof found
+--- Adam → Abram ---
+Adam ancestor of Abram because:
+  Adam (1.000) ancestor of → Seth (1.000) ancestor of → Enosh (1.000) ancestor of
+  → Kenan (1.000) ancestor of → Mahalalel (1.000) ancestor of → Jared (1.000) ancestor of
+  → Enoch (1.000) ancestor of → Methuselah (1.000) ancestor of → Lamech (1.000) ancestor of
+  → Noah (1.000) ancestor of → Shem (1.000) ancestor of → Arpachshad (1.000) ancestor of
+  → Shelah (1.000) ancestor of → Eber (1.000) ancestor of → Peleg (1.000) ancestor of
+  → Reu (1.000) ancestor of → Serug (1.000) ancestor of → Nahor (1.000) ancestor of
+  → Terah (1.000) ancestor of → Abram
+```
 
 Every step is a direct readout constructed from the witness polynomials — not an explanation generated after the fact. The intermediate nodes (Seth, Enosh, Kenan, … Terah) are the witnesses recorded during Join that jointly justify the conclusion.
 
-### Mathematical Foundations
+## Mathematical Foundations
 
 #### **Fuzzy relational composition:** 
 At its core, Lambert reasons by asking: "given that X relates to Y, and Y relates to Z, how strongly does X relate to Z?" This is relational composition, implemented with logical min and max rather than arithmetic multiplication and addition. The core inference step is a smooth approximation of [Zadeh's max-min relational composition (1965)](https://www.sciencedirect.com/science/article/pii/S001999586590241X):
