@@ -44,7 +44,7 @@ Adam ancestor of Abram because:
   → Terah (1.000) ancestor of → Abram
 ```
 
-Every step is a direct readout constructed from the witness polynomials — not an explanation generated after the fact. The intermediate nodes (Seth, Enosh, Kenan, … Terah) are the witnesses recorded during Join that jointly justify the conclusion.
+Every step is a direct readout constructed from the witness polynomials — not an explanation generated after the fact. The intermediate nodes (Seth, Enosh, Kenan, … Terah) are the witnesses recorded during Join that jointly justify the conclusion. Proofs like this are not guaranteed to be 100% correct - the model may still be prone to mistakes or make unexpected logical leaps. But this makes that process more transparent.
 
 ## Mathematical Foundations
 
