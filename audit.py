@@ -44,14 +44,13 @@ def extract_path(proof):
     return Tree.fold(folder, proof, None)
 
 
-def format_branch(path, backward, names):
+def format_branch(path, backward, names, relation="is related to"):
     if path is None:
         return None
     parts = []
     for i in range(len(path) - 1):
         u, v = path[i], path[i+1]
-        parts.append(names[u])
-        parts.append(f"({backward[u, v]:.3f})")
+        parts.append(f"{names[u]} ({backward[u, v]:.3f}) {relation}")
     parts.append(names[path[-1]])
     return " → ".join(parts)
 
@@ -66,8 +65,8 @@ def format_proof(proof, backward, names, relation="is related to"):
         paths = [p for p in paths if p is not None]
         if not paths:
             return "No proof found"
-        branches = [format_branch(p, backward, names) for p in paths]
-        branches = [b for b in branches if b is not None]
+        branches = [format_branch(p, backward, names, relation) for p in paths]
+        branches = list(dict.fromkeys(b for b in branches if b is not None))
         return {'node': label, 'branches': branches}
     else:
         path = extract_path(proof)

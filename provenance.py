@@ -25,12 +25,14 @@ class Provenance(t):
             [(y, Refutes(threshold, score)) for y, score in polynomial.items()],
             key=lambda x: x[1], reverse=True
         )
-        candidates = np.array([y for y, g in graded if g > 0], dtype=int)
+        candidates = np.array([y for y, g in graded if g > 0], dtype=int)[:3]
+        # print(f"  [candidates] ({u},{v}): {len(polynomial)} witnesses, {len(candidates)} above threshold")
         if len(candidates) == 0:
             return candidates
         if error is not None:
             gaps = error[u, :] > threshold
             candidates = candidates[~gaps[candidates]]
+            # print(f"  [candidates] ({u},{v}): {len(candidates)} after error filter")
         return candidates[(candidates != v) & (candidates != u)]
 
     def _recurse(self, E, u, v, candidates, threshold, seen):
@@ -41,6 +43,7 @@ class Provenance(t):
             key=lambda y: Implies(E[u, y], E[y, v]),
             reverse=True
         )
+        # print(f"  [recurse] ({u}→{v}): {len(ordered)} unseen candidates")
         branches = [
             Tree.Pair(
                 self.Prove(E, u, y, threshold, seen | {y}) or Tree.Pair(u, y),
@@ -49,17 +52,21 @@ class Provenance(t):
             for y in ordered
         ]
         branches = [b for b in branches if b is not None]
+        # print(f"  [recurse] ({u}→{v}): {len(branches)} valid branches")
         return {"node": (u, v), "branches": branches} if branches else None
 
     def Prove(self, E, u, v, threshold=0.05, seen=None):
         if seen is None:
             seen = set()
+            # print(f"[Prove] ({u}→{v}) threshold={threshold:.4f}")
         if u == v:
             return None
         candidates = self._select_candidates(u, v, threshold)
         if len(candidates) == 0:
             if E[u, v] > threshold:
+                # print(f"  [Prove] ({u}→{v}): direct edge, score={E[u,v]:.4f}")
                 return Tree.Pair(u, v)
+            # print(f"  [Prove] ({u}→{v}): no candidates, no direct edge")
             return None
         return self._recurse(E, u, v, candidates, threshold, seen)
 
@@ -67,13 +74,17 @@ class Provenance(t):
     # Finds intermediate nodes y such that u can reach y AND y can reach v.
     # λx. λy. λz.  (x z)(z y)
     def Witnesses(self, R, temp):
-        R_star = self.Closure(R, temp=temp, return_witnesses=False)
+        # print(f"[Witnesses] computing closure (temp={temp:.4f})")
+        R_star = self.Closure(R, temp=temp)
+        # print(f"[Witnesses] running self-join on R*")
         self.Join(R_star, R_star, temp)
         return R_star
-   
+
     def Query(self, W, src, dst, names, relation="related to", threshold=0.05, temp=0.05, return_proof=False):
+        print(f"[Query] {names[src]} → {names[dst]}  relation={relation!r}  threshold={threshold}  temp={temp}")
         R_star = self.Witnesses(W, temp=temp)
         proof = self.Prove(R_star, src, dst, threshold=threshold)
+        print(f"[Query] proof {'found' if proof else 'not found'}")
         formatted = format_proof(proof, R_star, names, relation)
         if return_proof:
             return formatted, proof
