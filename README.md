@@ -19,7 +19,23 @@ For each output pair (x, z), this finds the best intermediate "witness" y by com
 
 This equation can be expressed using different algebraic structures called semirings. We use the logical semiring — Disjunction (∨ = max) and Conjunction (∧ = min) — rather than the standard arithmetic semiring. This makes the model's internal logic semantically transparent and directly interpretable.
 
+Normally the information on intermediate witness nodes is lost during reduction - sum over the product or max over the minimum, in our case. Witness node information is stored in a polynomial format which can be used later to reconstruct a proof of how a model found a relationship.
+
 This also eliminates a technical overhead present in Domingos's original formulation. Standard Tensor Logic operates on $\{0, 1\}$ and must apply a Heaviside step function after each join to convert continuous sums back to Boolean values: $A[x,z] = H\left(\sum_y S[x,y] \cdot P[y,z]\right)$. In UA, using $\top/\bot = \pm\infty$ with min/max, Boolean operations are closed by construction — the max or min of values from $\{-\infty, +\infty\}$ is always in $\{-\infty, +\infty\}$. No thresholding is needed. This means making the model "soft" (continuous, learnable) is not a separate mode switch; it is the same framework with a temperature parameter controlling how sharp the min/max operations are.
+
+## Provenance Example
+
+The provenance pipeline was tested against the [BradyStephenson/bible-data](https://github.com/BradyStephenson/bible-data) dataset, which contains 3,009 biblical persons and 5,450 relationship records. After filtering to parent/child relationships and building an adjacency matrix over 1,972 nodes, Lambert's closure converged in ~12 seconds after 75 iterations, expanding 1,727 direct parent links into 33,943 transitive ancestor relationships.
+
+A provenance query was then run asking whether Adam is an ancestor of Abram. The system returned the following proof chain at full confidence:
+
+> [Query] Adam → Abram  relation='ancestor of'  threshold=0.05  temp=0.05
+> . . . 
+> [Query] proof found
+> --- Adam → Abram ---
+> {'node': 'Adam ancestor of Abram because:', 'branches': ['Adam (1.000) ancestor of → Seth (1.000) ancestor of → Enosh (1.000) ancestor of → Kenan (1.000) ancestor of → Mahalalel (1.000) ancestor of → Jared (1.000) ancestor of → Enoch (1.000) ancestor of → Methuselah (1.000) ancestor of → Lamech (1.000) ancestor of → Noah (1.000) ancestor of → Shem (1.000) ancestor of → Arpachshad (1.000) ancestor of → Shelah (1.000) ancestor of → Eber (1.000) ancestor of → Peleg (1.000) ancestor of → Reu (1.000) ancestor of → Serug (1.000) ancestor of → Nahor (1.000) ancestor of → Terah (1.000) ancestor of → Abram']}
+
+Every step is a direct readout constructed from the witness polynomials — not an explanation generated after the fact. The intermediate nodes (Seth, Enosh, Kenan, … Terah) are the witnesses recorded during Join that jointly justify the conclusion.
 
 ### Mathematical Foundations
 
