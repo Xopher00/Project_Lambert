@@ -36,22 +36,26 @@ class Tensor(Activations):
             return Tensor_A @ Tensor_B, None
 
         A, B = Tensor_A, Tensor_B
-        th   = threshold
         n, m = A.shape
         _, p = B.shape
         result    = np.full((n, p), Bottom, dtype=float)
+        absA, absB = Abs(A), Abs(B)
+        xs_list = [np.flatnonzero(absA[:, y] > threshold) for y in range(m)]
+        zs_list = [np.flatnonzero(absB[y, :] > threshold) for y in range(m)]
 
         for y in range(m):
-            xs = np.where(Abs(A[:, y]) > th)[0]
-            zs = np.where(Abs(B[y, :]) > th)[0]
+            xs = xs_list[y]
+            zs = zs_list[y]
             if not (len(xs) and len(zs)): continue
+            ix = np.ix_(xs, zs)
 
             a_col = A[:, y]
             b_row = B[y, :]
             contrib = self.SmoothMin((a_col[xs, None], b_row[None, zs]), temp, axis=0)
-            result[np.ix_(xs, zs)] = self.SmoothMax((result[np.ix_(xs, zs)], contrib), temp, axis=0)
+            old = result[ix]
+            result[ix] = self.SmoothMax((old, contrib), temp, axis=0)
 
-            self._track_witnesses(xs, y, zs, contrib, th)
+            self._track_witnesses(xs, y, zs, contrib, threshold)
 
         return result
     
@@ -64,17 +68,22 @@ class Tensor(Activations):
         assert n == o, "Shared (row) dimension mismatch"
         # min-reduction identity is Top (e.g., 1.0)
         B = np.full((m, p), Top, dtype=float)
+        # Find non-zero columns in A[i,:] and C[i,:]
+        absA, absC = Abs(A), Abs(C)
+        js_list = [np.flatnonzero(absA[i, :] > threshold) for i in range(n)]
+        ks_list = [np.flatnonzero(absC[i, :] > threshold) for i in range(n)]
 
         for i in range(n):
-            # Find non-zero columns in A[i,:] and C[i,:]
-            js = np.where(Abs(A[i, :]) > threshold)[0]  # Active columns in A
-            ks = np.where(Abs(C[i, :]) > threshold)[0]  # Active columns in C
+            js = js_list[i] # Active columns in A
+            ks = ks_list[i] # Active columns in C
             if not (len(js) and len(ks)): continue
+            ix = np.ix_(js, ks)
 
             a_row = A[i, js]  # (len(js),)
             c_row = C[i, ks]  # (len(ks),)
             contrib = Implies(a_row[:, None], c_row[None, :])  # (len(js), len(ks))
-            B[np.ix_(js, ks)] = self.SmoothMin((B[np.ix_(js, ks)], contrib), temp, axis=0)
+            old = B[ix]
+            B[ix] = self.SmoothMin((old, contrib), temp, axis=0)
 
         return B
     
