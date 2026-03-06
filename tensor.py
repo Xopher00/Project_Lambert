@@ -105,42 +105,6 @@ class Tensor(Activations):
 
         return R
 
-    def Grecond(self, E, temp=None, threshold=0.5, max_iters=100):
-        residual = E.copy()
-        As, Bs = [], []
-
-        for k in range(max_iters):
-            best_cover = Bottom
-            best_A, best_B = None, None
-
-            for j in range(E.shape[1]):
-                # extent: which objects belong to this concept
-                d = E[:, j]
-                a = self.Join(residual[:, j:j+1].T, E, temp).squeeze()
-                # intent: which attributes are shared by those objects  
-                b = self.Join(E, a[:, None], temp).squeeze()
-                print(a.min(), a.max(), b.min(), b.max())
-                # coverage: how much of residual does this concept explain
-                covered = self.Join(b[:, None], a[None, :], temp)
-                score = Sum(self.SmoothMin((covered, residual), temp, axis=0))
-                if score > best_cover:
-                    best_cover = score
-                    best_A = a
-                    best_B = b
-                    
-            As.append(best_A)
-            Bs.append(best_B)
-
-            covered = self.Join(best_B[:, None], best_A[None, :], temp)           
-            # run until we find the best factors a and b that explain the residual
-            residual = Refutes(covered, residual)
-            print(residual.min(), residual.max(), covered.min(), covered.max())
-            if np.all(residual <= Bottom):
-                break
-
-        return As, Bs
-
-
     def ChainJoin(self, *EmbRs, temp=0.0, semiring='fuzzy'):
         result = EmbRs[0]
         for EmbR in EmbRs[1:]:

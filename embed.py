@@ -3,10 +3,7 @@ Embedding layer. Compresses relations into a lower-dimensional space via
 SVD-based Tucker decomposition (Project), allowing the tensor logic
 operations from tensor.py to run on compact representations rather than
 full N×N matrices — enabling the system to scale to larger graphs.
-LearnEmbedding refines SVD-initialised embeddings via alternating Residuate:
-fixing emb to solve for EmbR, then fixing EmbR to solve for emb, until the
-underprediction error Refutes(Join(emb, EmbR), R) vanishes. GramMatrix and
-EmbedSet support analogical reasoning, where similar entities borrow
+GramMatrix and EmbedSet support analogical reasoning, where similar entities borrow
 inferences from one another proportionally to their embedding similarity.
 """
 
@@ -24,20 +21,13 @@ class Embed(Tensor):
         d = Max(int(Sum((S / s0) > threshold)), 1)
         return U[:, :d], d
 
-    # Tucker projection: maps a relation between spaces using emb as the bridge.
-    # Entity → Embedding: Project(R,    emb)    →  emb.T @ R    @ emb
-    # Embedding → Entity: Project(EmbR, emb.T)  →  emb   @ EmbR @ emb.T
-    def Project(self, M, emb):
-        if hasattr(M, 'tocsr'):          # scipy sparse
-            AE = M.dot(emb)
-        else:
-            AE = M @ emb                 # dense numpy
-        return emb.T @ AE
+    def Project(self, M, emb, temp=0.0):
+        """Max-min Tucker projection: emb.T ∘ M ∘ emb"""
+        return self.Join(self.Join(emb.T, M, temp), emb, temp)
 
-    # Extract relationship, keep track of products to see how model reached conclusion
     def Expand(self, EmbR, emb, temp):
-        logits = self.Project(EmbR, emb.T)
-        return self.SoftMax(logits, temp, axis=-1)
+        """Reconstruct: emb ∘ EmbR ∘ emb.T"""
+        return self.Join(self.Join(emb, EmbR, temp), emb.T, temp)
 
     # represents a group of entities on a single vector by combining their embeddings
     def EmbedSet(self, indices, emb, temp):
@@ -49,3 +39,44 @@ class Embed(Tensor):
     # λx. λy. λz.  (x z)(y z)
     def GramMatrix(self, M, temp, semiring='fuzzy'):
         return self.Join(M, M.T, temp, semiring=semiring)
+
+    def _score_concept(self, E, residual, j, temp):
+        """Score the fuzzy concept rooted at column j against the current residual.
+        Returns (a, b, score) — extent, intent, coverage score."""
+        a = self.Join(residual[:, j:j+1].T, E, temp).squeeze()
+        b = self.Join(E, a[:, None], temp).squeeze()
+        covered = self.Join(b[:, None], a[None, :], temp)
+        score = Sum(self.SmoothMin((covered, residual), temp, axis=0))
+        return a, b, score
+
+    def _select_concept(self, E, residual, temp):
+        """Scan all columns and return the (a, b) pair with the highest coverage score."""
+        best_score = Bottom
+        best_A, best_B = None, None
+        for j in range(E.shape[1]):
+            a, b, score = self._score_concept(E, residual, j, temp)
+            if score > best_score:
+                best_score = score
+                best_A, best_B = a, b
+        return best_A, best_B
+
+    def _update_residual(self, best_A, best_B, residual, temp):
+        """Subtract the selected concept's coverage from the residual."""
+        covered = self.Join(best_B[:, None], best_A[None, :], temp)
+        return Refutes(covered, residual)
+
+    def Grecond(self, E, temp=None, threshold=0.5, max_iters=100):
+        residual = E.copy()
+        As, Bs = [], []
+
+        for _ in range(max_iters):
+            if np.all(residual <= Bottom):
+                break
+            best_A, best_B = self._select_concept(E, residual, temp)
+            if best_A is None:
+                break
+            As.append(best_A)
+            Bs.append(best_B)
+            residual = self._update_residual(best_A, best_B, residual, temp)
+
+        return As, Bs
