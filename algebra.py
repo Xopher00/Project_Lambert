@@ -29,7 +29,6 @@ def Sum(args, axis=None, keepdims=False):
 def Implies(a, b):
     """
     Pseudocomplement for the min t-norm (Gödel implication):
-    Least upper bound
     a α b = 1 if a <= b else b
     Works elementwise on numpy arrays.
     """
@@ -37,7 +36,7 @@ def Implies(a, b):
 
 def Refutes(a, b):
     """
-    Greatest Lower bound, also called dual pseudocomplement
+    dual pseudocomplement
     a eps b = 0 if b <= a else b
     """
     return np.where(a >= b, Bottom, b)
