@@ -101,7 +101,9 @@ class Provenance(t):
         self._R_star = self.Closure(R, temp=temp)
         self._R_source = R
         self._clear_witnesses()
+        self.tracking = True
         self.Join(self._R_star, self._R_star, temp)
+        self.tracking = False
 
     def Query(self, W, src, dst, names, relation="related to", threshold=0.05, temp=0.05, return_proof=False):
         print(f"[Query] {names[src]} → {names[dst]}  relation={relation!r}  threshold={threshold}  temp={temp}")
