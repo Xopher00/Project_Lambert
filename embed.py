@@ -81,3 +81,21 @@ class Embed(Tensor):
             residual = self._update_residual(best_A, best_B, residual, temp)
 
         return As, Bs
+
+    def GrecondSelect(self, R, temp=None, threshold=0.5):
+        """Use Grecond intents to select representative columns from R.
+        For each factor k, picks the column j* most aligned with intent As[k].
+        Returns the reduced R using those columns, plus the selected indices."""
+        As, _ = self.Grecond(R, temp=temp, threshold=threshold)
+        if not As:
+            return R, np.arange(R.shape[1])
+        selected = []
+        for a in As:
+            # Score each column by min(R[:,j], a[j]) summed over rows — alignment with intent
+            scores = np.array([
+                Sum(self.SmoothMin((R[:, j], a[j] * np.ones(R.shape[0])), temp, axis=0))
+                for j in range(R.shape[1])
+            ])
+            selected.append(int(np.argmax(scores)))
+        cols = np.unique(selected)
+        return R[:, cols], cols
