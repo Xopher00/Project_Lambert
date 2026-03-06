@@ -54,7 +54,8 @@ class Embed(Tensor):
         """Scan all columns and return the (a, b) pair with the highest coverage score."""
         best_score = Bottom
         best_A, best_B = None, None
-        for j in range(E.shape[1]):
+        cols = np.flatnonzero(np.any(residual > Bottom, axis=0))
+        for j in cols: # range(E.shape[1]):
             a, b, score = self._score_concept(E, residual, j, temp)
             if score > best_score and score > 0:
                 best_score = score
@@ -69,7 +70,6 @@ class Embed(Tensor):
     def Grecond(self, E, temp=None, threshold=0.5, max_iters=100):
         residual = E.copy()
         As, Bs = [], []
-
         for _ in range(max_iters):
             if np.all(residual <= Bottom):
                 break
@@ -79,23 +79,25 @@ class Embed(Tensor):
             As.append(best_A)
             Bs.append(best_B)
             residual = self._update_residual(best_A, best_B, residual, temp)
-
         return As, Bs
 
     def GrecondSelect(self, R, temp=None, threshold=0.5):
         """Use Grecond intents to select representative columns from R.
         For each factor k, picks the column j* most aligned with intent As[k].
         Returns the reduced R using those columns, plus the selected indices."""
+        n_rows, n_cols = R.shape
+        cols = np.flatnonzero(np.any(R > Bottom, axis=0))   # skip dead columns
+        tmp = np.empty(n_rows, dtype=R.dtype)              # reuse buffer (avoid np.ones alloc)
         As, _ = self.Grecond(R, temp=temp, threshold=threshold)
         if not As:
             return R, np.arange(R.shape[1])
         selected = []
         for a in As:
+            scores = np.full(n_cols, Bottom, dtype=float)  # defaults so argmax is still valid
             # Score each column by min(R[:,j], a[j]) summed over rows — alignment with intent
-            scores = np.array([
-                Sum(self.SmoothMin((R[:, j], a[j] * np.ones(R.shape[0])), temp, axis=0))
-                for j in range(R.shape[1])
-            ])
+            for j in cols:
+                tmp.fill(a[j])  # replaces a[j] * np.ones(n_rows)
+                scores[j] = Sum(self.SmoothMin((R[:, j], tmp), temp, axis=0))            
             selected.append(int(np.argmax(scores)))
-        cols = np.unique(selected)
-        return R[:, cols], cols
+        u_cols = np.unique(selected)
+        return R[:, u_cols], u_cols
