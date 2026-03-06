@@ -46,7 +46,8 @@ class Embed(Tensor):
         a = self.Join(residual[:, j:j+1].T, E, temp).squeeze()
         b = self.Join(E, a[:, None], temp).squeeze()
         covered = self.Join(b[:, None], a[None, :], temp)
-        score = Sum(self.SmoothMin((covered, residual), temp, axis=0))
+        overlap = self.SmoothMin((covered, residual), temp, axis=0)
+        score = Sum(overlap[overlap > Bottom])
         return a, b, score
 
     def _select_concept(self, E, residual, temp):
@@ -55,7 +56,7 @@ class Embed(Tensor):
         best_A, best_B = None, None
         for j in range(E.shape[1]):
             a, b, score = self._score_concept(E, residual, j, temp)
-            if score > best_score:
+            if score > best_score and score > 0:
                 best_score = score
                 best_A, best_B = a, b
         return best_A, best_B
