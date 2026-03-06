@@ -12,11 +12,33 @@ of the tensor operations themselves.
 
 import numpy as np
 from tree import Tree
+import networkx as nx
 from tensor import Tensor as t
 from audit import format_proof
 from algebra import Implies, Refutes
+from collections import deque
 
 class Provenance(t):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._R_star = None
+        self._R_source = None
+
+    def witness_capacity(self, threshold=0.05):
+        if not self._witnesses:
+            return {"pairs": 0, "avg_branching": 0.0, "max_branching": 0}
+        
+        branch_counts = [
+            sum(1 for score in witnesses.values() if score > threshold)
+            for witnesses in self._witnesses.values()
+        ]
+        
+        return {
+            "pairs": len(branch_counts),
+            "avg_branching": np.mean(branch_counts),
+            "max_branching": max(branch_counts)
+        }
 
     def _select_candidates(self, u, v, threshold, error=None):
         polynomial = self._witnesses.get((u, v), {})
@@ -74,18 +96,19 @@ class Provenance(t):
     # Finds intermediate nodes y such that u can reach y AND y can reach v.
     # λx. λy. λz.  (x z)(z y)
     def Witnesses(self, R, temp):
-        # print(f"[Witnesses] computing closure (temp={temp:.4f})")
-        R_star = self.Closure(R, temp=temp)
-        # print(f"[Witnesses] running self-join on R*")
-        self.Join(R_star, R_star, temp)
-        return R_star
+        if self._R_star is not None and self._R_source is R:
+            return
+        self._R_star = self.Closure(R, temp=temp)
+        self._R_source = R
+        self._clear_witnesses()
+        self.Join(self._R_star, self._R_star, temp)
 
     def Query(self, W, src, dst, names, relation="related to", threshold=0.05, temp=0.05, return_proof=False):
         print(f"[Query] {names[src]} → {names[dst]}  relation={relation!r}  threshold={threshold}  temp={temp}")
-        R_star = self.Witnesses(W, temp=temp)
-        proof = self.Prove(R_star, src, dst, threshold=threshold)
+        self.Witnesses(W, temp=temp)
+        proof = self.Prove(self._R_star, src, dst, threshold=threshold)
         print(f"[Query] proof {'found' if proof else 'not found'}")
-        formatted = format_proof(proof, R_star, names, relation)
+        formatted = format_proof(proof, self._R_star, names, relation)
         if return_proof:
             return formatted, proof
         return formatted
