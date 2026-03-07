@@ -17,8 +17,8 @@ class Memory(Embed):
         )
 
     def _step(self, q, temp):
-        raw       = self.Attend(q, self.emb, temp)
-        raw = self.Softplus(raw, temp)
+        J       = self.Attend(q, self.emb, temp)
+        raw        = self.SoftMax(J, temp, axis=0)
         allowed   = self.Residuate(raw[:, None], self.emb.T, temp).squeeze()  # (250,)
         corrected = self.SmoothMin((raw, self.Join(allowed[None,:], self.emb, temp).squeeze()), temp, axis=0)
         return corrected, raw
