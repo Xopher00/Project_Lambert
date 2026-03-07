@@ -13,13 +13,33 @@ from tensor import Tensor
 
 class Embed(Tensor):
 
-    # Learn how to represent entities geometrically
-    # derived from the structure of our tensor via svd
-    def Embed(self, R, threshold=0.05):
-        U, S, _ = np.linalg.svd(R, full_matrices=False)
-        s0 = S[0] if S.size and S[0] != 0 else 1.0
-        d = Max(int(Sum((S / s0) > threshold)), 1)
-        return U[:, :d], d
+    def _concept_fixpoint(self, R, seed, temp, max_iters=20, eps=1e-3):
+        active = np.flatnonzero(seed > 0)
+        if len(active) == 0:
+            return seed
+        R_active = R[active, :]
+        a = seed[active]
+        for _ in range(max_iters):
+            b     = np.atleast_1d(self.Residuate(R_active, a[:, None], temp).squeeze())
+            a_new = np.atleast_1d(self.Residuate(R_active.T, b[:, None], temp).squeeze())
+            if Sum(Abs(a_new - a)) < eps:
+                break
+            a = a_new
+        return a
+
+    def ConceptEmbed(self, R, temp, eps=1e-3):
+        seen     = {}
+        rep_cols = []
+        for j in range(R.shape[1]):
+            a   = self._concept_fixpoint(R, R[:, j], temp, eps=eps)
+            n_active = int((R[:, j] > 0).sum())
+            key = (tuple((a / eps).astype(int))) if n_active > 1 else (j,)
+            if key not in seen:
+                seen[key] = j
+                rep_cols.append(j)
+        emb  = R[:, rep_cols]
+        EmbR = self.Project(R, emb, temp)
+        return emb, EmbR, rep_cols 
 
     def Project(self, M, emb, temp=0.0):
         """Max-min Tucker projection: emb.T ∘ M ∘ emb"""
@@ -40,64 +60,4 @@ class Embed(Tensor):
     def GramMatrix(self, M, temp, semiring='fuzzy'):
         return self.Join(M, M.T, temp, semiring=semiring)
 
-    def _score_concept(self, E, residual, j, temp):
-        """Score the fuzzy concept rooted at column j against the current residual.
-        Returns (a, b, score) — extent, intent, coverage score."""
-        a = self.Join(residual[:, j:j+1].T, E, temp).squeeze()
-        b = self.Join(E, a[:, None], temp).squeeze()
-        covered = self.Join(b[:, None], a[None, :], temp)
-        overlap = self.SmoothMin((covered, residual), temp, axis=0)
-        score = Sum(overlap[overlap > Bottom])
-        return a, b, score
 
-    def _select_concept(self, E, residual, temp):
-        """Scan all columns and return the (a, b) pair with the highest coverage score."""
-        best_score = Bottom
-        best_A, best_B = None, None
-        cols = np.flatnonzero(np.any(residual > Bottom, axis=0))
-        for j in cols: # range(E.shape[1]):
-            a, b, score = self._score_concept(E, residual, j, temp)
-            if score > best_score and score > 0:
-                best_score = score
-                best_A, best_B = a, b
-        return best_A, best_B
-
-    def _update_residual(self, best_A, best_B, residual, temp):
-        """Subtract the selected concept's coverage from the residual."""
-        covered = self.Join(best_B[:, None], best_A[None, :], temp)
-        return Refutes(covered, residual)
-
-    def Grecond(self, E, temp=None, threshold=0.5, max_iters=100):
-        residual = E.copy()
-        As, Bs = [], []
-        for _ in range(max_iters):
-            if np.all(residual <= Bottom):
-                break
-            best_A, best_B = self._select_concept(E, residual, temp)
-            if best_A is None:
-                break
-            As.append(best_A)
-            Bs.append(best_B)
-            residual = self._update_residual(best_A, best_B, residual, temp)
-        return As, Bs
-
-    def GrecondSelect(self, R, temp=None, threshold=0.5):
-        """Use Grecond intents to select representative columns from R.
-        For each factor k, picks the column j* most aligned with intent As[k].
-        Returns the reduced R using those columns, plus the selected indices."""
-        n_rows, n_cols = R.shape
-        cols = np.flatnonzero(np.any(R > Bottom, axis=0))   # skip dead columns
-        tmp = np.empty(n_rows, dtype=R.dtype)              # reuse buffer (avoid np.ones alloc)
-        As, _ = self.Grecond(R, temp=temp, threshold=threshold)
-        if not As:
-            return R, np.arange(R.shape[1])
-        selected = []
-        for a in As:
-            scores = np.full(n_cols, Bottom, dtype=float)  # defaults so argmax is still valid
-            # Score each column by min(R[:,j], a[j]) summed over rows — alignment with intent
-            for j in cols:
-                tmp.fill(a[j])  # replaces a[j] * np.ones(n_rows)
-                scores[j] = Sum(self.SmoothMin((R[:, j], tmp), temp, axis=0))            
-            selected.append(int(np.argmax(scores)))
-        u_cols = np.unique(selected)
-        return R[:, u_cols], u_cols
