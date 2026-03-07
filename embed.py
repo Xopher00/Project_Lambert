@@ -18,7 +18,7 @@ class Embed(Tensor):
         active = np.flatnonzero(seed > 0)
         R_active = R[active, :]
         def _f(a, t, R_active=R_active):
-            b     = np.atleast_1d(self.Residuate(R_active, a[:, None], t.squeeze()))
+            b     = np.atleast_1d(self.Residuate(R_active, a[:, None], t).squeeze())
             a_new = np.atleast_1d(self.Residuate(R_active.T, b[:, None], t).squeeze())
             return a_new
         def _energy(new, old, aux):
@@ -30,13 +30,16 @@ class Embed(Tensor):
     def ConceptEmbed(self, R, temp, eps=1e-3):
         seen     = {}
         rep_cols = []
+        covered  = set()
         for j in range(R.shape[1]):
             a   = self._concept_fixpoint(R, R[:, j], temp, eps=eps)
             n_active = int((R[:, j] > 0).sum())
             key = (tuple((a / eps).astype(int))) if n_active > 1 else (j,)
-            if key not in seen:
+            extent   = set(np.flatnonzero(R[:, j] > 0))
+            if key not in seen or not extent.issubset(covered):
                 seen[key] = j
                 rep_cols.append(j)
+                covered.update(extent)
         emb  = R[:, rep_cols]
         EmbR = self.Project(R, emb, temp)
         return emb, EmbR, rep_cols 
@@ -45,9 +48,9 @@ class Embed(Tensor):
         """Max-min Tucker projection: emb.T ∘ M ∘ emb"""
         return self.Join(self.Join(emb.T, M, temp), emb, temp)
 
-    def Expand(self, EmbR, emb, temp):
+    def Expand(self, M, emb, temp):
         """Reconstruct: emb ∘ EmbR ∘ emb.T"""
-        return self.Join(self.Join(emb, EmbR, temp), emb.T, temp)
+        return self.Join(self.Join(emb, M, temp), emb.T, temp)
 
     # represents a group of entities on a single vector by combining their embeddings
     def EmbedSet(self, indices, emb, temp):
@@ -59,3 +62,10 @@ class Embed(Tensor):
     # λx. λy. λz.  (x z)(y z)
     def GramMatrix(self, M, temp, semiring='fuzzy'):
         return self.Join(M, M.T, temp, semiring=semiring)
+    
+    def Attend(self, q, emb, temp=0.0):
+        """Hopfield retrieval: q ∘ emb.T ∘ emb"""
+        q2d     = q.reshape(1, -1)           # (1, d)
+        scores  = self.Join(q2d, emb.T, temp)  # (1, n_entities)
+        out     = self.Join(scores, emb, temp) # (1, d)
+        return out.squeeze()                 # back to (d,)
