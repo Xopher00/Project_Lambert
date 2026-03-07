@@ -22,7 +22,9 @@ class Embed(Tensor):
         for _ in range(max_iters):
             b     = np.atleast_1d(self.Residuate(R_active, a[:, None], temp).squeeze())
             a_new = np.atleast_1d(self.Residuate(R_active.T, b[:, None], temp).squeeze())
-            if Sum(Abs(a_new - a)) < eps:
+            Energy = Sum(Abs(a_new - a + eps))
+            temp = -Energy / (R.size * np.mean(Log(np.clip(R, eps, 1))))  
+            if  Energy < eps:
                 break
             a = a_new
         return a
