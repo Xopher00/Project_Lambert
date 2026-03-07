@@ -95,19 +95,19 @@ class Provenance(t):
     # Self-join on the converged closure — Join(R*, R*).
     # Finds intermediate nodes y such that u can reach y AND y can reach v.
     # λx. λy. λz.  (x z)(z y)
-    def Witnesses(self, R, temp):
+    def Witnesses(self, R, isClosed, temp):
         if self._R_star is not None and self._R_source is R:
             return
-        self._R_star = self.Closure(R, temp=temp)
+        self._R_star = self.Closure(R, temp=temp) if not isClosed else R
         self._R_source = R
         self._clear_witnesses()
         self.tracking = True
         self.Join(self._R_star, self._R_star, temp)
         self.tracking = False
 
-    def Query(self, W, src, dst, names, relation="related to", threshold=0.05, temp=0.05, return_proof=False):
+    def Query(self, W, src, dst, names, relation="related to", threshold=0.05, temp=0.05, return_proof=False, isClosed=False):
         print(f"[Query] {names[src]} → {names[dst]}  relation={relation!r}  threshold={threshold}  temp={temp}")
-        self.Witnesses(W, temp=temp)
+        self.Witnesses(W, isClosed, temp=temp)
         proof = self.Prove(self._R_star, src, dst, threshold=threshold)
         print(f"[Query] proof {'found' if proof else 'not found'}")
         formatted = format_proof(proof, self._R_star, names, relation)
