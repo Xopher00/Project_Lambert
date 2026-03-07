@@ -15,7 +15,6 @@ from fixpoint import FixpointIterator
 class Embed(Tensor):
 
     def _concept_fixpoint(self, R, seed, temp, max_iters=20, eps=1e-3):
-        seed   = R[:, j]
         active = np.flatnonzero(seed > 0)
         R_active = R[active, :]
         def _f(a, t, R_active=R_active):
