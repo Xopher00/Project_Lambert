@@ -15,38 +15,24 @@ from fixpoint import FixpointIterator
 class Embed(Tensor):
 
     def _concept_fixpoint(self, R, seed, temp, max_iters=20, eps=1e-3):
+        seed   = R[:, j]
         active = np.flatnonzero(seed > 0)
-        if len(active) == 0:
-            return seed
         R_active = R[active, :]
-        a = seed[active]
-        for _ in range(max_iters):
-            b     = np.atleast_1d(self.Residuate(R_active, a[:, None], temp).squeeze())
-            a_new = np.atleast_1d(self.Residuate(R_active.T, b[:, None], temp).squeeze())
-            Energy = Sum(Abs(a_new - a + eps))
-            temp = -Energy / (R.size * np.mean(Log(np.clip(R, eps, 1))))  
-            if  Energy < eps:
-                break
-            a = a_new
-        return a
+        def _f(a, t, R_active=R_active):
+            b     = np.atleast_1d(self.Residuate(R_active, a[:, None], t.squeeze()))
+            a_new = np.atleast_1d(self.Residuate(R_active.T, b[:, None], t).squeeze())
+            return a_new
+        def _energy(new, old, aux):
+            return float(Sum(Abs(new - old + eps)))
+        fp = FixpointIterator(f=_f, energy_fn=_energy, 
+            state0=seed[active].copy(), eps=eps, max_iters=max_iters)
+        return fp.run()
 
     def ConceptEmbed(self, R, temp, eps=1e-3):
         seen     = {}
         rep_cols = []
         for j in range(R.shape[1]):
-            # a   = self._concept_fixpoint(R, R[:, j], temp, eps=eps)
-            seed   = R[:, j]
-            active = np.flatnonzero(seed > 0)
-            R_active = R[active, :]
-            def _f(a, t, R_active=R_active):
-                b     = np.atleast_1d(self.Residuate(R_active, a[:, None], t).squeeze())
-                a_new = np.atleast_1d(self.Residuate(R_active.T, b[:, None], t).squeeze())
-                return a_new
-            def _energy(new, old, aux):
-                return float(Sum(Abs(new - old + eps)))
-            fp = FixpointIterator(f=_f, energy_fn=_energy, state0=seed[active].copy(),
-                                  eps=eps, max_iters=20)
-            a  = fp.run()
+            a   = self._concept_fixpoint(R, R[:, j], temp, eps=eps)
             n_active = int((R[:, j] > 0).sum())
             key = (tuple((a / eps).astype(int))) if n_active > 1 else (j,)
             if key not in seen:
