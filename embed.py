@@ -10,6 +10,7 @@ inferences from one another proportionally to their embedding similarity.
 import numpy as np
 from algebra import *
 from tensor import Tensor
+from fixpoint import FixpointIterator
 
 class Embed(Tensor):
 
@@ -33,7 +34,19 @@ class Embed(Tensor):
         seen     = {}
         rep_cols = []
         for j in range(R.shape[1]):
-            a   = self._concept_fixpoint(R, R[:, j], temp, eps=eps)
+            # a   = self._concept_fixpoint(R, R[:, j], temp, eps=eps)
+            seed   = R[:, j]
+            active = np.flatnonzero(seed > 0)
+            R_active = R[active, :]
+            def _f(a, t, R_active=R_active):
+                b     = np.atleast_1d(self.Residuate(R_active, a[:, None], t).squeeze())
+                a_new = np.atleast_1d(self.Residuate(R_active.T, b[:, None], t).squeeze())
+                return a_new
+            def _energy(new, old, aux):
+                return float(Sum(Abs(new - old + eps)))
+            fp = FixpointIterator(f=_f, energy_fn=_energy, state0=seed[active].copy(),
+                                  eps=eps, max_iters=20)
+            a  = fp.run()
             n_active = int((R[:, j] > 0).sum())
             key = (tuple((a / eps).astype(int))) if n_active > 1 else (j,)
             if key not in seen:
@@ -61,5 +74,3 @@ class Embed(Tensor):
     # λx. λy. λz.  (x z)(y z)
     def GramMatrix(self, M, temp, semiring='fuzzy'):
         return self.Join(M, M.T, temp, semiring=semiring)
-
-

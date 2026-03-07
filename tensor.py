@@ -13,6 +13,7 @@ for witness validation.
 import numpy as np
 from algebra import *
 from activations import Activations
+from fixpoint import FixpointIterator
 
 class Tensor(Activations):       
 
@@ -87,32 +88,47 @@ class Tensor(Activations):
 
         return B
     
-    def Closure(self, E, R=None, temp=None, max_iters=100, eps=1e-3):  
+    def Closure(self, E, R=None, temp=None, max_iters=100, eps=1e-3):
         if R is None: R = E.copy()
 
-        for k in range(max_iters):
-            J = self.Join(R, E, temp)
-            Rn = self.SmoothMax((J, E), temp, axis=0)
-            np.fill_diagonal(Rn, 0) 
+        # def _closure_loop(R, E, temp, max_iters, eps):
+        #     for k in range(max_iters):
+        #         J = self.Join(R, E, temp)
+        #         Rn = self.SmoothMax((J, E), temp, axis=0)
+        #         np.fill_diagonal(Rn, 0)
+        #         R_allowed = self.Residuate(Rn, E, temp)
+        #         Rn_corrected = self.SmoothMin((Rn, R_allowed), temp, axis=0)
+        #         dynamic_error = Sum(Abs(Rn_corrected - R) ** 2)  # ε_x
+        #         sensory_error = Sum(Abs(Rn - Rn_corrected) ** 2) # ε_y
+        #         Energy = dynamic_error + sensory_error
+        #         temp = -Energy / (R.size * np.mean(Log(np.clip(R, eps, 1))))
+        #         n_new = Sum((Rn > eps) & (R <= eps))
+        #         if Energy <= eps:
+        #             print(f"✓ CONVERGED at iteration {k + 1}")
+        #             break
+        #         R = Rn_corrected
+        #     return R
 
-            # Backward constraint propagation
-            R_allowed = self.Residuate(Rn, E, temp)
+        def _f(R, temp):
+            J            = self.Join(R, E, temp)
+            Rn           = self.SmoothMax((J, E), temp, axis=0)
+            np.fill_diagonal(Rn, 0)
+            R_allowed    = self.Residuate(Rn, E, temp)
             Rn_corrected = self.SmoothMin((Rn, R_allowed), temp, axis=0)
+            return Rn_corrected, Rn  # aux = Rn (before correction)
 
-            dynamic_error = Sum(Abs(Rn_corrected - R) ** 2)  # ε_x
-            sensory_error = Sum(Abs(Rn - Rn_corrected) ** 2) # ε_y 
-            Energy = dynamic_error + sensory_error
-            temp = -Energy / (R.size * np.mean(Log(np.clip(R, eps, 1))))                     
+        def _energy(new, old, aux):
+            Rn            = aux
+            dynamic_error = Sum(Abs(new - old) ** 2)  # ε_x
+            sensory_error = Sum(Abs(Rn - new) ** 2)   # ε_y
+            return dynamic_error + sensory_error
 
-            n_new = Sum((Rn > eps) & (R <= eps))
-            # print(f"iteration {k+1}: discovered {n_new} new relations, temperature is {temp:.10f}")
-            if Energy <= eps:
-                print(f"✓ CONVERGED at iteration {k + 1}")
-                break
-
-            R = Rn_corrected
-
-        return R
+        fp = FixpointIterator(f=_f, energy_fn=_energy, state0=R,
+                              eps=eps, max_iters=max_iters)
+        result = fp.run()
+        if fp.energy == 0:
+            print(f"✓ CONVERGED at iteration {fp._iter}")
+        return result
 
     def ChainJoin(self, *EmbRs, temp=0.0, semiring='fuzzy'):
         result = EmbRs[0]
