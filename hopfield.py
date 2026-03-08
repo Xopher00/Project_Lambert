@@ -17,9 +17,9 @@ class Memory(Embed):
         )
 
     def _step(self, q, temp):
-        J       = self.Attend(q, self.emb, temp)
-        raw        = self.SoftMax(J, temp, axis=0)
-        allowed   = self.Residuate(raw[:, None], self.emb.T, temp).squeeze()  # (250,)
+        J   = self.Attend(q, self.emb, temp)
+        raw = self.SoftMax(J, temp, axis=0)
+        allowed   = self.Residuate(raw[:, None], self.emb.T, temp).squeeze()
         corrected = self.SmoothMin((raw, self.Join(allowed[None,:], self.emb, temp).squeeze()), temp, axis=0)
         return corrected, raw
 
@@ -30,4 +30,7 @@ class Memory(Embed):
         return dynamic_error + sensory_error
 
     def retrieve(self, q):
-        return self.fp.perturb(q)
+        state = self.fp.perturb(q)
+        scores = self.Join(state[None,:], self.emb.T, self.fp.temp).squeeze()
+        mask = scores >= scores.max() - self.fp.eps
+        return np.where(mask)[0]
