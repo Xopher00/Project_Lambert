@@ -18,7 +18,7 @@ class Attention(Embed):
 
     def _step(self, q, temp):
         J   = self.Attend(q, self.emb, temp)
-        raw = self.SoftMax(J, temp, axis=0).squeeze()
+        raw = self.SoftMax(J, temp, axis=0)
         allowed   = self.Residuate(raw[:, None], self.emb.T, temp).squeeze()
         corrected = self.SmoothMin((raw, self.Join(allowed[None,:], self.emb, temp).squeeze()), temp, axis=0)
         return corrected, raw
@@ -36,5 +36,4 @@ class Attention(Embed):
         state = self.fp.perturb(q)
         scores = self.scores(state)
         mask = scores >= scores.max() - self.fp.eps
-        return np.where(mask)[0]
-    
+        return np.where(mask)[0]    
