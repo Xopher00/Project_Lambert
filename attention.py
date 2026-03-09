@@ -3,6 +3,7 @@ import numpy as np
 from functools import reduce
 from algebra import *
 from fixpoint import FixpointIterator
+from concurrent.futures import ThreadPoolExecutor
 
 class Attention(Embed):
     def __init__(self, emb, temp=1.0, eps=1e-3, max_iters=100):
@@ -49,6 +50,7 @@ class Attention(Embed):
         mask   = scores >= scores.max() - self.fp.eps
         weights = self.fp.state
         return np.where(mask)[0], weights
+    
 
 class MultiHeadAttention(Embed):
     def __init__(self, heads, names, eps=1e-3, max_iters=20):
@@ -66,18 +68,23 @@ class MultiHeadAttention(Embed):
             eps       = eps,
             max_iters = max_iters,
         )
+    
+    def _run_head(self, head, name, idx):
+        hits, state = head.retrieve(idx)
+        if len(hits) > 0:
+            self.intents[name] = (np.clip(state, 0, None), head.scores())
 
     def _outer_step(self, combined_scores, temp):
         idx = np.where(combined_scores >= combined_scores.max() - self.eps)[0]
-        score_vectors = []
-        for head, name in zip(self.heads, self.names):
-            hits, state = head.retrieve(idx)
-            if len(hits) > 0:
-                self.intents[name] = (np.clip(state, 0, None), head.scores())
-                score_vectors.append(head.scores())
-        if not score_vectors:
-            return combined_scores
-        new_combined = reduce(np.minimum, score_vectors)
+        
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(self._run_head, head, name, idx)
+                    for head, name in zip(self.heads, self.names)]
+            for future in futures:
+                future.result()
+
+        new_combined = reduce(np.minimum, [scores for _, (_, scores) in self.intents.items()])
+
         return new_combined
 
     def _outer_energy(self, new, old, aux):
