@@ -55,6 +55,42 @@ class CategoryExplorer:
                 }
         return self.categories
     
+    def isomorphic_groups(self):
+        groups = {}
+        for key, cat in self.categories.items():
+            iso_key = tuple(
+                tuple(sorted(intent[intent > self.eps], reverse=True))
+                for _, (intent, _) in cat['intents'].items()
+            )
+            if iso_key not in groups:
+                groups[iso_key] = []
+            groups[iso_key].append(key)
+        return groups
+    
+    def prune(self):
+        """Drop singletons and collapse isomorphic groups."""
+        # Drop singletons — categories with only one entity in the extent
+        self.categories = {
+            k: v for k, v in self.categories.items()
+            if np.sum(v['extent'] > self.eps) > 1
+        }
+
+        # Collapse isomorphic groups — union extents, keep one representative
+        groups = self.isomorphic_groups()
+        collapsed = {}
+        for iso_key, members in groups.items():
+            # Union of all extents across isomorphic members
+            union_extent = np.maximum.reduce([
+                self.categories[k]['extent'] for k in members
+            ])
+            # Keep the first member's intents as representative
+            representative = self.categories[members[0]]
+            collapsed[members[0]] = {
+                'intents': representative['intents'],
+                'extent': union_extent
+            }
+        self.categories = collapsed
+    
     def _lattice_step(self, state, temp):
         keys = list(self.categories.keys())
         for a, key_a in enumerate(keys):
@@ -89,20 +125,6 @@ class CategoryExplorer:
             k: v for k, v in self.categories.items() 
             if v['intents'] and any(np.any(intent > self.eps) for _, (intent, _) in v['intents'].items())
         }
-        print(f"Valid categories: {len(self.categories)}")
+        self.prune()
+        print(f"Valid categories after pruning: {len(self.categories)}")
         return self.categories
-
-    def isomorphic_groups(self):
-        groups = {}
-        for key, cat in self.categories.items():
-            iso_key = tuple(
-                tuple(sorted(intent[intent > self.eps], reverse=True))
-                for _, (intent, _) in cat['intents'].items()
-            )
-            if iso_key not in groups:
-                groups[iso_key] = []
-            groups[iso_key].append(key)
-        return groups
-    
-    # non_singletons = {k: v for k, v in groups.items() if len(v) > 1}
-    # print(f"Non-singleton isomorphic groups: {len(non_singletons)}")
