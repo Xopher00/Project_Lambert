@@ -1,5 +1,6 @@
 from embed import Embed
 import numpy as np
+from functools import reduce
 from algebra import *
 from fixpoint import FixpointIterator
 
@@ -29,11 +30,62 @@ class Attention(Embed):
         sensory_error = float(Sum(Abs(raw - new) ** 2))
         return dynamic_error + sensory_error
     
-    def scores(self, state):
-        return self.Join(state[None,:], self.emb.T, self.fp.temp).squeeze()
+    def scores(self):
+        return self.Join(self.fp.state[None,:], self.emb.T, self.fp.temp).squeeze()
+    
+    def _query(self, idx):
+        if isinstance(idx, (list, np.ndarray)):
+            q = self.emb[idx].min(axis=0)
+        else:
+            q = self.emb[idx].copy()
+        return q
 
-    def retrieve(self, q):
-        state = self.fp.perturb(q)
-        scores = self.scores(state)
-        mask = scores >= scores.max() - self.fp.eps
-        return np.where(mask)[0]    
+    def retrieve(self, idx, temp=None):
+        q = self._query(idx)
+        if np.all(q == 0):
+            return np.array([]), None
+        self.fp.perturb(q)
+        scores = self.scores()
+        mask   = scores >= scores.max() - self.fp.eps
+        weights = self.fp.state
+        return np.where(mask)[0], weights
+
+class MultiHeadAttention(Embed):
+    def __init__(self, heads, names, eps=1e-3, max_iters=20):
+        super().__init__()
+        self.heads = heads
+        self.names = names
+        self.eps = eps
+        self.intents = {}
+
+        state0 = np.zeros(heads[0].emb.shape[0])
+        self.fp = FixpointIterator(
+            f         = self._outer_step,
+            energy_fn = self._outer_energy,
+            state0    = state0,
+            eps       = eps,
+            max_iters = max_iters,
+        )
+
+    def _outer_step(self, combined_scores, temp):
+        idx = np.where(combined_scores >= combined_scores.max() - self.eps)[0]
+        score_vectors = []
+        for head, name in zip(self.heads, self.names):
+            hits, state = head.retrieve(idx)
+            if len(hits) > 0:
+                self.intents[name] = (np.clip(state, 0, None), head.scores())
+                score_vectors.append(head.scores())
+        if not score_vectors:
+            return combined_scores
+        new_combined = reduce(np.minimum, score_vectors)
+        return new_combined
+
+    def _outer_energy(self, new, old, aux):
+        return float(Sum(Abs(new - old) ** 2))
+
+    def retrieve(self, idx):
+        scores0 = np.zeros(self.heads[0].emb.shape[0])
+        scores0[idx] = 1.0
+        self.fp.perturb(scores0)
+        final_idx = np.where(self.fp.state >= self.fp.state.max() - self.eps)[0]
+        return final_idx, self.intents
