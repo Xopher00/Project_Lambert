@@ -91,24 +91,6 @@ class Tensor(Activations):
     def Closure(self, E, R=None, temp=None, max_iters=100, eps=1e-3):
         if R is None: R = E.copy()
 
-        # def _closure_loop(R, E, temp, max_iters, eps):
-        #     for k in range(max_iters):
-        #         J = self.Join(R, E, temp)
-        #         Rn = self.SmoothMax((J, E), temp, axis=0)
-        #         np.fill_diagonal(Rn, 0)
-        #         R_allowed = self.Residuate(Rn, E, temp)
-        #         Rn_corrected = self.SmoothMin((Rn, R_allowed), temp, axis=0)
-        #         dynamic_error = Sum(Abs(Rn_corrected - R) ** 2)  # ε_x
-        #         sensory_error = Sum(Abs(Rn - Rn_corrected) ** 2) # ε_y
-        #         Energy = dynamic_error + sensory_error
-        #         temp = -Energy / (R.size * np.mean(Log(np.clip(R, eps, 1))))
-        #         n_new = Sum((Rn > eps) & (R <= eps))
-        #         if Energy <= eps:
-        #             print(f"✓ CONVERGED at iteration {k + 1}")
-        #             break
-        #         R = Rn_corrected
-        #     return R
-
         def _f(R, temp):
             J            = self.Join(R, E, temp)
             Rn           = self.SmoothMax((J, E), temp, axis=0)
