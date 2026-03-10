@@ -1,4 +1,5 @@
 from fixpoint import FixpointIterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 from algebra import *
 from embed import Embed
@@ -28,33 +29,24 @@ class CategoryExplorer(Embed):
         for name, (intent, _) in self.mha.intents.items():
             parts.append(tuple((intent / self.eps).astype(int)))
         return tuple(parts)
-    
-    # select a nonzero index from the extent vector of a category
-    def _representative(self, extent):
-        nonzero = np.where(extent > self.eps)[0]
-        if len(nonzero) == 0:
-            return None
-        return nonzero[np.argmin(extent[nonzero])]
-    
-    # check if a relationship between two extents has already been discovered
-    def _co_occurs(self, i, j):
-        return any(
-            cat['extent'][i] > self.eps and cat['extent'][j] > self.eps
-            for cat in self.categories.values()
-        )
-
+       
     # Perform an initial exploration 
     def explore(self, n_entities):
+        covered = set()
         for i in range(n_entities):
+            if i in covered:
+                continue
             hits, intents = self.mha.retrieve([i])
             if len(hits) == 0:
                 continue
             key = self._intent_key()
+            extent = self.mha.fp.state.copy()
             if key not in self.categories:
                 self.categories[key] = {
-                    'intents': dict(self.mha.intents), 
-                    'extent': self.mha.fp.state.copy()
+                    'intents': dict(self.mha.intents),
+                    'extent': extent
                 }
+                covered.update(np.flatnonzero(extent > self.eps).tolist())
         return self.categories
 
     def _concept_fixpoint(self, R, seed, temp, max_iters=20, eps=1e-3):
@@ -62,6 +54,7 @@ class CategoryExplorer(Embed):
         if len(active) == 0:
             return seed        
         def _f(state, temp):
+            print('passing to heads . . .')
             hits, _ = self.mha.retrieve(np.flatnonzero(state > eps).tolist())
             return self.mha.fp.state.copy(), None        
         def _energy(new, old, aux):
