@@ -1,6 +1,7 @@
 from fixpoint import FixpointIterator
-from numpy import np
+import numpy as np
 from algebra import *
+from embed import Embed
 
 """"
 This layer sits on top of our attention / transformer layer.
@@ -15,8 +16,9 @@ even relatively small datasets can reveal a lot of information that was not expl
 This is an advanced form of transitive closure
 """
 
-class CategoryExplorer:
+class CategoryExplorer(Embed):
     def __init__(self, mha, eps=1e-3):
+        super().__init__() 
         self.mha = mha
         self.eps = eps
         self.categories = {}
@@ -54,77 +56,30 @@ class CategoryExplorer:
                     'extent': self.mha.fp.state.copy()
                 }
         return self.categories
-    
-    def isomorphic_groups(self):
-        groups = {}
-        for key, cat in self.categories.items():
-            iso_key = tuple(
-                tuple(sorted(intent[intent > self.eps], reverse=True))
-                for _, (intent, _) in cat['intents'].items()
-            )
-            if iso_key not in groups:
-                groups[iso_key] = []
-            groups[iso_key].append(key)
-        return groups
-    
-    def prune(self):
-        """Drop singletons and collapse isomorphic groups."""
-        # Drop singletons — categories with only one entity in the extent
-        self.categories = {
-            k: v for k, v in self.categories.items()
-            if np.sum(v['extent'] > self.eps) > 1
-        }
 
-        # Collapse isomorphic groups — union extents, keep one representative
-        groups = self.isomorphic_groups()
-        collapsed = {}
-        for iso_key, members in groups.items():
-            # Union of all extents across isomorphic members
-            union_extent = np.maximum.reduce([
-                self.categories[k]['extent'] for k in members
-            ])
-            # Keep the first member's intents as representative
-            representative = self.categories[members[0]]
-            collapsed[members[0]] = {
-                'intents': representative['intents'],
-                'extent': union_extent
-            }
-        self.categories = collapsed
-    
-    def _lattice_step(self, state, temp):
-        keys = list(self.categories.keys())
-        for a, key_a in enumerate(keys):
-            for key_b in keys[a+1:]:
-                i = self._representative(self.categories[key_a]['extent'])
-                j = self._representative(self.categories[key_b]['extent'])
-                if i is None or j is None:
-                    continue
-                if self._co_occurs(i, j):
-                    continue
-                hits, _ = self.mha.retrieve([i, j])
-                if len(hits) == 0:
-                    continue
-                new_key = self._intent_key()
-                if new_key not in self.categories:
-                    self.categories[new_key] = {'intents': dict(self.mha.intents), 'extent': self.mha.fp.state.copy()}
-        return np.maximum.reduce([cat['extent'] for cat in self.categories.values()]), None
+    def _concept_fixpoint(self, R, seed, temp, max_iters=20, eps=1e-3):
+        active = np.flatnonzero(seed > eps)
+        if len(active) == 0:
+            return seed        
+        def _f(state, temp):
+            hits, _ = self.mha.retrieve(np.flatnonzero(state > eps).tolist())
+            return self.mha.fp.state.copy(), None        
+        def _energy(new, old, aux):
+            return float(np.sum(np.abs(new - old)))        
+        fp = FixpointIterator(
+            f         = _f,
+            energy_fn = _energy,
+            state0    = seed.copy(),
+            eps       = eps,
+            max_iters = max_iters,
+        )
+        return fp.run()
     
     def explore_lattice(self, n_entities):
         self.explore(n_entities)
-        union = np.maximum.reduce([cat['extent'] for cat in self.categories.values()])
-        fp = FixpointIterator(
-            f         = self._lattice_step,
-            energy_fn = lambda new, old, aux: float(Sum(Abs(new - old))),
-            state0    = union,
-            eps       = self.eps,
-            max_iters = 50,
-        )
-        fp.run()
-        # Prune categories with empty intents - where no relationship was found
-        self.categories = {
-            k: v for k, v in self.categories.items() 
-            if v['intents'] and any(np.any(intent > self.eps) for _, (intent, _) in v['intents'].items())
-        }
-        self.prune()
-        print(f"Valid categories after pruning: {len(self.categories)}")
-        return self.categories
+        print('initial xploration complete')
+        emb_new = np.zeros((n_entities, len(self.categories)))
+        for col, (key, cat) in enumerate(self.categories.items()):
+            emb_new[:, col] = np.where(cat['extent'] > self.eps, cat['extent'], 0)
+        emb, EmbR, rep_cols = self.ConceptEmbed(emb_new, temp=self.mha.heads[0].fp.temp)
+        return emb, EmbR, rep_cols
