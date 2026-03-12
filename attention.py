@@ -27,8 +27,8 @@ class Attention(Embed):
 
     def _energy(self, new, old, aux):
         raw           = aux
-        dynamic_error = float(Sum(Abs(new - old) ** 2))
-        sensory_error = float(Sum(Abs(raw - new) ** 2))
+        dynamic_error = Sum(Abs(new - old) ** 2)
+        sensory_error = Sum(Abs(raw - new) ** 2)
         return dynamic_error + sensory_error
     
     def scores(self):
@@ -82,13 +82,14 @@ class MultiHeadAttention(Embed):
                     for head, name in zip(self.heads, self.names)]
             for future in futures:
                 future.result()
-
+        if not self.intents:
+            return combined_scores, None
         new_combined = reduce(np.minimum, [scores for _, (_, scores) in self.intents.items()])
 
         return new_combined
 
     def _outer_energy(self, new, old, aux):
-        return float(Sum(Abs(new - old) ** 2))
+        return Sum(Abs(new - old) ** 2)
 
     def retrieve(self, idx):
         scores0 = np.zeros(self.heads[0].emb.shape[0])

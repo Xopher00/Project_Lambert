@@ -1,4 +1,5 @@
 from fixpoint import FixpointIterator
+# from fractions import Fraction
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 from algebra import *
@@ -24,6 +25,9 @@ class CategoryExplorer(Embed):
         self.eps = eps
         self.categories = {}
 
+    # def _stabilize(self, a, n):
+    #    return np.array([float(Fraction(v).limit_denominator(n)) for v in a])
+
     def _intent_key(self):
         parts = []
         for name, (intent, _) in self.mha.intents.items():
@@ -44,7 +48,7 @@ class CategoryExplorer(Embed):
             if key not in self.categories:
                 self.categories[key] = {
                     'intents': dict(self.mha.intents),
-                    'extent': extent
+                    'extent': extent # self._stabilize(extent, n_entities)
                 }
                 covered.update(np.flatnonzero(extent > self.eps).tolist())
         return self.categories
@@ -54,11 +58,10 @@ class CategoryExplorer(Embed):
         if len(active) == 0:
             return seed        
         def _f(state, temp):
-            print('passing to heads . . .')
             hits, _ = self.mha.retrieve(np.flatnonzero(state > eps).tolist())
             return self.mha.fp.state.copy(), None        
         def _energy(new, old, aux):
-            return float(np.sum(np.abs(new - old)))        
+            return Sum(Abs(new - old))        
         fp = FixpointIterator(
             f         = _f,
             energy_fn = _energy,
@@ -69,10 +72,13 @@ class CategoryExplorer(Embed):
         return fp.run()
     
     def explore_lattice(self, n_entities):
+        print('Performing initial concept exploration . . .')
         self.explore(n_entities)
-        print('initial xploration complete')
+        print('Initial exploration phase complete.')
         emb_new = np.zeros((n_entities, len(self.categories)))
+        print('Beginning full concept exploration . . .')
         for col, (key, cat) in enumerate(self.categories.items()):
             emb_new[:, col] = np.where(cat['extent'] > self.eps, cat['extent'], 0)
         emb, EmbR, rep_cols = self.ConceptEmbed(emb_new, temp=self.mha.heads[0].fp.temp)
+        print('Transitive closure reached.')
         return emb, EmbR, rep_cols

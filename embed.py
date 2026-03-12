@@ -22,7 +22,7 @@ class Embed(Tensor):
             a_new = np.atleast_1d(self.Residuate(R_active.T, b[:, None], t).squeeze())
             return a_new
         def _energy(new, old, aux):
-            return float(Sum(Abs(new - old + eps)))
+            return Sum(Abs(new - old))
         fp = FixpointIterator(f=_f, energy_fn=_energy, 
             state0=seed[active].copy(), eps=eps, max_iters=max_iters)
         return fp.run()
