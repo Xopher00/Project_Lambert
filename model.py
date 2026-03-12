@@ -76,6 +76,16 @@ class Lambert:
             'matrix':       matrix[inverse]
         }
 
+    def map_values(self):
+        emb_vals = set(float(v) for v in self.concept_space['emb'].flat if v > self.eps)
+        return {
+            float(v): f"[{head_name}] {self.heads[head_name]['feature_labels'][self.heads[head_name]['rep_cols'][j]]}"
+            for cat in self.concept_space['categories'].values()
+            for head_name, (intent_vec, _) in cat['intents'].items()
+            for j, v in enumerate(intent_vec)
+            if float(v) in emb_vals
+        }
+
     def run(self, relations: dict, n_entities: int) -> tuple:
         print('getting embeddings...')
         self._get_embeddings(relations)
@@ -89,23 +99,7 @@ class Lambert:
         self._isomorphic()
         print(f'iso index: {len(self.iso_index["coefficients"])} coefficients')
 
-        if self.label:
-            print('labeling discovered categories...')
-            labeler = Labeler(
-                categories=self.concept_space['categories'],
-                emb_cat=self.concept_space['emb'],
-                feature_labels={n: h['feature_labels'] for n, h in self.heads.items()},
-                rep_cols={n: h['rep_cols'] for n, h in self.heads.items()},
-                cat_rep_cols=self.concept_space['rep_cols'],
-                entity_labels=self.entity_labels,
-                eps=self.eps
-            )
-            labeler.run()
-            self.labels = {
-                'categories': labeler.labels,
-                'meta':       labeler.meta_labels,
-                'iso':        labeler.iso_labels
-            }
+        self.concept_space['feature_map'] = self.map_values()
 
         print(f'categories: {len(self.concept_space["categories"])}')
         print(f'iso coefficients: {len(self.iso_index["coefficients"])}')
