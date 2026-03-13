@@ -21,10 +21,7 @@ class Embed(Tensor):
             b     = np.atleast_1d(self.Residuate(R_active, a[:, None], t).squeeze())
             a_new = np.atleast_1d(self.Residuate(R_active.T, b[:, None], t).squeeze())
             return a_new
-        def _energy(new, old, aux):
-            return Sum(Abs(new - old))
-        fp = FixpointIterator(f=_f, energy_fn=_energy, 
-            state0=seed[active].copy(), eps=eps, max_iters=max_iters)
+        fp = FixpointIterator(f=_f, state0=seed[active].copy(), eps=eps, max_iters=max_iters)
         return fp.run()
 
     def ConceptEmbed(self, R, temp, eps=1e-3):

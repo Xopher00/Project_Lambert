@@ -15,15 +15,25 @@ from algebra import Abs, Sum, Log, Bottom
 
 class FixpointIterator:
 
-    def __init__(self, f, energy_fn, state0, eps=1e-3, max_iters=100, temp=1.0):
+    def __init__(self, f, state0, eps=1e-3, max_iters=100, temp=1.0):
         self.f         = f          # (state, temp) -> new_state  OR  (new_state, aux)
-        self.energy_fn = energy_fn  # (new_state, old_state, aux) -> float
+        self.energy_fn = self.default_energy  # (new_state, old_state, aux) -> float
         self.state     = state0.copy()
         self.energy    = Bottom
         self.temp      = temp
+        self._init_temp = temp
         self.eps       = eps
         self.max_iters = max_iters
         self._iter     = 0
+        self._history = []
+
+    @staticmethod
+    def default_energy(new, old, aux):
+        dynamic_error = Sum(Abs(new - old) ** 2)
+        if aux is None:
+            return dynamic_error
+        sensory_error = Sum(Abs(aux - new) ** 2)
+        return dynamic_error + sensory_error
 
     def _update_temp(self, old_state):
         log_mean = np.mean(Log(np.clip(old_state, self.eps, 1.0)))
@@ -41,6 +51,7 @@ class FixpointIterator:
         self._update_temp(old)
         self.state = new
         self._iter += 1
+        self._record()
         return self.energy <= self.eps
 
     def run(self, verbose=False):
@@ -56,7 +67,10 @@ class FixpointIterator:
         return self.state
 
     def perturb(self, new_state, verbose=False):
-        self.state = new_state
+        self.state = new_state.copy()
+        self.energy = Bottom
+        self._iter  = 0
+        self.temp   = self._init_temp
         return self.run(verbose=verbose)
 
     def __repr__(self):
