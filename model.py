@@ -31,11 +31,10 @@ class Lambert:
     def _chunk(self, R, vocab):
         embed = Embed()
         binary = (R > 0).astype(float)
-        sim = embed.GramMatrix(binary.T, temp=1.0)  # (n_features, n_features)
+        sim = embed.GramMatrix(binary.T, temp=0.9)  # (n_features, n_features)
         chunk_size = min(int(np.sqrt(R.shape[1])), R.shape[0] - 1)
         n_chunks = max(2, R.shape[1] // chunk_size)
-        soft = embed.SoftMax(sim, temp=1.0, axis=1)
-        soft   = embed.SoftMax(sim, temp=1.0, axis=1)
+        soft = embed.SoftMax(sim, temp=0.09, axis=1)
         order  = np.argsort(np.argmax(soft, axis=1))  # sort features by their soft assignment
         labels = np.zeros(R.shape[1], dtype=int)
         labels[order] = np.arange(R.shape[1]) * n_chunks // R.shape[1]
