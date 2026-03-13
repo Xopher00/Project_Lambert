@@ -94,6 +94,8 @@ class MultiHeadAttention(Embed):
     def retrieve(self, idx):
         scores0 = np.zeros(self.heads[0].emb.shape[0])
         scores0[idx] = 1.0
+        # clearing stale intents, debugging why larger models have all zeroes
+        # self.intents = {}    
         self.fp.perturb(scores0)
         final_idx = np.where(self.fp.state >= self.fp.state.max() - self.eps)[0]
         return final_idx, self.intents

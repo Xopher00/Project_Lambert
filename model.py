@@ -3,7 +3,6 @@ from typing import Optional
 from dataclasses import dataclass, field
 from algebra import *
 from embed import Embed
-from language import Labeler
 from attention import Attention, MultiHeadAttention
 from explorer import CategoryExplorer
 
@@ -28,6 +27,17 @@ class Lambert:
     labels:        Optional[dict] = field(default=None, repr=False)
     # --- internal components ---
     explorer:      Optional[object] = field(default=None, repr=False)
+
+    def _chunk(self, R, vocab):
+        embed = Embed()
+        binary = (R > 0).astype(float)
+        sim = embed.GramMatrix(binary, temp=1.0)  # (n_features, n_features)
+        chunk_size = min(int(np.sqrt(R.shape[1])), R.shape[0] - 1)
+        n_chunks = max(2, R.shape[1] // chunk_size)
+        soft = embed.SoftMax(sim, temp=0.1, axis=1)
+        labels = np.argmax(soft, axis=1) * n_chunks // R.shape[1]
+        return {f'head_{i}': (R[:, np.where(labels==i)[0]], 
+                [vocab[j] for j in np.where(labels==i)[0]]) for i in range(n_chunks)}
 
     def _get_embeddings(self, relations: dict) -> dict:
         embed = Embed()
@@ -62,21 +72,7 @@ class Lambert:
             'categories': self.explorer.categories
         }
 
-    def _isomorphic(self):
-        unique  = self.concept_space['unique']
-        inverse = self.concept_space['inverse']
-
-        coeffs = sorted(set(unique[unique > self.eps].tolist()))
-        matrix = np.zeros((len(unique), len(coeffs)))
-        for j, c in enumerate(coeffs):
-            matrix[:, j] = (unique == c).any(axis=1).astype(float)
-
-        self.iso_index = {
-            'coefficients': coeffs,
-            'matrix':       matrix[inverse]
-        }
-
-    def map_values(self):
+    def _map_values(self):
         emb_vals = set(float(v) for v in self.concept_space['emb'].flat if v > self.eps)
         return {
             float(v): f"[{head_name}] {self.heads[head_name]['feature_labels'][self.heads[head_name]['rep_cols'][j]]}"
@@ -86,7 +82,14 @@ class Lambert:
             if float(v) in emb_vals
         }
 
-    def run(self, relations: dict, n_entities: int) -> tuple:
+    def run(self, relations: dict = None, n_entities: int = None, R: np.ndarray = None, vocab: list = None) -> tuple:
+
+        if R is not None:
+            print('Chunking . . . ')
+            relations = self._chunk(R, vocab)
+            n_entities = R.shape[0]
+            print(f'Partitioned data into {len(relations)} chunks.')
+
         print('getting embeddings...')
         self._get_embeddings(relations)
         print(f'embeddings ready: {list(self.heads.keys())}')
@@ -95,12 +98,8 @@ class Lambert:
         self._explore(n_entities)
         print(f'exploration complete: emb shape={self.concept_space["emb"].shape}, {len(self.concept_space["categories"])} categories')
 
-        print('finding isomorphic relationships...')
-        self._isomorphic()
-        print(f'iso index: {len(self.iso_index["coefficients"])} coefficients')
-
-        self.concept_space['feature_map'] = self.map_values()
+        print(f'Identifying strongest defining traits . . . ')
+        self.concept_space['feature_map'] = self._map_values()
 
         print(f'categories: {len(self.concept_space["categories"])}')
-        print(f'iso coefficients: {len(self.iso_index["coefficients"])}')
         
