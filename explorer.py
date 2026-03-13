@@ -65,12 +65,9 @@ class CategoryExplorer(Embed):
             return seed        
         def _f(state, temp):
             hits, _ = self.mha.retrieve(np.flatnonzero(state > eps).tolist())
-            return self.mha.fp.state.copy(), None        
-        def _energy(new, old, aux):
-            return Sum(Abs(new - old))        
+            return self.mha.fp.state.copy(), None         
         fp = FixpointIterator(
             f         = _f,
-            energy_fn = _energy,
             state0    = seed.copy(),
             eps       = eps,
             max_iters = max_iters,

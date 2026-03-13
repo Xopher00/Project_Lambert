@@ -11,7 +11,6 @@ class Attention(Embed):
         self.emb = emb
         self.fp  = FixpointIterator(
             f         = self._step,
-            energy_fn = self._energy,
             state0    = emb[0].copy(),
             temp      = temp,
             eps       = eps,
@@ -24,11 +23,6 @@ class Attention(Embed):
         allowed   = self.Residuate(raw[:, None], self.emb.T, temp).squeeze()
         corrected = self.SmoothMin((raw, self.Join(allowed[None,:], self.emb, temp).squeeze()), temp, axis=0)
         return corrected, raw
-
-    def _energy(self, new, old, aux):
-        dynamic_error = Sum(Abs(new - old) ** 2)
-        sensory_error = Sum(Abs(aux - new) ** 2)
-        return dynamic_error + sensory_error
     
     def scores(self):
         return self.Join(self.fp.state[None,:], self.emb.T, self.fp.temp).squeeze()
@@ -62,7 +56,6 @@ class MultiHeadAttention(Embed):
         state0 = np.zeros(heads[0].emb.shape[0])
         self.fp = FixpointIterator(
             f         = self._outer_step,
-            energy_fn = self._outer_energy,
             state0    = state0,
             eps       = eps,
             max_iters = max_iters,
@@ -90,11 +83,6 @@ class MultiHeadAttention(Embed):
         raw = self.Join(head_weights, all_scores, temp).squeeze()
         raw = self.SmoothMax((raw, combined_scores), temp, axis=0)
         return raw, combined_scores
-
-    def _outer_energy(self, new, old, aux):
-        dynamic_error = Sum(Abs(new - old) ** 2)
-        sensory_error = Sum(Abs(aux - new) ** 2)
-        return dynamic_error + sensory_error
 
     def retrieve(self, idx):
         scores0 = np.zeros(self.heads[0].emb.shape[0])
