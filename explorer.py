@@ -40,6 +40,11 @@ class CategoryExplorer(Embed):
         for i in range(n_entities):
             if i in covered:
                 continue
+            if i % 50 == 0:
+                print(f"  exploring entity {i}/{n_entities}  "
+                    f"categories={len(self.categories)}  "
+                    f"covered={len(covered)}")
+            self.mha.intents = {} 
             hits, intents = self.mha.retrieve([i])
             if len(hits) == 0:
                 continue
@@ -47,8 +52,8 @@ class CategoryExplorer(Embed):
             extent = self.mha.fp.state.copy()
             if key not in self.categories:
                 self.categories[key] = {
-                    'intents': dict(self.mha.intents),
-                    'extent': extent # self._stabilize(extent, n_entities)
+                    'intents':  dict(self.mha.intents),
+                    'extent':   extent,
                 }
                 covered.update(np.flatnonzero(extent > self.eps).tolist())
         return self.categories
