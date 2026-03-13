@@ -25,14 +25,15 @@ class CategoryExplorer(Embed):
         self.eps = eps
         self.categories = {}
 
-    # def _stabilize(self, a, n):
-    #    return np.array([float(Fraction(v).limit_denominator(n)) for v in a])
-
+    # def _intent_key(self):
+    #     parts = []
+    #     for name, (intent, _) in self.mha.intents.items():
+    #         parts.append(tuple((intent / self.eps).astype(int)))
+    #     return tuple(parts)
+    
     def _intent_key(self):
-        parts = []
-        for name, (intent, _) in self.mha.intents.items():
-            parts.append(tuple((intent / self.eps).astype(int)))
-        return tuple(parts)
+        extent = self.mha.fp.state
+        return tuple((extent / self.eps).astype(int))
        
     # Perform an initial exploration 
     def explore(self, n_entities):

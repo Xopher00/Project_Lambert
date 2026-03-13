@@ -26,9 +26,8 @@ class Attention(Embed):
         return corrected, raw
 
     def _energy(self, new, old, aux):
-        raw           = aux
         dynamic_error = Sum(Abs(new - old) ** 2)
-        sensory_error = Sum(Abs(raw - new) ** 2)
+        sensory_error = Sum(Abs(aux - new) ** 2)
         return dynamic_error + sensory_error
     
     def scores(self):
@@ -84,18 +83,22 @@ class MultiHeadAttention(Embed):
                 future.result()
         if not self.intents:
             return combined_scores, None
-        new_combined = reduce(np.minimum, [scores for _, (_, scores) in self.intents.items()])
-
-        return new_combined
+           
+        # temperature-aware belief propagation
+        all_scores = np.stack([scores for _, (_, scores) in self.intents.items()])
+        head_weights = self.Residuate(combined_scores[:, None], all_scores.T, temp)
+        raw = self.Join(head_weights, all_scores, temp).squeeze()
+        raw = self.SmoothMax((raw, combined_scores), temp, axis=0)
+        return raw, combined_scores
 
     def _outer_energy(self, new, old, aux):
-        return Sum(Abs(new - old) ** 2)
+        dynamic_error = Sum(Abs(new - old) ** 2)
+        sensory_error = Sum(Abs(aux - new) ** 2)
+        return dynamic_error + sensory_error
 
     def retrieve(self, idx):
         scores0 = np.zeros(self.heads[0].emb.shape[0])
         scores0[idx] = 1.0
-        # clearing stale intents, debugging why larger models have all zeroes
-        # self.intents = {}    
         self.fp.perturb(scores0)
         final_idx = np.where(self.fp.state >= self.fp.state.max() - self.eps)[0]
         return final_idx, self.intents
