@@ -16,7 +16,13 @@ class Embed(Tensor):
 
     def _concept_fixpoint(self, R, seed, temp, max_iters=20, eps=1e-3):
         active = np.flatnonzero(seed > 0)
-        return self.fixpoint_closure(R[active, :], seed[active], temp, eps, max_iters, bidirectional=True)
+        R_active = R[active, :]
+        def _f(a, t, R_active=R_active):
+            b     = np.atleast_1d(self.Residuate(R_active, a[:, None], t).squeeze())
+            a_new = np.atleast_1d(self.Residuate(R_active.T, b[:, None], t).squeeze())
+            return a_new
+        fp = FixpointIterator(f=_f, state0=seed[active].copy(), eps=eps, max_iters=max_iters)
+        return fp.run()
 
     def ConceptEmbed(self, R, temp, eps=1e-3):
         seen     = {}
