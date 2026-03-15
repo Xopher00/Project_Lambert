@@ -87,6 +87,15 @@ class Tensor(Activations):
             B[ix] = self.SmoothMin((old, contrib), temp, axis=0)
 
         return B
+
+    def fixpoint_closure(self, R, seed, temp, eps=1e-3, max_iters=20, bidirectional=True):
+        def _f(a, t):
+            b = np.atleast_1d(self.Residuate(R, a[:, None], t).squeeze())
+            if bidirectional:
+                return np.atleast_1d(self.Residuate(R.T, b[:, None], t).squeeze())
+            return b
+        fp = FixpointIterator(f=_f, state0=seed.copy(), eps=eps, max_iters=max_iters)
+        return fp.run()
     
     def Closure(self, E, R=None, temp=None, max_iters=100, eps=1e-3):
         if R is None: R = E.copy()
