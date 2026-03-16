@@ -95,6 +95,20 @@ theorem as stated.
 - Sanchez, E. (1976). Resolution of composite fuzzy relation equations.
   *Information and Control*, 30, 38–48.
 
+## Tensor Logic
+
+Domingos (2025) shows that Datalog rules and neural network operations are the same
+mathematical object. A rule like `Ancestor(x,z) ← Parent(x,y), Parent(y,z)` is, in
+the standard Boolean encoding, a tensor einsum with a Heaviside step function. In the
+max-min semiring the step function disappears and the rule becomes exactly
+`Join(Parent, Parent)`. Lambert's Join is therefore not an approximation of symbolic
+reasoning — it *is* symbolic reasoning, expressed natively in the semiring. At T=0
+it performs exact Datalog inference; at T>0 the smooth approximations introduce a
+controlled softening that interpolates toward analogical reasoning. The system is
+neurosymbolic by construction, not by composition.
+
+**Reference:** Domingos, P. (2025). *Tensor Logic: The Language of AI.*
+
 ## Witness tracking
 
 During Join, every intermediate node y that connects x to z above a threshold
