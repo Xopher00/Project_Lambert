@@ -105,6 +105,9 @@ class Tensor(Activations):
         xs_list = [np.flatnonzero(absA[:, y] > threshold) for y in range(m)]
         zs_list = [np.flatnonzero(absB[y, :] > threshold) for y in range(m)]
 
+        # we first filter for non zero entries, then loop over intermediate nodes
+        # in past versions we used numpy broadcasting to compare the entire matrices at once
+        # this creates O(n3) complexity. the current setup effectively avoids this by only comparing subsections of 2d matrices
         for y in range(m):
             xs = xs_list[y]
             zs = zs_list[y]
@@ -117,7 +120,7 @@ class Tensor(Activations):
             old = result[ix]
             result[ix] = self.SmoothMax((old, contrib), temp, axis=0)
 
-            self._track_witnesses(xs, y, zs, contrib, threshold)
+            self._track_witnesses(xs, y, zs, contrib, threshold) # if witness tracking is enabled, save intermediate nodes y connecting x to z
 
         return result
     
@@ -172,6 +175,8 @@ class Tensor(Activations):
         js_list = [np.flatnonzero(absA[i, :] > threshold) for i in range(n)]
         ks_list = [np.flatnonzero(absC[i, :] > threshold) for i in range(n)]
 
+        # this code is structured the same way as its adjoint operation for the same reasons: to avoid O(n3) complexity,
+        # we filter for non zero entries and than iterate over subsets of 2d matrices
         for i in range(n):
             js = js_list[i] # Active columns in A
             ks = ks_list[i] # Active columns in C
@@ -218,6 +223,9 @@ class Tensor(Activations):
         """
         if R is None: R = E.copy()
 
+        # This code was very relevant during earlier testing.
+        # However it has largely been subsumed by the more complex Attention mechanism several layers above
+        # That mechanism works essentially the same way. Under review whether or not this function is worth keeping.
         def _f(R, temp):
             J            = self.Join(R, E, temp)
             Rn           = self.SmoothMax((J, E), temp, axis=0)
@@ -232,6 +240,7 @@ class Tensor(Activations):
             print(f"✓ CONVERGED at iteration {fp._iter}")
         return result
 
+    # This function is under review. We never use it anywhere in our codebase, but it may become important later.
     def ChainJoin(self, *EmbRs, temp=0.0):
         """
         Apply Join sequentially across a chain of matrices.
@@ -256,6 +265,7 @@ class Tensor(Activations):
             result = self.Join(result, EmbR, temp=temp)
         return result    
 
+    # This function is under review for the same reasons. May become useful for reasoning backwards over relations.
     def Backward(self, E, temp=None, max_iters=100):
         """
         Compute the transitive closure of the reversed relation.
