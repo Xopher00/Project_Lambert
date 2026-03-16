@@ -16,10 +16,8 @@ accessed via concept_space, heads, and labels.
 import numpy as np
 from typing import Optional
 from dataclasses import dataclass, field
-from core.algebra import *
-from lattice.embed import Embed
-from lattice.attention import Attention, MultiHeadAttention
-from lattice.explorer import CategoryExplorer
+from core import Top, Bottom, Max, Sum, Implies, Refutes, Log, Exp, Abs, Negate
+from lattice import Embed, Attention, MultiHeadAttention, CategoryExplorer
 
 @dataclass
 class Lambert:

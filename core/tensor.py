@@ -13,9 +13,9 @@ temperature-controlled via the smooth activations from the layer below.
 """
 
 import numpy as np
-from algebra import *
-from activations import Activations
-from fixpoint import FixpointIterator
+from core.algebra import *
+from core.activations import Activations
+from core.fixpoint import FixpointIterator
 
 class Tensor(Activations):
     """

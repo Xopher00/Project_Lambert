@@ -15,7 +15,7 @@ of matching entities across all heads. The combination step is currently
 under review — see _outer_step for details.
 """
 
-from embed import Embed
+from lattice.embed import Embed
 import numpy as np
 from functools import reduce
 from core.algebra import *
