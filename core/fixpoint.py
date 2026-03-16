@@ -14,7 +14,7 @@ it by updating the state in the direction that minimises the error.
 """
 
 import numpy as np
-from algebra import Abs, Sum, Log, Bottom
+from core.algebra import Abs, Sum, Log, Bottom
 
 
 class FixpointIterator:

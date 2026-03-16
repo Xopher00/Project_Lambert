@@ -9,7 +9,7 @@ The gap shrinks back to zero as T approaches zero.
 
 import numpy as np
 from scipy.special import logsumexp
-from algebra import *
+from core.algebra import *
 
 class Activations:
     """

@@ -21,7 +21,7 @@ from core.fixpoint import FixpointIterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 from core.algebra import *
-from embed import Embed
+from lattice.embed import Embed
 
 
 class CategoryExplorer(Embed):
