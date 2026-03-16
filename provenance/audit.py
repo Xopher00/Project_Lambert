@@ -9,9 +9,16 @@ and strings.
 """
 
 import numpy as np
-from tree import Tree
+from .tree import Tree
 
 def extract_path(proof):
+    """
+    Flatten a proof tree into a linear path of entity indices.
+
+    Folds the tree using Tree.fold, concatenating and deduplicating
+    adjacent indices at each Pair node. Returns the first valid path
+    found among any branches. Returns None if no path can be extracted.
+    """
     def folder(tag, *args):
         if tag == 'leaf':
             # Leaf integers stay as-is
@@ -45,6 +52,13 @@ def extract_path(proof):
 
 
 def format_branch(path, backward, names, relation="is related to"):
+    """
+    Format a single reasoning path as an annotated string.
+
+    Walks consecutive pairs in path, annotating each step with the
+    edge strength from backward and the relation label. Returns None
+    if path is None.
+    """
     if path is None:
         return None
     parts = []
@@ -56,6 +70,14 @@ def format_branch(path, backward, names, relation="is related to"):
 
 
 def format_proof(proof, backward, names, relation="is related to"):
+    """
+    Format a full proof tree into a human-readable explanation.
+
+    For a branching proof (dict), extracts and formats each branch path,
+    deduplicates them, and returns a dict with a label and branch list.
+    For a leaf proof (Tree.Pair), extracts and formats the single path.
+    Returns "No proof found" if the proof is None or yields no valid paths.
+    """
     if proof is None:
         return "No proof found"
     if isinstance(proof, dict):
