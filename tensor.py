@@ -1,13 +1,15 @@
 """
-Relational operations layer. Implements Domingos' core tensor logic
-operations — Join, Closure, and Backward — grounded in UA rather than
-arithmetic. Join(X, Y) is ∨⟨y· X[x,y] ∧ Y[y,z]⟩: for each (x,z) pair,
-find the best intermediate y using SmoothMin (∧) then SmoothMax (∨). The
-scores tensor produced by Join records how much each y contributed, and
-is the primary carrier of reasoning provenance throughout the system.
-Closure iterates Join to fixpoint to compute transitive reachability;
-Backward transposes the relation first, giving reverse reachability needed
-for witness validation.
+Relational operations layer. Implements three core operations on matrices:
+
+- Join: for each output cell (x, z), finds the best intermediate node y
+  by taking the min of A[x,y] and B[y,z], then the max over all y.
+- Residuate: given A and C, finds the greatest B such that A composed
+  with B stays within C.
+- Closure: iterates Join to fixpoint, computing transitive reachability
+  across the relation.
+
+All operations are sparse — only non-zero entries are visited — and
+temperature-controlled via the smooth activations from the layer below.
 """
 
 import numpy as np
@@ -15,10 +17,43 @@ from algebra import *
 from activations import Activations
 from fixpoint import FixpointIterator
 
-class Tensor(Activations):       
+class Tensor(Activations):
+    """
+    Relational operations built on top of Activations.
+
+    Inherits all temperature-controlled activation functions and adds
+    matrix-level operations: Join, Residuate, Closure, and ChainJoin.
+
+    Also provides optional witness tracking: when enabled, every
+    intermediate node y that connects x to z during a Join is recorded.
+    This allows logical paths through the relation to be reconstructed
+    later for auditing the model's internal reasoning and identifying
+    where errors originate.
+
+    # Under review — witness tracking may become redundant as new layers are added.
+    """
 
     def _track_witnesses(self, xs, y, zs, contrib, th):
-        """Record witnesses for current y and merge into accumulated witnesses"""
+        """
+        Record intermediate node y as a witness for each (x, z) pair it connects.
+
+        For every (x, z) pair where y's contribution exceeds the threshold,
+        stores the contribution score in self._witnesses[(x, z)][y]. Called
+        during Join when tracking is enabled.
+
+        Parameters
+        ----------
+        xs : array of int
+            Row indices (x values) active for this y.
+        y : int
+            The intermediate node being evaluated.
+        zs : array of int
+            Column indices (z values) active for this y.
+        contrib : ndarray
+            Contribution scores, shape (len(xs), len(zs)).
+        th : float
+            Threshold below which a witness is not recorded.
+        """
         if not self.tracking:
             return
         i, j = np.where(contrib > th)
@@ -29,12 +64,38 @@ class Tensor(Activations):
             self._witnesses[key][y] = contrib[ii, jj]
 
     def _clear_witnesses(self):
+        """Reset the witness store."""
         self._witnesses = {}
 
     # v (y: A[x,y] ∧ B[y,z])
-    def Join(self, Tensor_A, Tensor_B, temp, semiring='fuzzy', threshold=1e-6):
-        if semiring == "arithmetic":
-            return Tensor_A @ Tensor_B, None
+    def Join(self, Tensor_A, Tensor_B, temp, threshold=1e-6):
+        """
+        Relational composition of two matrices.
+
+        For each output cell (x, z), finds the best intermediate node y by
+        taking the min of A[x, y] and B[y, z], then taking the max over all y:
+
+            result[x, z] = max over y of min(A[x, y], B[y, z])
+
+        Only non-zero entries are visited for efficiency. If witness tracking
+        is enabled, records each y's contribution for later path reconstruction.
+
+        Parameters
+        ----------
+        Tensor_A : ndarray, shape (n, m)
+            Left relation matrix.
+        Tensor_B : ndarray, shape (m, p)
+            Right relation matrix.
+        temp : float
+            Temperature passed to SmoothMin and SmoothMax.
+        threshold : float, optional
+            Entries below this value are treated as zero. Default is 1e-6.
+
+        Returns
+        -------
+        ndarray, shape (n, p)
+            The composed relation matrix.
+        """
 
         A, B = Tensor_A, Tensor_B
         n, m = A.shape
@@ -62,6 +123,43 @@ class Tensor(Activations):
     
     # ∧ (A[x,y]-¹ α C[x,z]) <= B[y,z]
     def Residuate(self, Tensor_A, Tensor_C, temp, threshold=1e-6):
+        """
+        The adjoint of Join. Given A and C, finds the greatest B such that
+        Join(A, B) stays within C.
+
+        For each cell (y, z), computes the tightest upper bound that every
+        row i of A places on B[y, z], using the Implies operation from
+        algebra.py:
+
+            B[y, z] = min over i of Implies(A[i, y], C[i, z])
+
+        If Join is relational composition forward, Residuate is its inverse:
+        it asks "given what we know about A and the target C, how large can
+        B be?"
+
+        Only non-zero entries are visited for efficiency.
+
+        Parameters
+        ----------
+        Tensor_A : ndarray, shape (n, m)
+            The left relation matrix.
+        Tensor_C : ndarray, shape (n, p)
+            The target relation matrix. Must share the row dimension with A.
+        temp : float
+            Temperature passed to SmoothMin.
+        threshold : float, optional
+            Entries below this value are treated as zero. Default is 1e-6.
+
+        Returns
+        -------
+        ndarray, shape (m, p)
+            The greatest B satisfying Join(A, B) ≤ C.
+
+        References
+        ----------
+        Sanchez, E. (1976). Resolution of composite fuzzy relation equations.
+        *Information and Control*, 30, 38–48. Theorem 5.
+        """
 
         A, C = Tensor_A, Tensor_C
         n, m = A.shape
@@ -89,6 +187,35 @@ class Tensor(Activations):
         return B
     
     def Closure(self, E, R=None, temp=None, max_iters=100, eps=1e-3):
+        """
+        Compute the transitive closure of relation E.
+
+        Iterates Join to fixpoint: at each step, extends the current relation
+        R by one hop through E, merges the result back with E, then clips it
+        down using Residuate to ensure no inferred relation exceeds what E can
+        justify. Repeats until the relation stops changing.
+
+        Diagonal entries are zeroed at each step to prevent self-loops from
+        accumulating.
+
+        Parameters
+        ----------
+        E : ndarray, shape (n, n)
+            The base relation matrix.
+        R : ndarray, shape (n, n), optional
+            Starting point for iteration. Defaults to a copy of E.
+        temp : float, optional
+            Temperature passed to Join, SmoothMax, and Residuate.
+        max_iters : int, optional
+            Maximum number of iterations. Default is 100.
+        eps : float, optional
+            Convergence threshold. Default is 1e-3.
+
+        Returns
+        -------
+        ndarray, shape (n, n)
+            The converged closure of E.
+        """
         if R is None: R = E.copy()
 
         def _f(R, temp):
@@ -99,24 +226,58 @@ class Tensor(Activations):
             Rn_corrected = self.SmoothMin((Rn, R_allowed), temp, axis=0)
             return Rn_corrected, Rn  # aux = Rn (before correction)
 
-        def _energy(new, old, aux):
-            Rn            = aux
-            dynamic_error = Sum(Abs(new - old) ** 2)  # ε_x
-            sensory_error = Sum(Abs(Rn - new) ** 2)   # ε_y
-            return dynamic_error + sensory_error
-
-        fp = FixpointIterator(f=_f, energy_fn=_energy, state0=R,
-                              eps=eps, max_iters=max_iters)
+        fp = FixpointIterator(f=_f, state0=R, eps=eps, max_iters=max_iters)
         result = fp.run()
         if fp.energy == 0:
             print(f"✓ CONVERGED at iteration {fp._iter}")
         return result
 
-    def ChainJoin(self, *EmbRs, temp=0.0, semiring='fuzzy'):
+    def ChainJoin(self, *EmbRs, temp=0.0):
+        """
+        Apply Join sequentially across a chain of matrices.
+
+        Equivalent to Join(EmbRs[0], Join(EmbRs[1], Join(...))) but written
+        left to right. Useful for composing a sequence of relations in one call.
+
+        Parameters
+        ----------
+        *EmbRs : sequence of ndarray
+            Two or more matrices to compose in order.
+        temp : float, optional
+            Temperature passed to each Join. Default is 0.0.
+
+        Returns
+        -------
+        ndarray
+            The result of composing all matrices left to right.
+        """
         result = EmbRs[0]
         for EmbR in EmbRs[1:]:
-            result = self.Join(result, EmbR, temp=temp, semiring=semiring)
+            result = self.Join(result, EmbR, temp=temp)
         return result    
 
     def Backward(self, E, temp=None, max_iters=100):
-        return self.Closure(E.T, temp=temp, max_iters=max_iters)   
+        """
+        Compute the transitive closure of the reversed relation.
+
+        Transposes E before passing it to Closure, giving reverse reachability:
+        where Closure answers "what can x reach?", Backward answers "what can
+        reach x?".
+
+        # Not currently used anywhere in the codebase. Under review.
+
+        Parameters
+        ----------
+        E : ndarray, shape (n, n)
+            The base relation matrix.
+        temp : float, optional
+            Temperature passed to Closure.
+        max_iters : int, optional
+            Maximum number of iterations. Default is 100.
+
+        Returns
+        -------
+        ndarray, shape (n, n)
+            The converged closure of E transposed.
+        """
+        return self.Closure(E.T, temp=temp, max_iters=max_iters)
