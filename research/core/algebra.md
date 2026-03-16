@@ -28,9 +28,9 @@ relation.
 
 **References:**
 - Hehner, E.C.R. (2004). From Boolean Algebra to Unified Algebra. *The Mathematical
-  Intelligencer*, Springer, 26(2), pp. 3–19. https://hehner.ca/BAUA.pdf
+  Intelligencer*, Springer, 26(2), pp. 3–19. https://www.cs.toronto.edu/~hehner/BAUA.pdf
 - Hehner, E.C.R. (2007, revised 2021). *Unified Algebra.* International Journal of
-  Mathematical Sciences, 1(1), pp. 20–37. https://hehner.ca/UA.pdf
+  Mathematical Sciences, 1(1), pp. 20–37. https://www.cs.utoronto.ca/~hehner/UA.pdf
 
 ## Top and Bottom
 
