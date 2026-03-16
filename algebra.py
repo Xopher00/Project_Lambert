@@ -1,10 +1,14 @@
 """
-Foundation layer for Unified Algebra (Hehner). Defines the two primitive
-operators — ∧ (min) and ∨ (max) — along with the arithmetic scaffolding
-(Sum, Product, Log, Exp) that everything above this layer is built from.
-Also encodes Hehner's divide-by-zero rule: x/0 = (x > 0), mapping the
-singularity to a binary truth value rather than an error. All other modules
-import from this one; nothing here depends on anything above it.
+The bottom layer. Every other module imports from this one.
+
+Defines the core operation — max (∨) — plus basic arithmetic helpers
+(Sum, Log, Exp, Abs, Negate) and two logical operators (Implies, Refutes)
+borrowed from fuzzy set theory.
+
+Top and Bottom mark the endpoints of whatever ordered domain the system
+is working in. In boolean logic they are True and False; on the real
+number line they are +∞ and −∞. Here they are set to 1e9 and -1e9 as
+practical stand-ins for infinity.
 """
 
 import time
@@ -14,60 +18,178 @@ Top = 1e9
 Bottom = -1e9
 
 def Max(*args, axis=None, keepdims=False):
-    """Max: binary (x,y) or quantifier (f, axis=...)"""
+    """
+    Return the maximum of the inputs.
+
+    Can be called two ways:
+
+    - ``Max(a, b)`` — elementwise maximum of two arrays.
+    - ``Max(array, axis=...)`` — reduce an array along an axis.
+
+    Parameters
+    ----------
+    *args : array-like
+        Either one array (for reduction) or two arrays (for elementwise max).
+    axis : int, optional
+        Axis to reduce along. Only used when a single array is passed.
+    keepdims : bool, optional
+        If True, keep reduced axes as size-1 dimensions.
+
+    Returns
+    -------
+    ndarray
+        The maximum values.
+    """
     if len(args) == 1:
         return np.max(args[0], axis=axis, keepdims=keepdims)
     elif len(args) == 2:
         return np.maximum(args[0], args[1])
     else:
-        np.maximum.reduce(np.array(args))
+        return np.maximum.reduce(np.array(args))
 
 def Sum(args, axis=None, keepdims=False):
-    """Sum over domain"""
+    """
+    Add up the elements of an array.
+
+    Parameters
+    ----------
+    args : array-like
+        The array to sum.
+    axis : int, optional
+        Axis to sum along. If None, sums all elements.
+    keepdims : bool, optional
+        If True, keep reduced axes as size-1 dimensions.
+
+    Returns
+    -------
+    ndarray or scalar
+        The sum.
+    """
     return np.sum(args, axis=axis, keepdims=keepdims)
 
 def Implies(a, b):
     """
-    Pseudocomplement for the min t-norm (Gödel implication):
-    a α b = 1 if a <= b else b
+    Fuzzy implication: given two values a and b, ask "does a imply b?"
+
+    Returns Top (∞) if a <= b, meaning a is no stronger than b so the
+    implication holds without restriction. Returns b otherwise, capping
+    the result at the weaker value.
+
     Works elementwise on numpy arrays.
+
+    Parameters
+    ----------
+    a : array-like
+        The antecedent (the "if" side).
+    b : array-like
+        The consequent (the "then" side).
+
+    Returns
+    -------
+    ndarray
+        Top where a <= b, otherwise b.
+
+    References
+    ----------
+    Sanchez, E. (1976). Resolution of composite fuzzy relation equations.
+    *Information and Control*, 30, 38–48. Section 6, the α operation.
     """
     return np.where(a <= b, Top, b)
 
 def Refutes(a, b):
     """
-    dual pseudocomplement
-    a eps b = 0 if b <= a else b
+    The dual of Implies. Given two values a and b, ask "does a refute b?"
+
+    Returns Bottom (−∞) if b <= a, meaning b is fully refuted by a.
+    Returns b otherwise.
+
+    Works elementwise on numpy arrays.
+
+    Parameters
+    ----------
+    a : array-like
+        The refuting value.
+    b : array-like
+        The value being tested.
+
+    Returns
+    -------
+    ndarray
+        Bottom where b <= a, otherwise b.
+
+    References
+    ----------
+    Dual of the α operation from:
+    Sanchez, E. (1976). Resolution of composite fuzzy relation equations.
+    *Information and Control*, 30, 38–48.
     """
     return np.where(a >= b, Bottom, b)
 
 def Log(args):
-    """Log over args"""
+    """
+    Natural logarithm (base e), applied elementwise.
+
+    Parameters
+    ----------
+    args : array-like
+        Input values. Must be positive.
+
+    Returns
+    -------
+    ndarray
+        The natural logarithm of each element.
+    """
     return np.log(args)
 
 def Exp(args):
-    """Euler's Number ^ args"""
+    """
+    Exponential function (e raised to the power of each element), applied elementwise.
+
+    Parameters
+    ----------
+    args : array-like
+        Input values.
+
+    Returns
+    -------
+    ndarray
+        e ** args, elementwise.
+    """
     return np.exp(args)
 
 def Abs(x):
-    """Absolute value |x|"""
+    """
+    Absolute value, applied elementwise.
+
+    Parameters
+    ----------
+    x : array-like
+        Input values.
+
+    Returns
+    -------
+    ndarray
+        The absolute value of each element.
+    """
     return np.abs(x)
 
 def Negate(x):
-    """Negate: works on scalars, arrays, or tuples"""
+    """
+    Negate the input.
+
+    Handles scalars, numpy arrays, and tuples or lists of arrays —
+    negating each element in the collection individually.
+
+    Parameters
+    ----------
+    x : scalar, array-like, tuple, or list
+        The value or values to negate.
+
+    Returns
+    -------
+    scalar, ndarray, or tuple
+        The negated value(s).
+    """
     if isinstance(x, (tuple, list)):
         return tuple(-elem for elem in x)
     return -x
-
-def Error(actual, predicted, base_threshold=0.05):
-    error = np.abs(actual - predicted)
-    threshold = np.clip(base_threshold - np.mean(error), 0.1, base_threshold)
-    return error, threshold
-
-def timed(fn):
-    def wrapper(*args, **kwargs):
-        t = time.time()
-        result = fn(*args, **kwargs)
-        print(f"  total_time={time.time()-t:.2f}s")
-        return result
-    return wrapper
