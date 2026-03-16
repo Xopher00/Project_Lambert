@@ -47,8 +47,8 @@ equations. *Information and Control*, 30, 38–48.
     Residuate(A, C)[y,z] = min over i of Implies(A[i,y], C[i,z])
 
 Given a left relation A and a target C, Residuate finds the greatest B such
-that Join(A, B) ≤ C. This is the right residual of the max-min semiring — the
-exact algebraic inverse of Join within the semiring structure.
+that Join(A, B) ≤ C. This is the adjoint operation to a fuzzy relational join. 
+Though not the same, this is similar to how division is related to multiplication.
 
 In logical terms: Residuate asks "given what we know about A and the target C,
 how large can B be without exceeding C?" It gives the tightest upper bound on B
@@ -57,9 +57,6 @@ consistent with A and C.
 The operation is the α (alpha) operation from Sanchez (1976), applied row by
 row. For each pair (y, z), it takes the min over all rows i of Implies(A[i,y],
 C[i,z]) — the tightest constraint that every row of A places on B[y,z].
-
-This is not a heuristic approximation — it is the exact Galois adjoint of Join
-in the max-min semiring.
 
 **Reference:** Sanchez, E. (1976). Theorem 5.
 
