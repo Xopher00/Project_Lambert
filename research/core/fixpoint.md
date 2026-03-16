@@ -3,6 +3,14 @@
 The fixpoint iteration infrastructure. Wraps any operator and iterates it until
 the state stops changing, with temperature derived from energy at each step.
 
+This module is the theoretical heart of the system. The pattern it implements —
+measure free energy, derive temperature from it, iterate until convergence — is
+what connects Lambert's computation to the free energy principle in predictive
+coding. Every layer above this one delegates to it: Closure, Attention,
+ConceptEmbed, and Lambert itself all run inside a FixpointIterator. The number
+of reasoning steps the system takes, and the sharpness of every smooth operator
+during those steps, is determined entirely by the energy dynamics described here.
+
 ## Fixpoint iteration and the Tarski guarantee
 
 A fixpoint of an operator f is a state x such that f(x) = x — the operator
@@ -36,23 +44,23 @@ before any correction) differed from the corrected belief (the state after
 applying a Residuate or similar constraint). It is only present when the operator
 returns an auxiliary value alongside the new state.
 
-This two-term structure is inspired by the prediction error decomposition in
-active inference (Parr, Pezzulo & Friston 2022, equation 4.19), where free
-energy is a sum of precision-weighted prediction errors across sensory and
-dynamic levels. The structural correspondence is real: Lambert's sensory error
-mirrors the sensory prediction error ε_y, and the dynamic error mirrors the
-dynamic prediction error ε_x.
+The energy function is, mathematically, a loss function — the same squared-error
+sums used in standard supervised learning. What differs is the interpretation:
+rather than measuring distance from a labelled target, it measures distance from
+a fixpoint. The system is not trained toward an answer; it iterates toward
+internal consistency.
 
-The limit of the analogy: the full variational free energy framework requires a
-joint generative model, an approximate posterior, and a KL divergence applied to
-a probability measure. Lambert has none of these — the max-min semiring is not a
-probability measure, and Join is not marginalisation. Lambert's energy is best
-understood as a fixpoint residual in the max-min semiring, not as an evidence
-lower bound.
+This two-term structure instantiates the same theoretical pattern as the
+prediction error decomposition in active inference (Parr, Pezzulo & Friston
+2022, equation 4.19): free energy as a sum of precision-weighted prediction
+errors across sensory and dynamic levels. Lambert's sensory error mirrors the
+sensory prediction error ε_y; the dynamic error mirrors the dynamic prediction
+error ε_x. The correspondence is structural — both frameworks use a multi-term
+residual to drive inference toward a consistent belief state.
 
-A third term — parametric error, measuring KL divergence between current and
-prior parameters — appears at the third level of equation 4.19 but is not
-included here. It may become relevant when parameter learning is added.
+A third term — parametric error, measuring divergence between current and prior
+parameters — appears at the third level of equation 4.19 but is not included
+here. It may become relevant when parameter learning is added.
 
 **Reference:** Parr, T., Pezzulo, G. & Friston, K.J. (2022). *Active Inference:
 The Free Energy Principle in Mind, Brain, and Behavior.* MIT Press.
@@ -65,25 +73,26 @@ Boltzmann distribution in statistical mechanics:
 
     T = |−E / (N × mean(log(state)))|
 
-where E is the current energy and N is the state size. When energy is high,
-temperature stays high — keeping the smooth activations (SmoothMax, SmoothMin)
-exploratory and fuzzy. As energy falls toward zero, temperature falls too and the
-system converges toward crisp boolean outputs.
+where E is the current energy and N is the state size.
 
-This couples the reasoning mode to convergence progress automatically: the system
-is soft and exploratory when far from a fixpoint, and hard and decisive once it
-has nearly converged. No external schedule is needed.
+This is the computational interpretation of precision in predictive coding: far
+from a consistent belief state, the system operates with high temperature — soft,
+exploratory, analogical. As beliefs stabilise, energy falls, and the system
+sharpens toward crisp outputs. No external schedule is needed.
 
-The formula is borrowed by analogy from thermodynamics (F = U − TS), where
-temperature governs the trade-off between energy minimisation and entropy. It
-produces qualitatively correct behaviour but uses a non-standard entropy
-definition and has boundary cases when any state value is zero or all values
-are one.
+The specific formula is a heuristic borrowed by analogy from thermodynamics
+(F = U − TS). It produces qualitatively correct behaviour but uses a non-standard
+entropy definition and has known boundary cases when state values are zero or all
+one. A formula with a cleaner theoretical derivation may exist.
 
-## The perturb interface
+Domingos (2025) discusses temperature in a related context: T=0 is purely
+deductive; increasing T makes reasoning increasingly analogical, with less similar
+examples borrowing inferences from each other. The optimal T differs per
+application — mathematical rules warrant T=0, rules accumulating weak evidence
+over sparse data warrant higher T. Lambert implements this automatically: sparse
+or contradictory inputs produce high energy and therefore high temperature;
+well-supported inputs converge quickly at low temperature.
 
-FixpointIterator exposes a `perturb` method for incremental updates. Rather than
-constructing a new iterator from scratch when new data arrives, the existing
-iterator is reset to a new starting state — clearing accumulated iteration state
-and temperature — and run to convergence again, preserving the operator and
-convergence parameters from construction.
+**Reference:** Domingos, P. (2025). *Tensor Logic: The Language of AI.*
+arXiv:2510.12269v3.
+

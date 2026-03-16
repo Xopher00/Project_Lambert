@@ -88,6 +88,20 @@ layer to normalise a query vector before the Residuate correction step.
 
 SoftMin is the De Morgan dual: SoftMin(x) = -SoftMax(-x).
 
+SoftMax unifies four conventionally distinct functions under a single parameterisation.
+Temperature controls sharpness; the axis argument controls whether normalisation is
+relative to the full input vector or to zero:
+
+| T | axis | Reduces to |
+|---|---|---|
+| → 0 | over vector | argmax — one element dominates, all others vanish |
+| > 0 | over vector | softmax — graded distribution summing to 1 |
+| → 0 | None (binary) | Heaviside step — ⊤ if x > 0, ⊥ otherwise |
+| > 0 | None (binary) | sigmoid — smooth 0→1 transition |
+
+The sigmoid case follows directly from softmax: sigmoid(x) is softmax over the
+two-element list (0, x), returning x's share of the total — which is exp(x) / (1 + exp(x)).
+
 ## Softplus and Relu
 
 Softplus is LogSumExp over the two-element list (0, x) — a smooth approximation
