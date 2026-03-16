@@ -1,8 +1,20 @@
 class Tree:
-    """Structural recursion for nested parameter trees."""
+    """
+    Structural recursion over nested proof trees.
+
+    Provides zip, map, and fold over trees built from Pair nodes, dicts,
+    lists, and tuples. Used by Provenance to construct and traverse proof
+    trees, and by Audit to extract and format reasoning paths.
+    """
 
     class Pair:
-        """Wrapper for (param, grad) that stops recursion."""
+        """
+        A binary node holding two branches of a proof tree.
+
+        Used to represent a single reasoning step: fst is the left
+        sub-proof and snd is the right sub-proof. Leaf values are
+        integers (entity indices).
+        """
         __slots__ = ("fst", "snd")
 
         def __init__(self, a, b):
@@ -15,6 +27,12 @@ class Tree:
     # === TreeZip ===
     @staticmethod
     def zip(a, b):
+        """
+        Pair corresponding leaves of two identically shaped trees.
+
+        Recursively traverses both trees in lockstep, wrapping each pair
+        of leaves in a Tree.Pair. The two trees must have the same structure.
+        """
         if isinstance(a, dict):
             return {k: Tree.zip(a[k], b[k]) for k in a}
         if isinstance(a, tuple):
@@ -26,6 +44,13 @@ class Tree:
     # === TreeMap ===
     @staticmethod
     def map(fn, x):
+        """
+        Apply a function to every leaf in the tree.
+
+        Recursively traverses the tree, applying fn to each Tree.Pair or
+        scalar leaf. Dicts, tuples, and lists are traversed but not
+        transformed themselves.
+        """
         if isinstance(x, Tree.Pair):
             return fn(x)
         if isinstance(x, dict):
@@ -39,6 +64,14 @@ class Tree:
     # === TreeFold ===
     @staticmethod
     def fold(fn, tree, default=None):
+        """
+        Reduce a proof tree to a single value.
+
+        Recursively folds the tree bottom-up, calling fn at each node
+        with a tag and the already-folded children. Tags are:
+        ``'pair'``, ``'dict'``, ``'list'``, ``'tuple'``, ``'leaf'``.
+        Returns default for None nodes.
+        """
         if tree is None:
             return default
         if isinstance(tree, Tree.Pair):
