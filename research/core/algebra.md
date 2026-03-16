@@ -22,7 +22,7 @@ operation viewed at different points on a spectrum, which makes the model's inte
 reasoning interpretable by construction.
 
 The implementation here does not reproduce Hehner's class hierarchy or notation. What it
-takes from UA is the conceptual structure: Top and Bottom as domain extrema, max as the
+takes from Unified Algebra is the conceptual structure: Top and Bottom as domain extrema, max as the
 fundamental operation, and the identification of logical implication with the ordering
 relation.
 
@@ -46,36 +46,36 @@ finite values more predictably than `float('inf')` in edge cases involving compa
 and composition, and these values are large enough that no legitimate computation reaches
 them.
 
-## Max: the core operation
+## Max and Min
 
-Max (∨), read "x max y", is the least upper bound of its inputs — the smallest value
-that is at least as large as both. On the boolean domain it is disjunction: the result
-is Bottom only when both inputs are Bottom. On the real number line it is the numeric
-maximum. As a quantifier over a domain, ∨⟨x: D· f(x)⟩ is existential quantification —
-∃x ∈ D: f(x) — "there exists an x in D such that f holds."
+Hehner's central thesis is that the apparent differences between logic and arithmetic
+are differences of domain, not of kind. The same two operations — Max and Min — appear
+in every domain wearing different names. Lambert inherits this directly: the same Max
+and Min are used for logical inference, numeric comparison, set operations, and
+quantification throughout the codebase.
 
-These are not three separate operations that happen to share laws. Hehner's central
-thesis is that they are one operation, and that the apparent differences between logic
-and arithmetic are differences of domain, not of kind. Lambert inherits this directly:
-the same Max function is used for logical inference, numeric comparison, and existential
-reasoning throughout the codebase.
-
-## Min: the dual operation
-
-Min (∧), read "x min y", is the greatest lower bound of its inputs — the largest value
-that is no greater than both. It is the dual of Max under negation: -(x ∧ y) = -x ∨ -y.
-
-Like Max, Min is one operation wearing different clothes depending on the domain:
+**Max (∨)**, read "x max y", is the least upper bound of its inputs — the smallest
+value that is at least as large as both:
 
 | Domain | Operation | Notation |
 |---|---|---|
-| Boolean logic | conjunction (AND) | x ∧ y |
+| Boolean logic | disjunction — logical OR (∨) | x ∨ y |
+| Arithmetic | numeric maximum | max(x, y) |
+| Set theory | union (∪) | A ∪ B |
+| Existential quantification | there exists | ∃x ∈ D: f(x)  (UA: ∨⟨x: D· f(x)⟩) |
+
+**Min (∧)**, read "x min y", is the greatest lower bound of its inputs — the largest
+value that is no greater than both. It is the dual of Max under negation:
+-(x ∧ y) = -x ∨ -y.
+
+| Domain | Operation | Notation |
+|---|---|---|
+| Boolean logic | conjunction — logical AND (∧) | x ∧ y |
 | Arithmetic | numeric minimum | min(x, y) |
 | Set theory | intersection (∩) | A ∩ B |
 | Universal quantification | for all | ∀x ∈ D: f(x)  (UA: ∧⟨x: D· f(x)⟩) |
 
-∧⟨x: D· f(x)⟩ is universal quantification — ∀x ∈ D: f(x) — "for all x in D, f holds."
-Min over a domain is universality, just as Max over a domain is existence.
+Max over a domain is existence; Min over a domain is universality.
 
 Min is not defined as a standalone function in `algebra.py` — it is implemented
 directly as `SmoothMin` in the activations layer and as `np.minimum` inline where
@@ -86,7 +86,7 @@ Join, Residuate, and the max-min semiring throughout the codebase.
 
 These two functions implement fuzzy logical operators derived from fuzzy set theory.
 
-**Implies(a, b)** asks: does a imply b? In UA, implication is the ordering relation ≤.
+**Implies(a, b)** asks: does a imply b? In Unified Algebra, implication is the ordering relation ≤.
 These are all the same statement:
 
 | Domain | Reading | Notation |
@@ -95,7 +95,7 @@ These are all the same statement:
 | Sets | A is contained in B | A ⊆ B |
 | Arithmetic | a is less than or equal to b | a ≤ b |
 
-`Implies` implements this: it returns Top if a ≤ b — the implication holds without
+`Implies` implements a fuzzy version of this: it returns Top if a ≤ b — the implication holds without
 restriction. Otherwise it returns b, capping at the weaker value. This is the α
 operation from Sanchez (1976), the algebraic foundation of the Residuate operation in
 `tensor.py`.
@@ -105,11 +105,6 @@ operation from Sanchez (1976), the algebraic foundation of the Residuate operati
 lower bound, denoted a ε b (Kaufmann). By duality with α: if a ≥ b, b is fully dominated
 and the result is Bottom; otherwise b stands. The name "Refutes" is our own — the source
 does not use it.
-
-One important caveat: the unit interval [0,1] is neither Brouwerian nor dual Brouwerian
-in the strict lattice-theoretic sense, so this operation is best understood as an
-extension of the dual Brouwerian structure to [0,1] rather than a strict consequence
-of it.
 
 **References:**
 - Sanchez, E. (1976). Resolution of composite fuzzy relation equations.
