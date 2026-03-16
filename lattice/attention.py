@@ -18,8 +18,8 @@ under review — see _outer_step for details.
 from embed import Embed
 import numpy as np
 from functools import reduce
-from algebra import *
-from fixpoint import FixpointIterator
+from core.algebra import *
+from core.fixpoint import FixpointIterator
 from concurrent.futures import ThreadPoolExecutor
 
 class Attention(Embed):
