@@ -16,10 +16,10 @@ accessed via concept_space, heads, and labels.
 import numpy as np
 from typing import Optional
 from dataclasses import dataclass, field
-from algebra import *
-from embed import Embed
-from attention import Attention, MultiHeadAttention
-from explorer import CategoryExplorer
+from core.algebra import *
+from lattice.embed import Embed
+from lattice.attention import Attention, MultiHeadAttention
+from lattice.explorer import CategoryExplorer
 
 @dataclass
 class Lambert:

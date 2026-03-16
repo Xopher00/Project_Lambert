@@ -16,9 +16,9 @@ and Attend are utilities for analogical reasoning and retrieval.
 """
 
 import numpy as np
-from algebra import *
-from tensor import Tensor
-from fixpoint import FixpointIterator
+from core.algebra import *
+from core.tensor import Tensor
+from core.fixpoint import FixpointIterator
 
 class Embed(Tensor):
     """

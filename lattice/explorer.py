@@ -17,10 +17,10 @@ Inspired by category theory: a category is defined by its relations, and
 new categories can be defined by composing existing ones.
 """
 
-from fixpoint import FixpointIterator
+from core.fixpoint import FixpointIterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
-from algebra import *
+from core.algebra import *
 from embed import Embed
 
 

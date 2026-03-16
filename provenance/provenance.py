@@ -13,9 +13,9 @@ of the tensor operations themselves.
 import numpy as np
 from .tree import Tree
 import networkx as nx
-from tensor import Tensor as t
+from core.tensor import Tensor as t
 from .audit import format_proof
-from algebra import Implies, Refutes
+from core.algebra import Implies, Refutes
 from collections import deque
 
 class Provenance(t):
