@@ -250,16 +250,13 @@ class MultiHeadAttention(Embed):
         combined score), runs all heads in parallel against that active set,
         then merges the resulting scores into a new combined score vector.
 
-        The merge uses a belief-propagation-like approach: head weights are
-        derived via Residuate, applied to each head's scores via Join, and
-        the result is merged with the previous combined scores via SmoothMax.
+        The merge uses elementwise minimum (hard intersection) across all head
+        scores — the lattice infimum, keeping only entities satisfying all
+        relations simultaneously.
 
-        # Under review. An earlier version used elementwise minimum (hard
-        # intersection) across heads, which was stable on simple datasets but
-        # broke on complex ones. The current approach avoids that instability
-        # but causes category collapse — distinct categories merge into fewer,
-        # broader ones. This may affect the system's ability to build and
-        # traverse the full concept lattice.
+        # A belief-propagation-like soft merge was tried previously — see
+        # commented-out code below. It resolved instability on complex datasets
+        # but caused category collapse. Currently under review.
 
         Parameters
         ----------
@@ -285,11 +282,18 @@ class MultiHeadAttention(Embed):
         if not self.intents:
             return combined_scores, None
 
-        all_scores = np.stack([scores for _, (_, scores) in self.intents.items()])
-        head_weights = self.Residuate(combined_scores[:, None], all_scores.T, temp)
-        raw = self.Join(head_weights, all_scores, temp).squeeze()
-        raw = self.SmoothMax((raw, combined_scores), temp, axis=0)
-        return raw, combined_scores
+        # Hard intersection across heads — elementwise minimum (lattice infimum).
+        # Theoretically correct for multi-relational concept intersection (Brito et al., Theorem 8).
+        new_combined = reduce(np.minimum, [scores for _, (_, scores) in self.intents.items()])
+        return new_combined, combined_scores
+
+        # Belief-propagation-like soft merge — under review.
+        # Avoids instability of hard intersection on complex datasets but causes category collapse.
+        # all_scores = np.stack([scores for _, (_, scores) in self.intents.items()])
+        # head_weights = self.Residuate(combined_scores[:, None], all_scores.T, temp)
+        # raw = self.Join(head_weights, all_scores, temp).squeeze()
+        # raw = self.SmoothMax((raw, combined_scores), temp, axis=0)
+        # return raw, combined_scores
 
     def retrieve(self, idx):
         """
