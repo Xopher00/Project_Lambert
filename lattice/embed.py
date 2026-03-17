@@ -35,7 +35,7 @@ class Embed(Tensor):
     concept and can be used directly as entity embeddings.
     """
 
-    def _concept_fixpoint(self, R, seed, temp, max_iters=20, eps=1e-3):
+    def _concept_fixpoint(self, R, seed, temp, max_iters=20, eps=1e-3, full=False):
         """
         Find the formal concept anchored at a seed column.
 
@@ -80,12 +80,13 @@ class Embed(Tensor):
         applications.
         """
         active = np.flatnonzero(seed > 0)
-        R_active = R[active, :]
+        R_active = R.copy() if full else R[active, :]
+        state0   = seed.copy() if full else seed[active].copy()
         def _f(a, t, R_active=R_active):
             b     = np.atleast_1d(self.Residuate(R_active, a[:, None], t).squeeze())   # O*:  entity vector → attribute vector (intent)
             a_new = np.atleast_1d(self.Residuate(R_active.T, b[:, None], t).squeeze()) # A∧:  attribute vector → entity vector (extent)
             return a_new
-        fp = FixpointIterator(f=_f, state0=seed[active].copy(), eps=eps, max_iters=max_iters)
+        fp = FixpointIterator(f=_f, state0=state0, eps=eps, max_iters=max_iters)
         return fp.run()
 
     def ConceptEmbed(self, R, temp, eps=1e-3):
@@ -145,70 +146,6 @@ class Embed(Tensor):
         emb  = R[:, rep_cols]
         EmbR = self.Project(R, emb, temp)
         return emb, EmbR, rep_cols
-
-    def ConceptSweep(self, R, temp, threshold=0.5, eps=1e-3):
-        """
-        Enumerate all formal concepts via the Next Closure algorithm.
-
-        Traverses the concept lattice in lectic order, starting from the
-        closure of the empty attribute set and advancing by lectic successor
-        at each step. Each step yields the intent (closed attribute vector)
-        of one formal concept.
-
-        The lectic successor of a closed set A is found by scanning attributes
-        from right to left: for each i, construct B as A restricted to
-        attributes < i, plus attribute i at threshold, close B, and advance
-        if B_closed[i] >= threshold and A_closed[i] < threshold.
-
-        _concept_fixpoint is called with R.T so that the fixpoint operates in
-        attribute space: rows of R.T are attributes, columns are entities, and
-        the seed is an attribute vector — the same O*/A∧ alternation, transposed.
-
-        Parameters
-        ----------
-        R : ndarray, shape (n_entities, n_features)
-            The relation matrix.
-        temp : float
-            Temperature passed to _concept_fixpoint.
-        threshold : float, optional
-            Membership threshold used to test lectic advancement and to seed
-            attribute i in the successor construction. Default is 0.5.
-        eps : float, optional
-            Convergence threshold for _concept_fixpoint. Default is 1e-3.
-
-        Yields
-        ------
-        ndarray, shape (n_features,)
-            The closed intent vector of each formal concept, in lectic order.
-        """
-        n_features = R.shape[1]
-        RT = R.T                                    # (n_features, n_entities)
-
-        A = np.zeros(n_features)
-        while True:
-            if np.all(A == 0):
-                A_closed = np.zeros(n_features)
-            else:
-                active   = np.flatnonzero(A > 0)
-                A_closed = np.zeros(n_features)
-                A_closed[active] = self._concept_fixpoint(RT, A, temp, eps=eps)
-            yield A_closed
-
-            found = False
-            for i in range(n_features - 1, -1, -1):
-                B        = np.where(np.arange(n_features) < i, A_closed, 0.0)
-                B[i]     = threshold
-                active   = np.flatnonzero(B > 0)
-                B_closed_active = self._concept_fixpoint(RT, B, temp, eps=eps)
-                B_closed = np.zeros(n_features)
-                B_closed[active] = B_closed_active
-                if B_closed[i] >= threshold and A_closed[i] < threshold:
-                    A     = B_closed
-                    found = True
-                    break
-
-            if not found:
-                break
 
     def Project(self, M, emb, temp=0.0):
         """
