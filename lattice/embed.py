@@ -42,8 +42,8 @@ class Embed(Tensor):
         Iterates two alternating Residuate steps until the attribute vector
         stops changing:
 
-            b = Residuate(R_active, a)      # extent: which attributes fit these entities?
-            a = Residuate(R_active.T, b)    # intent: which entities fit those attributes?
+            b = Residuate(R_active, a)      # O*:  entity vector → attribute vector (intent)
+            a = Residuate(R_active.T, b)    # A∧:  attribute vector → entity vector (extent)
 
         This is the algorithmic realisation of the adjoint closure that defines
         a fuzzy formal concept (Belohlavek & Vychodil 2007). Convergence is
@@ -82,8 +82,8 @@ class Embed(Tensor):
         active = np.flatnonzero(seed > 0)
         R_active = R[active, :]
         def _f(a, t, R_active=R_active):
-            b     = np.atleast_1d(self.Residuate(R_active, a[:, None], t).squeeze())
-            a_new = np.atleast_1d(self.Residuate(R_active.T, b[:, None], t).squeeze())
+            b     = np.atleast_1d(self.Residuate(R_active, a[:, None], t).squeeze())   # O*:  entity vector → attribute vector (intent)
+            a_new = np.atleast_1d(self.Residuate(R_active.T, b[:, None], t).squeeze()) # A∧:  attribute vector → entity vector (extent)
             return a_new
         fp = FixpointIterator(f=_f, state0=seed[active].copy(), eps=eps, max_iters=max_iters)
         return fp.run()
