@@ -11,16 +11,59 @@ Mathematical foundations of Project Lambert, organised by layer.
 
 ## Lattice layer
 
-Documentation in progress.
+- [embed](lattice/embed.md) — formal concepts, ConceptEmbed, coverage-based concept selection
+- [attention](lattice/attention.md) — attention as dense associative memory, correction principle, conjunctive queries, multi-head retrieval
+- [explorer](lattice/explorer.md) — multi-relational formal concepts, second-order FCA, lattice closure
 
-## Key references
+---
+
+## References
+
+### Unified Algebra
 
 - Hehner, E.C.R. (2004). From Boolean Algebra to Unified Algebra. *The Mathematical Intelligencer*, 26(2), 3–19.
 - Hehner, E.C.R. (2007, revised 2021). *Unified Algebra.* International Journal of Mathematical Sciences, 1(1), 20–37.
+
+### Fuzzy set theory and relational composition
+
+- Zadeh, L.A. (1965). Fuzzy sets. *Information and Control*, 8(3), 338–353.
+  — foundation of the max-min semiring; max-min relational composition. Referenced in [tensor](core/tensor.md).
 - Sanchez, E. (1976). Resolution of composite fuzzy relation equations. *Information and Control*, 30, 38–48.
-- Nesterov, Y. (2005). Smooth minimization of non-smooth functions. *Mathematical Programming*, 103(1), 127–152.
-- Tarski, A. (1955). A lattice-theoretical fixpoint theorem and its applications. *Pacific Journal of Mathematics*, 5(2), 285–309.
+  — greatest solution to `A ∘ B = C` under max-min composition (Theorem 5); basis for `Residuate`, Join, and the attention correction step. Referenced in [tensor](core/tensor.md), [embed](lattice/embed.md), [attention](lattice/attention.md).
 - Kaufmann, A. *Introduction to the Theory of Fuzzy Subsets.* Ch. 1, p. 39.
+
+### Smooth approximations
+
+- Nesterov, Y. (2005). Smooth minimization of non-smooth functions. *Mathematical Programming*, 103(1), 127–152.
+  — bounded-gap approximation property of LogSumExp. Referenced in [activations](core/activations.md).
+
+### Fixpoint theory
+
+- Tarski, A. (1955). A lattice-theoretical fixpoint theorem and its applications. *Pacific Journal of Mathematics*, 5(2), 285–309.
+  — guarantees convergence of monotone operators on complete lattices. Referenced in [embed](lattice/embed.md).
+
+### Formal concept analysis
+
+- Brito, P. et al. *Fuzzy Formal Concept Analysis.*
+  — Definition 15: fuzzy formal context `⟨O, A, I_f⟩`; Definition 17: formal concept as simultaneous fixpoint of `O*` and `A∧`; Theorem 8: completeness of the concept lattice. Referenced in [embed](lattice/embed.md), [attention](lattice/attention.md), [explorer](lattice/explorer.md).
+- Trnecka, M. & Vyjidacek, R. (2020). Revisiting the GreCon Algorithm for Boolean Matrix Factorization. *CLA 2020.*
+  — coverage-based concept selection as matrix decomposition. Referenced in [embed](lattice/embed.md).
+- Belohlavek, R. & Vychodil, V. (2007). Fuzzy concept lattices constrained by hedges. *JACIII*, 11.
+  — fuzzy FCA with graded membership. Referenced in [embed](lattice/embed.md).
+
+### Associative memory and attention
+
+- Krotov, D. & Hopfield, J. (2021). Large Associative Memory Problem in Neurobiology and Machine Learning. *ICLR 2021.*
+  — §3.2 Model B: derivation of transformer attention as the fast-memory limit of dense associative memory; partial pattern initialisation and attractor convergence. Referenced in [attention](lattice/attention.md), [explorer](lattice/explorer.md).
+- Ramsauer, H. et al. (2020). Hopfield Networks is All You Need. *arXiv:2008.07320.*
+  — modern Hopfield networks and their connection to attention. Referenced in [embed](lattice/embed.md).
+
+### Predictive coding and free energy
+
 - Parr, T., Pezzulo, G. & Friston, K.J. (2022). *Active Inference: The Free Energy Principle in Mind, Brain, and Behavior.* MIT Press.
-- Belohlavek, R., Outrata, J. & Trnecka, M. (2010). Decomposing matrices by formal concepts. *JCSS*, 76(1), 3–20.
-- Ramsauer, H. et al. (2020). Hopfield Networks is All You Need. *arXiv:2008.07320*.
+  — eq. 4.19: energy as sum of prediction errors; theoretical basis for the energy function in `FixpointIterator`. Referenced in [fixpoint](core/fixpoint.md).
+
+### Tensor logic and temperature
+
+- Domingos, P. (2025). *Tensor Logic: The Language of AI.* arXiv:2510.12269v3. https://arxiv.org/abs/2510.12269
+  — Datalog rules as einsums; Join as tensor logic relational composition; temperature spectrum from deductive (T=0) to analogical (T>0); optimal T varies by data sparsity. Referenced in [tensor](core/tensor.md), [fixpoint](core/fixpoint.md).
