@@ -15,10 +15,10 @@ of matching entities across all heads. The combination step is currently
 under review — see _outer_step for details.
 """
 
-from lattice.embed import Embed
 import numpy as np
 from functools import reduce
 from core.algebra import *
+from lattice.embed import Embed
 from core.fixpoint import FixpointIterator
 from concurrent.futures import ThreadPoolExecutor
 
