@@ -197,18 +197,19 @@ class Lambert:
             Number of entities to explore.
         """
         mha = self._build_mha()
-        self.explorer = CategoryExplorer(mha, eps=self.eps)
-        emb, EmbR, rep_cols = self.explorer.explore_lattice(n_entities)
+        self.concept_space = {}
+        self.explorer = CategoryExplorer(mha, self, eps=self.eps)
+        self.explorer.explore_lattice(n_entities, verbose=True)
         self.query = Query(self)
-        unique, inverse = np.unique(emb, axis=0, return_inverse=True)
-        self.concept_space = {
-            'emb':        emb,
-            'EmbR':       EmbR,
-            'rep_cols':   rep_cols,
-            'unique':     unique,
-            'inverse':    inverse,
-            'categories': self.explorer.categories
-        }
+        # unique, inverse = np.unique(emb, axis=0, return_inverse=True)
+        # self.concept_space = {
+        #     'emb':        emb,
+        #     'EmbR':       EmbR,
+        #     'rep_cols':   rep_cols,
+        #     'unique':     unique,
+        #     'inverse':    inverse,
+        #     'categories': self.explorer.categories
+        # }
 
     def _map_values(self):
         """
@@ -231,7 +232,7 @@ class Lambert:
         """
         emb_vals = set(float(v) for v in self.concept_space['emb'].flat if v > self.eps)
         return {
-            float(v): f"[{head_name}] {self.heads[head_name]['feature_labels'][self.heads[head_name]['rep_cols'][j]]}"
+            (head_name, j, float(v)): f"[{head_name}] {self.heads[head_name]['feature_labels'][self.heads[head_name]['rep_cols'][j]]}"
             for cat in self.concept_space['categories'].values()
             for head_name, (intent_vec, _) in cat['intents'].items()
             for j, v in enumerate(intent_vec)
@@ -278,5 +279,3 @@ class Lambert:
         self.concept_space['feature_map'] = self._map_values()
 
         print(f'categories: {len(self.concept_space["categories"])}')
-
-

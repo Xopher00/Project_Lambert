@@ -89,7 +89,7 @@ class Embed(Tensor):
         fp = FixpointIterator(f=_f, state0=state0, eps=eps, max_iters=max_iters)
         return fp.run()
 
-    def ConceptEmbed(self, R, temp, eps=1e-3):
+    def ConceptEmbed(self, R, temp, eps=1e-3, seen=None, covered=None, rep_cols=None):
         """
         Select a compact set of representative formal concepts from a relation matrix.
 
@@ -131,10 +131,11 @@ class Embed(Tensor):
         Belohlavek, R., Outrata, J. & Trnecka, M. (2010). Decomposing matrices
         by formal concepts. *JCSS*, 76(1), 3–20.
         """
-        seen     = {}
-        rep_cols = []
-        covered  = set()
-        for j in range(R.shape[1]):
+        seen    = seen    if seen    is not None else {}
+        covered = covered if covered is not None else set()
+        rep_cols = rep_cols if rep_cols is not None else []
+        start = len(rep_cols)
+        for j in range(start, R.shape[1]):
             a   = self._concept_fixpoint(R, R[:, j], temp, eps=eps)
             n_active = int((R[:, j] > 0).sum())
             key = (tuple((a / eps).astype(int))) if n_active > 1 else (j,)

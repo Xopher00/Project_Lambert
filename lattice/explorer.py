@@ -43,11 +43,15 @@ class CategoryExplorer(Embed):
         Default is 1e-3.
     """
 
-    def __init__(self, mha, eps=1e-3):
+    def __init__(self, mha, model, eps=1e-3):
         super().__init__()
+        self.__dict__.update(model.__dict__)
         self.mha = mha
         self.eps = eps
         self.categories = {}
+        self.seen    = {}
+        self.covered = set()
+        self.rep_cols = []
 
     # An earlier version of the intent key method using intents instead of extents
     # keep this version in mind as we research the nature of extents and intents in formal concept analysis
@@ -176,7 +180,7 @@ class CategoryExplorer(Embed):
         )
         return fp.run()
 
-    def explore_lattice(self, n_entities):
+    def explore_lattice(self, n_entities=None, seeds=None, verbose=False):
         """
         Perform full lattice closure over the discovered categories.
 
@@ -214,13 +218,23 @@ class CategoryExplorer(Embed):
             Column indices of the category matrix selected as representative
             concepts.
         """
-        print('Performing initial concept exploration . . .')
-        self.explore(n_entities)
-        print('Initial exploration phase complete.')
-        emb_new = np.zeros((n_entities, len(self.categories)))
-        print('Beginning full concept exploration . . .')
+        if verbose is True: print('Performing initial concept exploration . . .')
+        self.explore(n_entities=n_entities, seeds=seeds)
+        if verbose is True: print('Initial exploration phase complete.')
+        n = n_entities or self.mha.heads[0].emb.shape[0]
+        emb_new = np.zeros((n, len(self.categories)))
+        if verbose is True: print('Beginning full concept exploration . . .')
         for col, (key, cat) in enumerate(self.categories.items()):
             emb_new[:, col] = np.where(cat['extent'] > self.eps, cat['extent'], 0)
-        emb, EmbR, rep_cols = self.ConceptEmbed(emb_new, temp=self.mha.heads[0].fp.temp)
-        print('Transitive closure reached.')
-        return emb, EmbR, rep_cols
+        emb, EmbR, self.rep_cols = self.ConceptEmbed(emb_new, temp=self.mha.heads[0].fp.temp, 
+                                                     seen=self.seen, covered=self.covered, rep_cols=self.rep_cols)
+        unique, inverse = np.unique(emb, axis=0, return_inverse=True)
+        self.concept_space.update({
+            'emb':        emb,
+            'EmbR':       EmbR,
+            'rep_cols':   self.rep_cols,
+            'unique':     unique,
+            'inverse':    inverse,
+            'categories': self.categories
+        })
+        if verbose is True: print('Transitive closure reached.')

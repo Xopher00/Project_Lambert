@@ -64,7 +64,7 @@ class Query:
                                     scores0[ranked], {}, prov, 'backward'))
 
         idx     = self._resolve(entities) if entities is not None else []
-        self.explorer.explore(seeds=idx)
+        self.explorer.explore_lattice(seeds=idx)
         state   = self.explorer.mha.fp.state
         intents = dict(self.explorer.mha.intents)
         ranked  = self._rank(state, top_k)
