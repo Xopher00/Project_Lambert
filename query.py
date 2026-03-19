@@ -29,6 +29,8 @@ class Query:
     def _rank(self, scores, top_k):
         ranked = np.argsort(scores)[::-1]
         ranked = ranked[(scores[ranked] > self.eps) & (scores[ranked] > -1e8)]
+        if len(ranked) == 0:
+            return ranked
         ranked = ranked[scores[ranked] >= scores[ranked[0]] - self.eps][:top_k]
         return ranked
 
@@ -40,31 +42,26 @@ class Query:
         ], key=lambda x: -x[2])
 
     def _feature_scores(self, features):
-        head_scores = {}
-        for feat in features:
-            matches = [(hn, j) for k, (hn, j) in self._col_index.items()
-                       if feat.lower() in k.lower()]
-            if not matches:
-                print(f'  [warn] feature not found: {feat}')
-                continue
-            for hn, j in matches:
-                head   = self.explorer.mha.heads[self.explorer.mha.names.index(hn)]
-                active = np.where(head.emb[:, j] > self.eps)[0]
-                if not len(active):
-                    continue
-                head.retrieve(active)
-                s = np.clip(head.scores(), 0, None)
-                head_scores[hn] = np.maximum(head_scores.get(hn, np.zeros(self.n)), s)
-        return reduce(np.minimum, head_scores.values()) if head_scores else None
+        matches = [(hn, j, k) for feat in features
+                for k, (hn, j) in self._col_index.items()
+                if feat.lower() in k.lower()]
+        if not matches:
+            return None, []
+        head_scores, prov = {}, []
+        for hn, j, k in matches:
+            col = self.explorer.mha.heads[self.explorer.mha.names.index(hn)].emb[:, j]
+            head_scores[hn] = np.maximum(head_scores.get(hn, np.zeros(self.n)), col)
+            prov.append((hn, k, float(col.max())))
+        return reduce(np.maximum, head_scores.values()), prov
 
     def __call__(self, entities=None, features=None, top_k=10):
         if features is not None:
-            scores0 = self._feature_scores(features)
+            scores0, prov = self._feature_scores(features)
             if scores0 is None:
                 return show(QueryResult([], np.array([]), {}, [], 'backward'))
             ranked = self._rank(scores0, top_k)
             return show(QueryResult([self.entity_labels[i] for i in ranked],
-                                scores0[ranked], {}, [], 'backward'))
+                                    scores0[ranked], {}, prov, 'backward'))
 
         idx     = self._resolve(entities) if entities is not None else []
         self.explorer.explore(seeds=idx)

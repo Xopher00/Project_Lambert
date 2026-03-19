@@ -110,26 +110,20 @@ class CategoryExplorer(Embed):
             - ``'intents'``: the per-head intent dict from MultiHeadAttention
             - ``'extent'``: the converged outer fixpoint state vector
         """
-        candidates = seeds if seeds is not None else range(n_entities)
+        candidates = [seeds] if seeds is not None else [[i] for i in range(n_entities)]
         covered = set()
-        for i in candidates:
-            if i in covered:
+        for query in candidates:
+            if all(i in covered for i in query):
                 continue
-            if n_entities and i % 50 == 0:
-                print(f"  exploring entity {i}/{n_entities}  "
-                    f"categories={len(self.categories)}  "
-                    f"covered={len(covered)}")
+            if n_entities and len(covered) % 50 == 0:
+                print(f"  covered={len(covered)}  categories={len(self.categories)}")
             self.mha.intents = {}
-            hits, intents = self.mha.retrieve([i])
-            if len(hits) == 0:
-                continue
+            hits, _ = self.mha.retrieve(query)
+            if not len(hits): continue
             key = self._intent_key()
             extent = self.mha.fp.state.copy()
             if key not in self.categories:
-                self.categories[key] = {
-                    'intents': dict(self.mha.intents),
-                    'extent':  extent,
-                }
+                self.categories[key] = {'intents': dict(self.mha.intents), 'extent': extent}
                 covered.update(np.flatnonzero(extent > self.eps).tolist())
         return self.categories
 
