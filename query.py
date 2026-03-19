@@ -12,16 +12,12 @@ class QueryResult:
 
 class Query:
 
-    def __init__(self, explorer, heads, entity_labels, eps=1e-3):
-        self.explorer      = explorer
-        self.mha           = explorer.mha
-        self.heads         = heads
-        self.entity_labels = entity_labels
-        self.eps           = eps
-        self.n             = explorer.mha.heads[0].emb.shape[0]
-        self._col_index    = {
+    def __init__(self, model):
+        self.__dict__ = model.__dict__
+        self.n             = self.explorer.mha.heads[0].emb.shape[0]
+        self._col_index = {
             f'[{hn}] {h["feature_labels"][h["rep_cols"][j]]}': (hn, j)
-            for hn, h in heads.items()
+            for hn, h in self.heads.items()
             for j in range(len(h['rep_cols']))
         }
 
@@ -52,7 +48,7 @@ class Query:
                 print(f'  [warn] feature not found: {feat}')
                 continue
             for hn, j in matches:
-                head   = self.mha.heads[self.mha.names.index(hn)]
+                head   = self.explorer.mha.heads[self.explorer.mha.names.index(hn)]
                 active = np.where(head.emb[:, j] > self.eps)[0]
                 if not len(active):
                     continue
