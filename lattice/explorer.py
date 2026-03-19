@@ -83,8 +83,8 @@ class CategoryExplorer(Embed):
         """
         extent = self.mha.fp.state
         return tuple((extent / self.eps).astype(int))
-
-    def explore(self, n_entities):
+    
+    def explore(self, n_entities=None, seeds=None):
         """
         Perform the initial category discovery phase.
 
@@ -110,11 +110,12 @@ class CategoryExplorer(Embed):
             - ``'intents'``: the per-head intent dict from MultiHeadAttention
             - ``'extent'``: the converged outer fixpoint state vector
         """
+        candidates = seeds if seeds is not None else range(n_entities)
         covered = set()
-        for i in range(n_entities):
+        for i in candidates:
             if i in covered:
                 continue
-            if i % 50 == 0:
+            if n_entities and i % 50 == 0:
                 print(f"  exploring entity {i}/{n_entities}  "
                     f"categories={len(self.categories)}  "
                     f"covered={len(covered)}")
@@ -126,8 +127,8 @@ class CategoryExplorer(Embed):
             extent = self.mha.fp.state.copy()
             if key not in self.categories:
                 self.categories[key] = {
-                    'intents':  dict(self.mha.intents),
-                    'extent':   extent,
+                    'intents': dict(self.mha.intents),
+                    'extent':  extent,
                 }
                 covered.update(np.flatnonzero(extent > self.eps).tolist())
         return self.categories

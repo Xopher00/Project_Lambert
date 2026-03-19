@@ -14,10 +14,11 @@ accessed via concept_space, heads, and labels.
 """
 
 import numpy as np
+from query import Query
 from typing import Optional
 from dataclasses import dataclass, field
-from core import Top, Bottom, Max, Sum, Implies, Refutes, Log, Exp, Abs, Negate
 from lattice import Embed, Attention, MultiHeadAttention, CategoryExplorer
+
 
 @dataclass
 class Lambert:
@@ -147,9 +148,10 @@ class Lambert:
         embed = Embed()
         self.heads = {}
         for name, (R, feature_labels) in relations.items():
-            emb, _, rep_cols = embed.ConceptEmbed(R, temp=self.embed_temp, eps=self.eps)
+            emb, EmbR, rep_cols = embed.ConceptEmbed(R, temp=self.embed_temp, eps=self.eps)
             self.heads[name] = {
                 'emb':            emb,
+                'EmbR':           EmbR,
                 'rep_cols':       rep_cols,
                 'feature_labels': feature_labels
             }
@@ -196,10 +198,12 @@ class Lambert:
         """
         mha = self._build_mha()
         self.explorer = CategoryExplorer(mha, eps=self.eps)
-        emb, _, rep_cols = self.explorer.explore_lattice(n_entities)
+        emb, EmbR, rep_cols = self.explorer.explore_lattice(n_entities)
+        self.query = Query(self.explorer, self.heads, self.entity_labels, self.eps)
         unique, inverse = np.unique(emb, axis=0, return_inverse=True)
         self.concept_space = {
             'emb':        emb,
+            'EmbR':       EmbR,
             'rep_cols':   rep_cols,
             'unique':     unique,
             'inverse':    inverse,
@@ -274,3 +278,5 @@ class Lambert:
         self.concept_space['feature_map'] = self._map_values()
 
         print(f'categories: {len(self.concept_space["categories"])}')
+
+
