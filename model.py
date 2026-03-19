@@ -199,7 +199,7 @@ class Lambert:
         mha = self._build_mha()
         self.explorer = CategoryExplorer(mha, eps=self.eps)
         emb, EmbR, rep_cols = self.explorer.explore_lattice(n_entities)
-        self.query = Query(self.explorer, self.heads, self.entity_labels, self.eps)
+        self.query = Query(self)
         unique, inverse = np.unique(emb, axis=0, return_inverse=True)
         self.concept_space = {
             'emb':        emb,
