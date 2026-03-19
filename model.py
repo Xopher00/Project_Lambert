@@ -177,7 +177,7 @@ class Lambert:
             names.append(name)
         return MultiHeadAttention(heads=attn_heads, names=names, eps=self.eps)
 
-    def _explore(self, n_entities: int):
+    def _explore(self, n_entities: int, mode: str):
         """
         Build the MultiHeadAttention and run full lattice exploration.
 
@@ -199,17 +199,9 @@ class Lambert:
         mha = self._build_mha()
         self.concept_space = {}
         self.explorer = CategoryExplorer(mha, self, eps=self.eps)
-        self.explorer.explore_lattice(n_entities, verbose=True)
+        if mode != "Lazy":
+            self.explorer.explore_lattice(n_entities, verbose=True)
         self.query = Query(self)
-        # unique, inverse = np.unique(emb, axis=0, return_inverse=True)
-        # self.concept_space = {
-        #     'emb':        emb,
-        #     'EmbR':       EmbR,
-        #     'rep_cols':   rep_cols,
-        #     'unique':     unique,
-        #     'inverse':    inverse,
-        #     'categories': self.explorer.categories
-        # }
 
     def _map_values(self):
         """
@@ -239,7 +231,7 @@ class Lambert:
             if float(v) in emb_vals
         }
 
-    def run(self, relations: dict = None, n_entities: int = None, R: np.ndarray = None, vocab: list = None) -> tuple:
+    def run(self, mode: str = None, relations: dict = None, n_entities: int = None, R: np.ndarray = None, vocab: list = None) -> tuple:
         """
         Execute the full Lambert pipeline.
 
@@ -250,6 +242,9 @@ class Lambert:
 
         Parameters
         ----------
+        mode : str
+            Determines if the model is in lazy mode. 
+            In lazy mode, the model does not learn the data all at once, but on demand 
         relations : dict, optional
             Pre-partitioned relation matrices. Maps head name to a tuple of
             (R, feature_labels). Required if R is not provided.
@@ -272,10 +267,12 @@ class Lambert:
         print(f'embeddings ready: {list(self.heads.keys())}')
 
         print('exploring lattice...')
-        self._explore(n_entities)
-        print(f'exploration complete: emb shape={self.concept_space["emb"].shape}, {len(self.concept_space["categories"])} categories')
+        self._explore(n_entities, mode)
 
-        print(f'Identifying strongest defining traits . . . ')
-        self.concept_space['feature_map'] = self._map_values()
+        if mode != "Lazy":
+            print(f'exploration complete: emb shape={self.concept_space["emb"].shape}, {len(self.concept_space["categories"])} categories')
 
-        print(f'categories: {len(self.concept_space["categories"])}')
+            print(f'Identifying strongest defining traits . . . ')
+            self.concept_space['feature_map'] = self._map_values()
+
+            print(f'categories: {len(self.concept_space["categories"])}')
