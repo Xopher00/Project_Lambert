@@ -76,19 +76,14 @@ own concept basin, then combining their outputs via an outer fixpoint in
 
 The theoretically correct combination is the lattice infimum across heads — the
 elementwise minimum, keeping only entities satisfying all relations simultaneously.
-This follows directly from Brito et al. (Theorem 8): the infimum of concepts across
-heads is the intersection of their extents. An earlier version of Lambert used this
-and behaved correctly on simple datasets. On more complex data it produced
-instability.
+This follows from Brito et al. (Theorem 8): the infimum of concepts is the
+intersection of their extents. Bělohlávek (2000) Theorem 2 gives a direct proof:
+each head's stable points form a complete lattice, and the intersection of complete
+lattices closed under meet is also a complete lattice. The current implementation
+uses hard `np.minimum` in `_outer_step`, which is the correct operation.
 
-The current implementation replaces the hard intersection with a soft merge: head
-weights are derived via `Residuate` — measuring how well each head's output aligns
-with the current global belief — and results are combined via `SmoothMax`. This
-resolves the instability but introduces category collapse: concepts that share
-entities tend to merge rather than separate, because `SmoothMax` never produces a
-score lower than either input. Whether the original instability was intrinsic to
-the hard intersection or a symptom of embedding quality at the time is an open
-question.
+> Brito, P. et al. *Fuzzy Formal Concept Analysis.* — Theorem 8, infimum of concepts.
 
-> Brito, P. et al. *Fuzzy Formal Concept Analysis.* — Theorem 8, infimum as the
-> theoretically correct operation for multi-relational concept intersection.
+> Bělohlávek, R. (2000). Fuzzy logical bidirectional associative memory.
+> *Neural Network World*, 10(5). — Theorem 2: stable points of each head form a
+> complete lattice; their intersection is the multi-relational concept lattice.

@@ -32,6 +32,20 @@ This completeness is what guarantees `_concept_fixpoint` converges.
 > Brito, P. et al. *Fuzzy Formal Concept Analysis.* — adjoint maps `O*`, `A∧`;
 > concept lattice completeness, Theorem 25.
 
+Bělohlávek (2000) provides a stronger and more specific convergence result directly
+for this setting. His Fuzzy Logical BAM uses the same two update steps — equation
+by equation, with Gödel implication as the residuum and `min` as conjunction,
+which is exactly Lambert's algebra. **Theorem 1** proves the alternation is stable
+and reaches its stable point in exactly two discrete time steps, via the idempotence
+of Galois adjunctions (`A^{↑↓↑} = A^↑`, Ore 1944). A state ⟨A,B⟩ is stable if
+and only if it is a formal concept. **Theorem 2** proves the full set of stable
+points forms a complete lattice. Lambert's `max_iters=20` is conservative — the
+algebra guarantees convergence in at most 2 steps.
+
+> Bělohlávek, R. (2000). Fuzzy logical bidirectional associative memory.
+> *Neural Network World*, 10(5). — Theorem 1: two-step convergence of the
+> `O*`/`A∧` alternation; Theorem 2: stable points form the concept lattice.
+
 ---
 
 ## `_concept_fixpoint`
