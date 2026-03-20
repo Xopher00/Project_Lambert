@@ -157,7 +157,10 @@ class Attention(Embed):
             The converged fixpoint state, representing the head's belief
             distribution over concept dimensions.
         """
-        q = self._query(idx)
+        if isinstance(idx, np.ndarray) and idx.dtype.kind == 'f':
+            q = idx
+        else:
+            q = self._query(idx)
         if np.all(q == 0):
             return np.array([]), None
         self.fp.perturb(q)

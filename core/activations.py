@@ -71,7 +71,7 @@ class Activations:
                return Max(a, b)           
             return temp * np.logaddexp(a/temp, b/temp)
         # Array path - use scipy
-        if temp == 0 or temp == None:
+        if temp == 0 or temp is None:
             return Max(x, axis=axis, keepdims=keepdims)
         return temp * logsumexp(x/temp, axis=axis, keepdims=keepdims)
     

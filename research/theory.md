@@ -17,6 +17,32 @@ Mathematical foundations of Project Lambert, organised by layer.
 
 ---
 
+## Query semantics
+
+Lambert currently lacks a formal specification of what a query *is* and what a valid answer *means* algebraically. The retrieval mechanism works and provably converges, but the semantics are implicit. Making them explicit is the single highest-leverage theoretical step remaining, because provenance, multi-head combination, lattice navigation, and scaling via Tucker decomposition all depend on it.
+
+### The definition
+
+A query is a partial attribute vector `q ∈ [0,1]^m` — some values known, others zero (unknown). The correct answer is the **smallest formal concept whose intent contains q**:
+
+```
+B = Residuate(R, q)      # intent: attributes implied by q
+A = Residuate(R.T, B)    # extent: entities consistent with that intent
+```
+
+The answer is the concept `(A, B)`. The extent `A` is the set of entities satisfying the query. The intent `B` is the set of attributes the answer implies — provenance falls out directly from the lattice structure, no separate mechanism required.
+
+This is exactly what `_concept_fixpoint` computes. Bělohlávek (2000) Theorem 1 proves it converges to this concept in at most two steps.
+
+### What this unlocks
+
+- **Provenance**: `B` is the reason set. Attributes in the intent are what the query entails.
+- **Multi-head combination**: The correct answer across heads is the meet of their answer concepts — the largest concept contained in all simultaneously (Bělohlávek Theorem 2). The hard `np.minimum` in `_outer_step` computes this correctly.
+- **Lattice navigation**: More specific = meet with another concept (add constraints). More general = join (relax constraints). Both are operations on `emb` columns via the partial order.
+- **Tucker decomposition**: Once query semantics is grounded, `Project(R, emb)` is the correct object for multi-hop queries in compressed concept space (Domingos 2025).
+
+---
+
 ## References
 
 ### Unified Algebra
@@ -41,6 +67,11 @@ Mathematical foundations of Project Lambert, organised by layer.
 
 - Tarski, A. (1955). A lattice-theoretical fixpoint theorem and its applications. *Pacific Journal of Mathematics*, 5(2), 285–309.
   — guarantees convergence of monotone operators on complete lattices. Referenced in [embed](lattice/embed.md).
+
+### Fuzzy logical associative memory
+
+- Bělohlávek, R. (2000). Fuzzy logical bidirectional associative memory. *Neural Network World*, 10(5).
+  — Theorem 1: Lambert's `_concept_fixpoint` (`O*`/`A∧` alternation with Gödel implication) converges to a formal concept in exactly two steps via idempotence of Galois adjunctions (Ore 1944). Theorem 2: stable points form the complete concept lattice. Theorem 6: constructive learning rule for R from labeled concepts. Lambert's algebra (min, Gödel implication) is Example 2 — one of three canonical cases the theorems directly cover. Referenced in [embed](lattice/embed.md), [attention](lattice/attention.md).
 
 ### Formal concept analysis
 
