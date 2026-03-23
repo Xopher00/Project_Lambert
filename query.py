@@ -41,39 +41,37 @@ class Query:
             for j, v in enumerate(intent_vec) if v > self.model.eps
         ], key=lambda x: -x[2])
 
-    def _feature_scores(self, features):
-        matches = [(hn, j, k) for feat in features
-                for k, (hn, j) in self._col_index.items()
-                if feat.lower() in k.lower()]
-        if not matches:
-            return None, []
-        head_scores, prov = {}, []
-        for hn, j, k in matches:
-            col = self.model.explorer.mha.heads[self.model.explorer.mha.names.index(hn)].emb[:, j]
-            head_scores[hn] = np.maximum(head_scores.get(hn, np.zeros(self.n)), col)
-            prov.append((hn, k, float(col.max())))
-        return reduce(np.maximum, head_scores.values()), prov
+    def _build_seeds(self, entities=None, features=None):
+        if entities is not None:
+            idx  = self._resolve(entities)
+            mode = 'intersection' if len(idx) > 1 else 'forward'
+            return idx, mode
+        if isinstance(features, str):
+            features = [features]
+        n = self.model.explorer.mha.heads[0].emb.shape[0]
+        q = np.zeros(n)
+        for feat in features:
+            for label, (hn, j) in self._col_index.items():
+                if feat.lower() in label.lower():
+                    head_idx = self.model.explorer.mha.names.index(hn)
+                    q = np.maximum(q, self.model.explorer.mha.heads[head_idx].emb[:, j])
+        return q, 'backward'
 
     def __call__(self, entities=None, features=None, top_k=10):
-        if features is not None:
-            scores0, prov = self._feature_scores(features)
-            if scores0 is None:
-                return show(QueryResult([], np.array([]), {}, [], 'backward'))
-            ranked = self._rank(scores0, top_k)
-            return show(QueryResult([self.model.entity_labels[i] for i in ranked],
-                                    scores0[ranked], {}, prov, 'backward'))
-
-        idx     = self._resolve(entities) if entities is not None else []
-        self.model.explorer.explore(seeds=idx, learn=False)
-        state   = self.model.explorer.mha.fp.state
-        intents = dict(self.model.explorer.mha.intents)
-        ranked  = self._rank(state, top_k)
-        prov    = self._provenance(intents)
-        active  = set(round(float(state[i]), 3) for i in ranked)
-        prov    = [(hn, l, v) for hn, l, v in prov if round(v, 3) in active]
-        mode    = 'intersection' if len(idx) > 1 else 'forward'
-        return show(QueryResult([self.model.entity_labels[i] for i in ranked],
-                                state[ranked], intents, prov, mode))
+        if entities is None and features is None:
+            raise ValueError("Provide either entities or features.")
+        seeds, mode = self._build_seeds(entities=entities, features=features)
+        self.model.explorer.mha.intents = {}
+        hits, intents = self.model.explorer.mha.retrieve(seeds)
+        state  = self.model.explorer.mha.fp.state
+        ranked = self._rank(state, top_k)
+        prov   = self._provenance(intents)
+        active = set(round(float(state[i]), 3) for i in ranked)
+        prov   = [(hn, l, v) for hn, l, v in prov if round(v, 3) in active]
+        return show(QueryResult(
+            [self.model.entity_labels[i] for i in ranked],
+            state[ranked], intents, prov, mode
+        ))
 
 
 def show(r, show_provenance=True):
