@@ -9,96 +9,57 @@ Every solution to this problem so far has been inadequate — something slapped 
 However, it may be possible to make these models transparent and auditable. By understanding the mathematics behind how models work, we can build a new framework from the ground up and incorporate provenance at the deepest level. This is what Project Lambert is trying to achieve.
 
 ## The Math
-This project was initially inspired by the work of mathematician Eric Hehner. Hehner developed a unique mathematical notation system that unifies arithmetic and logic — a [Unified Algebra](https://www.cs.utoronto.ca/~hehner/UA.pdf). The idea that math and logic are two sides of the same coin means we can theoretically build an AI not based on statistics and probability, but on logic itself. By incorporating logic at the model's deepest layer, we can make it easier to understand on an intuitive and interpretable level how a model reaches a decision or processes data.
+This project was initially inspired by the work of mathematician Eric Hehner. Hehner recognized that arithmetic and logic obey the same mathematical laws, and developed a notation system that reflects this and combines them into a single, [Unified Algebra](https://www.cs.utoronto.ca/~hehner/UA.pdf). The idea that math and logic are two sides of the same coin means we can theoretically build an AI not based on statistics and probability, but on logic itself. By incorporating logic at the model's deepest layer, we can make it easier to understand on an intuitive and interpretable level how a model reaches a decision or processes data.
 
-We also take inspiration from [Tensor Logic](https://arxiv.org/pdf/2510.12269), a framework for creating an AI programming language proposed by Pedro Domingos. To summarize Domingos' paper: every operation an AI model performs can be reduced to the same core equation — Einstein summation (tensor contraction):
+We also take inspiration from [Tensor Logic](https://arxiv.org/pdf/2510.12269), a framework proposed by Pedro Domingos in which every AI operation reduces to the same core equation — Einstein summation over a tensor product:
 
-$$R[x,z] = \vee\langle y \cdot A[x,y] \wedge B[y,z]\rangle$$
+$$R[x,z] = \sum_y A[x,y] \cdot B[y,z]$$
 
-For each output pair (x, z), this finds the best intermediate "witness" y by combining relations A and B through logical conjunction (∧) and existential quantification (∨).
+Lambert replaces the arithmetic operations with fuzzy logic — max and min — giving:
 
-This equation can be expressed using different algebraic structures called semirings. We use the logical semiring — Disjunction (∨ = max) and Conjunction (∧ = min) — rather than the standard arithmetic semiring. This makes the model's internal logic semantically transparent and directly interpretable.
+$$R[x,z] = \bigvee_y \bigl(A[x,y] \wedge B[y,z]\bigr)$$
 
-Normally the information on intermediate witness nodes is lost during reduction - sum over the product or max over the minimum, in our case. Witness node information is stored in a polynomial format which can be used later to reconstruct a proof of how a model found a relationship. In this framework the same computation is used to train a neural network, perform inference, and construct a proof. 
+This makes the model's reasoning semantically transparent and directly interpretable.
 
-This also eliminates a technical overhead present in Domingos's original formulation. Standard Tensor Logic operates on $\{0, 1\}$ and must apply a Heaviside step function after each join to convert continuous sums back to Boolean values: $A[x,z] = H\left(\sum_y S[x,y] \cdot P[y,z]\right)$. In UA, using $\top/\bot = \pm\infty$ with min/max, Boolean operations are closed by construction — the max or min of values from $\{-\infty, +\infty\}$ is always in $\{-\infty, +\infty\}$. No thresholding is needed. This means making the model "soft" (continuous, learnable) is not a separate mode switch; it is the same framework with a temperature parameter controlling how sharp the min/max operations are.
-
-## Provenance Example
-
-The provenance pipeline was tested against the [BradyStephenson/bible-data](https://github.com/BradyStephenson/bible-data) dataset, which contains 3,009 biblical persons and 5,450 relationship records. After filtering to parent/child relationships and building an adjacency matrix over 1,972 nodes, Lambert's closure converged in ~12 seconds after 75 iterations, expanding 1,727 direct parent links into 33,943 transitive ancestor relationships.
-
-A provenance query was then run asking whether Adam is an ancestor of Abram. The system returned the following proof chain at full confidence:
-
-```
-[Query] Adam → Abram  relation='ancestor of'  threshold=0.05  temp=0.05
-. . .
-[Query] proof found
---- Adam → Abram ---
-Adam ancestor of Abram because:
-  Adam (1.000) ancestor of → Seth (1.000) ancestor of → Enosh (1.000) ancestor of
-  → Kenan (1.000) ancestor of → Mahalalel (1.000) ancestor of → Jared (1.000) ancestor of
-  → Enoch (1.000) ancestor of → Methuselah (1.000) ancestor of → Lamech (1.000) ancestor of
-  → Noah (1.000) ancestor of → Shem (1.000) ancestor of → Arpachshad (1.000) ancestor of
-  → Shelah (1.000) ancestor of → Eber (1.000) ancestor of → Peleg (1.000) ancestor of
-  → Reu (1.000) ancestor of → Serug (1.000) ancestor of → Nahor (1.000) ancestor of
-  → Terah (1.000) ancestor of → Abram
-```
-
-Every step is a direct readout constructed from the witness polynomials — not an explanation generated after the fact. The intermediate nodes (Seth, Enosh, Kenan, … Terah) are the witnesses recorded during Join that jointly justify the conclusion. Proofs like this are not guaranteed to be 100% correct - the model may still be prone to mistakes or make unexpected logical leaps. But this makes that process more transparent.
+The deeper goal — central to Domingos' vision — is a genuinely neurosymbolic AI: one where the neural and symbolic aspects are not separate systems bolted together, but the same computation expressed at different levels of abstraction. In Lambert, learning, inference, and logical reasoning all reduce to the same relational operations. There is no symbolic layer on top of a neural layer; the logic is the network.
 
 ## Mathematical Foundations
 
-#### **Fuzzy relational composition:** 
-At its core, Lambert reasons by asking: "given that X relates to Y, and Y relates to Z, how strongly does X relate to Z?" This is relational composition, implemented with logical min and max rather than arithmetic multiplication and addition. The core inference step is a smooth approximation of [Zadeh's max-min relational composition (1965)](https://www.sciencedirect.com/science/article/pii/S001999586590241X):
+#### **Fuzzy relational composition:**
+At its core, Lambert reasons by asking: "given that X relates to Y, and Y relates to Z, how strongly does X relate to Z?" This is relational composition, implemented using fuzzy logic — min and max — rather than linear algebra matrix multiplication. The core inference step is:
 
-$$R[x,z] = \text{SmoothMax}_y\bigl(\text{SmoothMin}(A[x,y], B[y,z])\bigr)$$
+$$R[x,z] = \bigvee_y \bigl(A[x,y] \wedge B[y,z]\bigr)$$
 
-The underlying algebraic structure $([0,1], \max, \min)$ is a valid distributive lattice and semiring, with over 50 years of theoretical grounding in fuzzy set theory and relational algebra [(Sanchez, 1976)](https://www.sciencedirect.com/science/article/pii/S0019995876904460).
+For each output pair (x, z), this finds the strongest chain of evidence through all possible intermediaries y, where chain strength is the weakest link [(Zadeh, 1965)](https://www.sciencedirect.com/science/article/pii/S001999586590241X).
 
-#### **Smoothing:** 
-Pure min and max have sharp corners that make learning difficult. LogSumExp smooths them into differentiable approximations, with temperature controlling how tight the approximation is. SmoothMin and SmoothMax are implemented via LogSumExp, a well-established smoothing technique [(Nesterov, 2005)](https://link.springer.com/article/10.1007/s10107-004-0552-5). The approximation error is controllable:
+Its adjoint operation is residuation — the inverse of composition, used for querying and concept closure:
 
-$$\left|\text{SmoothMax}(\mathbf{x}) - \vee(\mathbf{x})\right| \leq \frac{\log n}{\alpha}$$
+$$b_j = \bigwedge_i \bigl(a_i \to R_{ij}\bigr)$$
 
-where $\alpha$ is the temperature parameter. A known consequence is that smoothing breaks the distributivity and idempotency of the exact semiring; algebraic guarantees of the crisp max-min semiring do not transfer, and error accumulates with composition depth.
+where → is Gödel implication: `a → b = 1 if a ≤ b, else b`. Residuation finds the tightest set of attributes consistent with a given set of entities, and vice versa — the two directions of relational inference [(Sanchez, 1976)](https://www.sciencedirect.com/science/article/pii/S0019995876904460).
 
-#### **Witness tracking and provenance:** 
-When Lambert draws a conclusion, it records exactly which intermediate facts justified it — these are called witnesses. This is not a post-hoc explanation added after the fact; it is a direct readout of the computation itself.
+#### **Smoothing:**
+Pure min and max are not differentiable. SmoothMin and SmoothMax are implemented via LogSumExp, with a temperature parameter controlling how close the approximation is to the exact operations. At low temperature the system reasons crisply; at higher temperature reasoning becomes softer and more analogical. The system operates anywhere on this spectrum without changing the underlying framework [(Nesterov, 2005)](https://link.springer.com/article/10.1007/s10107-004-0552-5).
 
-During each Join, all intermediate indices y such that  $y = A[x,y] \wedge B[y,z]$ — the entities that "witness" the inference — above a contribution threshold are recorded along with their contribution score. [Green, Karvounarakis & Tannen (2007, PODS)](https://dl.acm.org/doi/10.1145/1265530.1265535) proved that query annotations propagate through relational algebra via semiring operations. Under the fuzzy semiring, Lambert's composition is exactly relational composition with provenance: the witness is the provenance certificate. These recorded witnesses are then used to reconstruct a human-readable proof tree tracing exactly which intermediate entities justified each conclusion — the concrete mechanism behind the provenance goal described above. 
+#### **Formal concept analysis and concept embeddings:**
+Lambert's embedding is grounded in fuzzy formal concept analysis (Bělohlávek & Vychodil). A **formal concept** is a pair (extent, intent): the extent is the set of entities that share a collection of attributes; the intent is the set of attributes that defines them. Lambert selects representative concepts as embedding dimensions, building the embedding directly from the algebraic structure of the data [(Bělohlávek, Outrata & Trnecka, 2010)](https://www.sciencedirect.com/science/article/pii/S002200009900013X).
 
-#### **Fixed-point convergence:** 
-Lambert trains by repeating the same join operation until the result stops changing — this stable state is called a fixed point. The following guarantees this process terminates.
+#### **Convergence:**
+Rather than training via gradient descent and backpropagation, Lambert uses predictive coding [(Friston et al., 2010)](https://www.nature.com/articles/nrn2787): the system iterates to minimise free energy, updating beliefs until they stop changing. The stable points of this process are the formal concepts of the relation, whose set forms a complete lattice [(Bělohlávek, 2000)](https://www.sciencedirect.com/science/article/pii/S002002550000044X). As free energy falls, temperature falls with it, hardening fuzzy operations toward crisp logical outcomes.
 
-The iteration $A_{n+1} = \text{Join}(A_n, B)$ has guaranteed fixed-point existence via the [Knaster-Tarski theorem (1955)](https://projecteuclid.org/journals/pacific-journal-of-mathematics/volume-5/issue-2/A-lattice-theoretical-fixpoint-theorem-and-its-applications/pjm/1103044538.full): any monotone function on a complete lattice has fixed points, and $([0,1]^N, \leq)$ is a complete lattice. At positive temperature, SmoothMax/SmoothMin are locally contractive, giving geometric convergence near a fixed point:
+#### **Attention:**
+Lambert's attention mechanism performs retrieval over concept embeddings using max-min composition rather than dot-product arithmetic — converging on the concept that most strongly subsumes the query rather than the one most correlated with it [(Krotov & Hopfield, 2021)](https://arxiv.org/abs/2008.06549). Each head iterates a query to convergence, constrained by residuation so the result stays within what the embedding can support. Multi-head retrieval runs one head per relation and combines results via elementwise minimum — the lattice meet of the concepts each head returns.
 
-$$\lVert x_n - x^* \rVert \leq q^n \lVert x_0 - x^* \rVert, \quad q < 1$$
-
-Whether the map is globally contractive — and thus whether the iteration always converges to the same fixed point regardless of initialization — is an open question.
-
-#### **Free energy:** 
-To know when to stop iterating, Lambert measures how much the model changed on the last step. When this change approaches zero, the model has converged.
-
-The convergence diagnostic:    $$F = \sum (A_n - A)^2$$   measures the squared change between successive iterates, analogous to monitoring a Lyapunov function ([Hopfield, 1982](https://www.pnas.org/doi/10.1073/pnas.79.8.2554);  [Ramsauer et al., 2021](https://arxiv.org/abs/2008.02217)). It relates to variational free energy [(Friston et al., 2010)](https://www.nature.com/articles/nrn2787) under restrictive assumptions but omits precision weighting, an explicit generative model, and the entropy term. It is best understood as a fixed-point residual rather than a formal evidence lower bound.
-
-#### **Temperature schedule:** 
-As the model converges and free energy drops, temperature drops with it — hardening fuzzy reasoning toward crisp boolean logic. The formula governing this: $$T = \frac{-E}{N \cdot \overline{\log A}}$$  is borrowed by analogy from thermodynamics ($F = U - TS$). 
-
-It produces qualitatively correct behavior — temperature drops as $E \to 0$, hardening soft operations toward crisp boolean logic — but uses a non-standard entropy definition and has boundary singularities when any $A_i = 0$ or all $A_i = 1$. 
-
-The temperature parameter controls a spectrum between two reasoning modes: at $T \to 0$, SmoothMax approaches hard max and SmoothMin approaches hard min, recovering exact crisp Boolean logic; as $T increases, the logical operations become fuzzier and all evidence contributes proportionally, enabling analogical reasoning. The system can operate anywhere on this spectrum without changing the underlying framework.
-
-#### **SVD/Tucker decomposition:** 
-Lambert uses a standard compression technique to represent entities in a lower-dimensional space. This technique was designed for arithmetic algebra and is not a perfect fit for logical algebra — a known limitation left for future work. 
-
-SVD's optimality guarantee (minimum Frobenius-norm reconstruction error) does not transfer, as the Frobenius norm is not the natural metric for max-min algebra. Tropical analogues of matrix decomposition exist but have fundamentally different properties [(Develin, Santos & Sturmfels, 2005)](https://arxiv.org/abs/math/0312114); a proper lattice-based factorization would be more principled and is left as future work.
-
-These limitations have been reviewed and are considered acceptable for the current stage of the project.
+#### **Provenance:**
+Because every conclusion is a formal concept, provenance is a structural property of the lattice the computation produces — not added on top of it. The concept itself is the proof: its extent identifies which entities are implicated, its intent identifies why [(Green, Karvounarakis & Tannen, 2007)](https://dl.acm.org/doi/10.1145/1265530.1265535).
 
 ## Status
-Most of the core components of a tensor logic based system (described by Pedro Domingos) have been assembled and debugged. These are based on Unified Algebra and Fuzzy logic, rather than typical statistics. The UA-based formulation is significantly cleaner and more interpretable than a statistical equivalent would be.
 
-Remaining work:
-- Build a full end-to-end pipeline that traces a complete logic path for a moderately complex task or query - a diagnosis or recommendation based on a medical knowledge graph, for example.
-- Iterate and improve components based on research, or simplify if mathematics allow, both to improve performance and be more theoretically grounded
-- Embedding module still needs work
+The core algebraic framework, embedding, attention, and lattice exploration components are implemented and functional. The system discovers multi-relational concepts invisible to standard similarity measures, and produces fully traceable provenance via the concept lattice.
+
+**Active research directions:**
+
+- Characterising the fixpoint set of multi-head attention formally — whether it constitutes a complete lattice and under what conditions
+- Relation matrix updates from new relational evidence — incorporating genuinely novel facts and propagating their consequences through the lattice
+- Connecting Lambert's architecture back to standard transformer-based frameworks — characterising what transformers approximate in max-min algebraic terms, and what is lost in that approximation
+- Scaling to large medical and scientific knowledge graphs
