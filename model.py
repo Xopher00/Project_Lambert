@@ -10,7 +10,7 @@ table mapping extent keys to the feature labels that caused entities to
 be grouped together.
 
 All results are stored on the instance after run() completes and can be
-accessed via concept_space, heads, and labels.
+accessed via concept_space and heads.
 """
 
 import numpy as np
@@ -39,9 +39,6 @@ class Lambert:
         Temperature used during attention retrieval. Default is 1.0.
     eps : float, optional
         Convergence threshold and extent membership threshold. Default is 1e-3.
-    label : bool, optional
-        Vestigial. Originally a flag to trigger LLM-based category labelling,
-        which has since been removed. Default is False.
 
     Attributes
     ----------
@@ -60,10 +57,6 @@ class Lambert:
         - ``'inverse'``: maps each entity back to its row in unique
         - ``'categories'``: the full category dict from CategoryExplorer
         - ``'feature_map'``: human-readable lookup from extent key to feature label
-    iso_index : dict or None
-        Vestigial. Previously used to index structurally isomorphic categories.
-    labels : dict or None
-        Reserved for downstream labelling. Not yet populated.
     explorer : CategoryExplorer or None
         The CategoryExplorer instance used during run(). Retained for inspection.
     """
@@ -73,17 +66,12 @@ class Lambert:
     embed_temp:    float = 1.0
     attn_temp:     float = 1.0
     eps:           float = 1e-3
-    label:         bool  = False
 
     # --- results (populated by run()) ---
     # heads[name] = {'emb': ndarray, 'rep_cols': list, 'feature_labels': list}
     heads:         Optional[dict] = field(default=None, repr=False)
     # concept_space = {'emb': ndarray, 'unique': ndarray, 'inverse': ndarray, 'categories': dict}
     concept_space: Optional[dict] = field(default=None, repr=False)
-    # iso_index = {'exact': {id: {'signature': tuple}}, 'near': {id: {'signatures': list}}, 'matrix': ndarray}
-    iso_index:     Optional[dict] = field(default=None, repr=False)
-    # labels = {'categories': dict, 'meta': dict, 'iso': dict}
-    labels:        Optional[dict] = field(default=None, repr=False)
     # --- internal components ---
     explorer:      Optional[object] = field(default=None, repr=False)
 
@@ -231,7 +219,7 @@ class Lambert:
             if float(v) in emb_vals
         }
 
-    def run(self, mode: str = None, relations: dict = None, n_entities: int = None, R: np.ndarray = None, vocab: list = None) -> tuple:
+    def run(self, mode: str = None, relations: dict = None, n_entities: int = None, R: np.ndarray = None, vocab: list = None) -> None:
         """
         Execute the full Lambert pipeline.
 

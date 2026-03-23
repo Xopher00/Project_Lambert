@@ -82,11 +82,12 @@ class Embed(Tensor):
         active = np.flatnonzero(seed > 0)
         R_active = R.copy() if full else R[active, :]
         state0   = seed.copy() if full else seed[active].copy()
-        def _f(a, t, R_active=R_active):
-            b     = np.atleast_1d(self.Residuate(R_active, a[:, None], t).squeeze())   # O*:  entity vector → attribute vector (intent)
-            a_new = np.atleast_1d(self.Residuate(R_active.T, b[:, None], t).squeeze()) # A∧:  attribute vector → entity vector (extent)
-            return a_new
-        fp = FixpointIterator(f=_f, state0=state0, eps=eps, max_iters=max_iters)
+        fp = FixpointIterator(
+            f      = lambda a, t, R=R_active: self.Recall(a, R, t),
+            state0 = state0,
+            eps    = eps,
+            max_iters = max_iters,
+        )
         return fp.run()
 
     def ConceptEmbed(self, R, temp, eps=1e-3, seen=None, covered=None, rep_cols=None):
@@ -206,34 +207,6 @@ class Embed(Tensor):
         """
         return self.Join(self.Join(emb, M, temp), emb.T, temp)
 
-    def EmbedSet(self, indices, emb, temp):
-        """
-        Combine a group of entities into a single embedding vector.
-
-        Takes the smooth maximum (LogSumExp) over the embedding rows of the
-        given entities. At temp=0 this returns the elementwise maximum across
-        the group — the least upper bound in the concept lattice. At temp>0
-        the result is a smooth approximation slightly above that bound.
-
-        Useful for representing a set of entities as a single query vector,
-        for example when asking what a group collectively implies.
-
-        Parameters
-        ----------
-        indices : array-like of int
-            Row indices into emb identifying the entities in the set.
-        emb : ndarray, shape (n, k)
-            The embedding matrix.
-        temp : float
-            Temperature passed to SmoothMax.
-
-        Returns
-        -------
-        ndarray, shape (k,)
-            A single embedding vector representing the group.
-        """
-        return self.SmoothMax(emb[indices, :], temp, axis=0)
-
     def GramMatrix(self, M, temp):
         """
         Compute entity-entity similarity via shared embedding dimensions.
@@ -304,3 +277,8 @@ class Embed(Tensor):
         scores  = self.Join(q2d, emb.T, temp)  # (1, n_entities)
         out     = self.Join(scores, emb, temp) # (1, d)
         return out.squeeze()                 # back to (d,)
+    
+    def Recall(self, a, emb, temp=0.0):
+        a2d = a.reshape(-1, 1)                              # (n, 1)  mirrors q.reshape(1, -1)
+        b   = self.Residuate(emb, a2d, temp).reshape(-1, 1) # (k, 1)
+        return self.Residuate(emb.T, b, temp).reshape(-1)   # (n,)

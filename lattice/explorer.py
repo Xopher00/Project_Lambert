@@ -88,7 +88,7 @@ class CategoryExplorer(Embed):
         extent = self.mha.fp.state
         return tuple((extent / self.eps).astype(int))
     
-    def explore(self, n_entities=None, seeds=None):
+    def explore(self, n_entities=None, seeds=None, learn=True):
         """
         Perform the initial category discovery phase.
 
