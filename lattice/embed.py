@@ -9,10 +9,10 @@ from Boolean matrix factorisation (Belohlavek, Outrata & Trnecka 2010): a
 relation matrix can be approximated as a composition of concept columns.
 
 ConceptEmbed is the main entry point. Project and Expand are Tucker-style
-projection and reconstruction in the max-min semiring; both are currently under
+projection and reconstruction under max-min composition; both are currently under
 review — callers discard the projected matrix returned by ConceptEmbed, and
-Expand is not called anywhere in the active codebase. GramMatrix, EmbedSet,
-and Attend are utilities for analogical reasoning and retrieval.
+Expand is not called anywhere in the active codebase. GramMatrix, Attend, and
+Recall are utilities for analogical reasoning and retrieval.
 """
 
 import numpy as np
@@ -39,16 +39,10 @@ class Embed(Tensor):
         """
         Find the formal concept anchored at a seed column.
 
-        Iterates two alternating Residuate steps until the attribute vector
-        stops changing:
-
-            b = Residuate(R_active, a)      # O*:  entity vector → attribute vector (intent)
-            a = Residuate(R_active.T, b)    # A∧:  attribute vector → entity vector (extent)
-
-        This is the algorithmic realisation of the adjoint closure that defines
-        a fuzzy formal concept (Belohlavek & Vychodil 2007). Convergence is
-        guaranteed by the Tarski fixed-point theorem: each step is monotone on
-        the complete lattice of fuzzy sets ordered pointwise.
+        Iterates Recall to fixpoint, starting from the seed entity vector.
+        Each step closes the current entity vector into a tighter (extent, intent)
+        pair via alternating Residuate. The stable point is the unique formal
+        concept whose extent contains the seed entities (Bělohlávek, 2000).
 
         Only rows active in the seed (seed > 0) are included, keeping the
         operation sparse.
@@ -73,11 +67,8 @@ class Embed(Tensor):
 
         References
         ----------
-        Belohlavek, R. & Vychodil, V. (2007). Fuzzy concept lattices constrained
-        by hedges. *JACIII*, 11.
-
-        Tarski, A. (1955). A lattice-theoretical fixpoint theorem and its
-        applications.
+        Bělohlávek, R. (2000). Fuzzy logical bidirectional associative memory.
+        *Information Sciences*, 128, 91–103.
         """
         active = np.flatnonzero(seed > 0)
         R_active = R.copy() if full else R[active, :]
@@ -279,6 +270,32 @@ class Embed(Tensor):
         return out.squeeze()                 # back to (d,)
     
     def Recall(self, a, emb, temp=0.0):
+        """
+        One step of concept closure via alternating Residuate.
+
+        Applies two adjoint Residuate operations in sequence:
+
+            b = Residuate(emb,   a)   # entity vector → attribute vector (intent)
+            a = Residuate(emb.T, b)   # attribute vector → entity vector (extent)
+
+        Each step tightens the (extent, intent) pair toward a formal concept.
+        Iterating to fixpoint recovers the unique concept whose extent contains
+        the seed entities (Bělohlávek, 2000).
+
+        Parameters
+        ----------
+        a : ndarray, shape (n,)
+            Current entity vector.
+        emb : ndarray, shape (n, k)
+            The relation or embedding matrix.
+        temp : float, optional
+            Temperature passed to Residuate. Default is 0.0.
+
+        Returns
+        -------
+        ndarray, shape (n,)
+            Updated entity vector after one closure step.
+        """
         a2d = a.reshape(-1, 1)                              # (n, 1)  mirrors q.reshape(1, -1)
         b   = self.Residuate(emb, a2d, temp).reshape(-1, 1) # (k, 1)
         return self.Residuate(emb.T, b, temp).reshape(-1)   # (n,)
