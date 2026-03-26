@@ -116,6 +116,7 @@ This is exactly what `_concept_fixpoint` computes. Bělohlávek (2000) Theorem 1
 - Belohlavek, R., & Vychodil, V. (2009). Formal concept analysis with background knowledge: Attribute priorities. IEEE Transactions on Systems, Man, and Cybernetics—Part C: Applications and Reviews, 39(4), 399–409.
 - Belohlavek, R., & Vychodil, V. (2010). Discovery of optimal factors in binary data via a novel method of matrix decomposition. Journal of Computer and System Sciences, 76(1), 3–20. DOI: 10.1016/j.jcss.2009.05.002.
 - Brito, A. M., de Barros, L. C., Laureano, E. E., Bertato, F. M., & Coniglio, M. E. (2018). Fuzzy formal concept analysis. In Fuzzy Information Processing (pp. 192–205). Communications in Computer and Information Science. Springer. DOI: 10.1007/978-3-319-95312-0_17.
+- Burch, G. B. (1964). Seven-valued logic in Jain philosophy. International Philosophical Quarterly, 4(1), 68–93.
 - Burchi, M., & Timofte, R. (2025). Learning transformer-based world models with contrastive predictive coding. International Conference on Learning Representations (ICLR 2025).
 - Dannert, K. M., Grädel, E., Naaf, M., & Tannen, V. (2021). Semiring provenance for fixed-point logic. In Proceedings of the 29th EACSL Annual Conference on Computer Science Logic (CSL 2021), LIPIcs vol. 183, article 17. DOI: 10.4230/LIPIcs.CSL.2021.17.
 - Domingos, P. (2025). Tensor logic: The language of AI. arXiv preprint, arXiv:2510.12269.
@@ -133,6 +134,8 @@ This is exactly what `_concept_fixpoint` computes. Bělohlávek (2000) Theorem 1
 - Kriegel, F., & Borchmann, D. (2015). NextClosures: Parallel computation of the canonical base. In Proceedings of the 12th International Conference on Concept Lattices and Their Applications (CLA 2015). TU Dresden.
 - Krotov, D., & Hopfield, J. (2021). Large associative memory problem in neurobiology and machine learning. In Proceedings of the International Conference on Learning Representations (ICLR 2021). arXiv:2008.06996.
 - Maragos, P. (2005). Lattice image processing: A unification of morphological and fuzzy algebraic systems. Journal of Mathematical Imaging and Vision, 22, 83–118.
+- Maragos, P., Charisopoulos, V., & Theodosis, E. (2021). Tropical Geometry and Machine Learning, Proceedings of the IEEE 109(5).
+- Manin, Y. & Marcolli, M. (2024) — Homotopy Theoretic and Categorical Models of Neural Information Networks, Compositionality 6(4).
 - Nesterov, Y. (2005). Smooth minimization of non-smooth functions. Mathematical Programming, Series A, 103, 127–152.
 - Nikzad, M., Gao, Y., & Zhou, J. (2021). Attention-based pyramid dilated lattice network for blind image denoising. In Proceedings of the 30th International Joint Conference on Artificial Intelligence (IJCAI-21).
 - Qi, C., Lukasiewicz, T., & Salvatori, T. (2025). Training deep predictive coding networks. In New Frontiers in Associative Memory Workshop, ICLR 2025.
@@ -143,6 +146,7 @@ This is exactly what `_concept_fixpoint` computes. Bělohlávek (2000) Theorem 1
 - Schmitt, I. (2026). Triadic concept analysis for logic interpretation of simple artificial networks. arXiv preprint, arXiv:2601.06229.
 - Serafini, L., d'Avila Garcez, A., Badreddine, S., Donadello, I., Spranger, M., & Bianchi, F. (2022). Logic tensor networks: Theory and applications. In P. Hitzler & M. K. Sarker (Eds.), Neuro-Symbolic Artificial Intelligence: The State of the Art (Ch. 17). IOS Press.
 - Shah, S., & Zadrozny, W. (2026). Implementing tensor logic: Unifying Datalog and neural reasoning via tensor contraction. arXiv preprint, arXiv:2601.17188.
+- Shen, L. & Tang, X. (2021) — Isbell Adjunctions and Kan Adjunctions via Quantale-Enriched Two-Variable Adjunctions, Applied Categorical Structures. 
 - Sussner, P., & Valle, M. E. (2006). Implicative fuzzy associative memories. IEEE Transactions on Fuzzy Systems, 14(6), 791–807.
 - Tan, X. W., Tan, N., Lee, G., & Kok, S. (2025). The shape of reasoning: Topological analysis of reasoning traces in large language models. arXiv preprint, arXiv:2510.20665.
 - Tarski, A. (1955). A lattice-theoretical fixpoint theorem and its applications. Pacific Journal of Mathematics, 5(2), 285–309.
