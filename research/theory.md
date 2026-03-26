@@ -124,6 +124,8 @@ This is exactly what `_concept_fixpoint` computes. Bělohlávek (2000) Theorem 1
 - Friston, K. J., Parr, T., & Pezzulo, G. (2022). Active inference: The free energy principle in mind, brain, and behavior. MIT Press.
 - Gallagher, J. (2018). The differential λ-calculus: Syntax and semantics for differential geometry. PhD Thesis, University of Calgary.
 - Gao, B., & Spratling, M. W. (2025). Softplus attention with re-weighting boosts length extrapolation in large language models. arXiv preprint, arXiv:2501.13428.
+- Gavranović, B. (2024). Fundamental Components of Deep Learning: A category-theoretic approach. PhD thesis, University of Strathclyde. arXiv:2403.13001.
+- Gavranović, B., Lessard, P., Dudzik, A., von Glehn, T., Araújo, J.G.M. & Veličković, P. (2024). Position: Categorical deep learning is an algebraic theory of all architectures. In Proceedings of the 41st International Conference on Machine Learning (ICML 2024). 
 - Goessmann, A., Schütte, J., Fröhlich, M., & Eigel, M. (2026). A tensor network formalism for neuro-symbolic AI. arXiv preprint, arXiv:2601.15442.
 - Green, T. J., Karvounarakis, G., & Tannen, V. (2007). Provenance semirings. In Proceedings of the 26th ACM SIGMOD-SIGACT-SIGART Symposium on Principles of Database Systems (PODS 2007), pp. 31–40. DOI: 10.1145/1265530.1265535.
 - Grzejdziak-Zdziarski, M., & Loog, M. (2026). The missing interdiscipline: Reasons and ways to study the history of machine learning. External research report. Available at: https://hdl.handle.net/2066/328381.
