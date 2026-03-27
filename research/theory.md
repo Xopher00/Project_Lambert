@@ -107,7 +107,6 @@ This is exactly what `_concept_fixpoint` computes. Bělohlávek (2000) Theorem 1
 - Alcântara, M. S. da S., Dias, T., de Oliveira, W. R., & de Melo, S. de B. (2021). A survey of categorical properties of L-fuzzy relations. Fuzzy Sets and Systems. DOI: 10.1016/j.fss.2021.03.010.
 - Alfarra, M. H. A. (2020). Applications of tropical geometry in deep neural networks. MSc Thesis, King Abdullah University of Science and Technology (KAUST).
 - Alfarra, M., Bibi, A., Hammoud, H., Gaafar, M., & Ghanem, B. (2023). On the decision boundaries of neural networks: A tropical geometry perspective. IEEE Transactions on Pattern Analysis and Machine Intelligence, 45(4), 5027–5037. DOI: 10.1109/TPAMI.2022.3201490.
-- Anonymous. (2025). Inferring the invisible: Recurrent neurosymbolic forward chaining network. Under double-blind review, ICLR 2025.
 - Bazin, A., Galasso-Carbonnel, J., & Kahn, G. (2024). Polyadic relational concept analysis. International Journal of Approximate Reasoning, 164, 109067. DOI: 10.1016/j.ijar.2023.109067.
 - Belohlavek, R. (c. 1998). Feedforward networks with fuzzy signals. Unpublished technical report, Institute for Research and Applications of Fuzzy Modeling / Department of Computer Science, Technical University of Ostrava. Available at: http://belohlavek.inf.upol.cz/publications/Bel_Fnfs.pdf
 - Belohlavek, R. (2000). Fuzzy bidirectional associative memories. Information Sciences, 128, 91–103.
@@ -146,6 +145,7 @@ This is exactly what `_concept_fixpoint` computes. Bělohlávek (2000) Theorem 1
 - Nikzad, M., Gao, Y., & Zhou, J. (2021). Attention-based pyramid dilated lattice network for blind image denoising. In Proceedings of the 30th International Joint Conference on Artificial Intelligence (IJCAI-21).
 - Qi, C., Lukasiewicz, T., & Salvatori, T. (2025). Training deep predictive coding networks. In New Frontiers in Associative Memory Workshop, ICLR 2025.
 - Ramsauer, H., Schäfl, B., Lehner, J., Seidl, P., Widrich, M., Adler, T., Gruber, L., Holzleitner, M., Pavlović, M., Sandve, G. K., Greiff, V., Kreil, D., Kopp, M., Klambauer, G., Brandstetter, J., & Hochreiter, S. (2021). Hopfield networks is all you need. In Proceedings of the International Conference on Learning Representations (ICLR 2021). arXiv:2008.02217.
+- Ren W., Wan K., Leng J., & Li S. (2026). Inferring the Invisible: Neuro-Symbolic Rule Discovery for Missing Value Imputation. ICLR 2026.
 - Riehl, E. (2016). *Category theory in context*. Dover Publications. (Aurora: Dover Modern Math Originals series.) ISBN-13: 978-0-486-80903-8. 272 pp.
 - Ritter, G. X., Sussner, P., & Díaz-de-León, J. L. (1998). Morphological associative memories. IEEE Transactions on Neural Networks, 9(2), 281–293. DOI: 10.1109/72.661123.
 - Ritter, G. X., Díaz-de-León, J. L., & Sussner, P. (1999). Morphological bidirectional associative memories. Neural Networks, 12(6), 851–867. DOI: 10.1016/S0893-6080(99)00033-7.
@@ -160,5 +160,5 @@ This is exactly what `_concept_fixpoint` computes. Bělohlávek (2000) Theorem 1
 - Trnecka, M., & Vyjidacek, R. (2020). Revisiting the GreCon algorithm for boolean matrix factorization. In F. J. Valverde-Albacete & M. Trnecka (Eds.), Proceedings of the 15th International Conference on Concept Lattices and Their Applications (CLA 2020), CEUR Workshop Proceedings, vol. 2668, pp. 59–70.
 - Wattenberg, M., & Viégas, F. B. (2024). Relational composition in neural networks: A survey and call to action. arXiv preprint, arXiv:2407.14662.
 - Zadeh, L. A. (1965). Fuzzy sets. Information and Control, 8, 338–353.
-Zhang, L., Naitzat, G., & Lim, L.-H. (2018). Tropical geometry of deep neural networks. In Proceedings of the 35th International Conference on Machine Learning (ICML 2018), PMLR 80. arXiv:1805.07091.
-Zhu, Y., Katt, S., & Kaski, S. (2026). More than irrational: Modeling belief-biased agents. In Proceedings of the 40th AAAI Conference on Artificial Intelligence (AAAI 2026). arXiv:2511.12359.
+- Zhang, L., Naitzat, G., & Lim, L.-H. (2018). Tropical geometry of deep neural networks. In Proceedings of the 35th International Conference on Machine Learning (ICML 2018), PMLR 80. arXiv:1805.07091.
+- Zhu, Y., Katt, S., & Kaski, S. (2026). More than irrational: Modeling belief-biased agents. In Proceedings of the 40th AAAI Conference on Artificial Intelligence (AAAI 2026). arXiv:2511.12359.
