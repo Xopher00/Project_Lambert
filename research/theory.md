@@ -107,11 +107,13 @@ This is exactly what `_concept_fixpoint` computes. Bělohlávek (2000) Theorem 1
 - Alcântara, M. S. da S., Dias, T., de Oliveira, W. R., & de Melo, S. de B. (2021). A survey of categorical properties of L-fuzzy relations. Fuzzy Sets and Systems. DOI: 10.1016/j.fss.2021.03.010.
 - Alfarra, M. H. A. (2020). Applications of tropical geometry in deep neural networks. MSc Thesis, King Abdullah University of Science and Technology (KAUST).
 - Alfarra, M., Bibi, A., Hammoud, H., Gaafar, M., & Ghanem, B. (2023). On the decision boundaries of neural networks: A tropical geometry perspective. IEEE Transactions on Pattern Analysis and Machine Intelligence, 45(4), 5027–5037. DOI: 10.1109/TPAMI.2022.3201490.
+- Bizière, C., Grädel, E., & Naaf, M. (2023). Locality theorems in semiring semantics. In *Proceedings of the 48th International Symposium on Mathematical Foundations of Computer Science (MFCS 2023)* (J. Leroux, S. Lombardy, & D. Peleg, Eds.), vol. 272 of LIPIcs, pp. 20:1–20:15. Schloss Dagstuhl – Leibniz-Zentrum für Informatik. DOI: 10.4230/LIPIcs.MFCS.2023.20
 - Bazin, A., Galasso-Carbonnel, J., & Kahn, G. (2024). Polyadic relational concept analysis. International Journal of Approximate Reasoning, 164, 109067. DOI: 10.1016/j.ijar.2023.109067.
 - Belohlavek, R. (c. 1998). Feedforward networks with fuzzy signals. Unpublished technical report, Institute for Research and Applications of Fuzzy Modeling / Department of Computer Science, Technical University of Ostrava. Available at: http://belohlavek.inf.upol.cz/publications/Bel_Fnfs.pdf
 - Belohlavek, R. (2000). Fuzzy bidirectional associative memories. Information Sciences, 128, 91–103.
 - Belohlavek, R., Krmelova, M., & Outrata, J. (2010). Computing the lattice of all fixpoints of a fuzzy closure operator. IEEE Transactions on Fuzzy Systems, 18(3), 546–557.
 - Belohlavek, R., & Trnecka, M. (2015). From-below approximations in Boolean matrix factorization: Geometry and new algorithm. Journal of Computer and System Sciences, 81(8), 1678–1697. DOI: 10.1016/j.jcss.2015.06.002.
+- Bělohlávek, R., & Vychodil, V. (2007). Fuzzy concept lattices constrained by hedges. Journal of Advanced Computational Intelligence and Intelligent Informatics, 11(6), 536–545. Publisher: Fuji Technology Press Ltd. ISSN: 1343-0130. URL: https://www.fujipress.jp/jaciii/jc/jacii001100060536/
 - Belohlavek, R., & Vychodil, V. (2009). Formal concept analysis with background knowledge: Attribute priorities. IEEE Transactions on Systems, Man, and Cybernetics—Part C: Applications and Reviews, 39(4), 399–409.
 - Belohlavek, R., & Vychodil, V. (2010). Discovery of optimal factors in binary data via a novel method of matrix decomposition. Journal of Computer and System Sciences, 76(1), 3–20. DOI: 10.1016/j.jcss.2009.05.002.
 - Brito, A. M., de Barros, L. C., Laureano, E. E., Bertato, F. M., & Coniglio, M. E. (2018). Fuzzy formal concept analysis. In Fuzzy Information Processing (pp. 192–205). Communications in Computer and Information Science. Springer. DOI: 10.1007/978-3-319-95312-0_17.
@@ -121,8 +123,6 @@ This is exactly what `_concept_fixpoint` computes. Bělohlávek (2000) Theorem 1
 - Domingos, P. (2025). Tensor logic: The language of AI. arXiv preprint, arXiv:2510.12269.
 - Dubois, D., & Prade, H. (1980). Fuzzy sets and systems: Theory and applications. Academic Press.
 - Friston, K. J., Parr, T., & Pezzulo, G. (2022). Active inference: The free energy principle in mind, brain, and behavior. MIT Press.
-- Gallagher, J. (2018). The differential λ-calculus: Syntax and semantics for differential geometry. PhD Thesis, University of Calgary.
-- Gao, B., & Spratling, M. W. (2025). Softplus attention with re-weighting boosts length extrapolation in large language models. arXiv preprint, arXiv:2501.13428.
 - Gavranović, B. (2024). Fundamental Components of Deep Learning: A category-theoretic approach. PhD thesis, University of Strathclyde. arXiv:2403.13001.
 - Gavranović, B., Lessard, P., Dudzik, A., von Glehn, T., Araújo, J.G.M. & Veličković, P. (2024). Position: Categorical deep learning is an algebraic theory of all architectures. In Proceedings of the 41st International Conference on Machine Learning (ICML 2024). 
 - Goessmann, A., Schütte, J., Fröhlich, M., & Eigel, M. (2026). A tensor network formalism for neuro-symbolic AI. arXiv preprint, arXiv:2601.15442.
@@ -139,10 +139,8 @@ This is exactly what `_concept_fixpoint` computes. Bělohlávek (2000) Theorem 1
 - Maragos, P. (2005). Lattice image processing: A unification of morphological and fuzzy algebraic systems. Journal of Mathematical Imaging and Vision, 22, 83–118.
 - Maragos, P., Charisopoulos, V., & Theodosis, E. (2021). Tropical Geometry and Machine Learning. Proceedings of the IEEE, 109(5), 2073–2088. DOI: 10.1109/JPROC.2021.3065238.
 - Manin, Y. I., & Marcolli, M.  (2024) — Homotopy Theoretic and Categorical Models of Neural Information Networks, Compositionality, 6(4), 14135. DOI: 10.46298/compositionality-6-4.
-- Naaf, M., Bizière, C., & Grädel, E. (2023). Locality theorems in semiring semantics. In *Proceedings of the 48th International Symposium on Mathematical Foundations of Computer Science (MFCS 2023)* (J. Leroux, S. Lombardy, & D. Peleg, Eds.), vol. 272 of LIPIcs, pp. 20:1–20:15. Schloss Dagstuhl – Leibniz-Zentrum für Informatik. DOI: 10.4230/LIPIcs.MFCS.2023.20
 - Naaf, M. (2024). Logic, semirings, and fixed points, PhD thesis, RWTH Aachen University. Defended 30 August 2024. DOI: 10.18154/RWTH-2024-10804. URL: https://publications.rwth-aachen.de/record/996756/files/996756.pdf
 - Nesterov, Y. (2005). Smooth minimization of non-smooth functions. Mathematical Programming, Series A, 103, 127–152.
-- Nikzad, M., Gao, Y., & Zhou, J. (2021). Attention-based pyramid dilated lattice network for blind image denoising. In Proceedings of the 30th International Joint Conference on Artificial Intelligence (IJCAI-21).
 - Qi, C., Lukasiewicz, T., & Salvatori, T. (2025). Training deep predictive coding networks. In New Frontiers in Associative Memory Workshop, ICLR 2025.
 - Ramsauer, H., Schäfl, B., Lehner, J., Seidl, P., Widrich, M., Adler, T., Gruber, L., Holzleitner, M., Pavlović, M., Sandve, G. K., Greiff, V., Kreil, D., Kopp, M., Klambauer, G., Brandstetter, J., & Hochreiter, S. (2021). Hopfield networks is all you need. In Proceedings of the International Conference on Learning Representations (ICLR 2021). arXiv:2008.02217.
 - Ren W., Wan K., Leng J., & Li S. (2026). Inferring the Invisible: Neuro-Symbolic Rule Discovery for Missing Value Imputation. ICLR 2026.
@@ -161,4 +159,3 @@ This is exactly what `_concept_fixpoint` computes. Bělohlávek (2000) Theorem 1
 - Wattenberg, M., & Viégas, F. B. (2024). Relational composition in neural networks: A survey and call to action. arXiv preprint, arXiv:2407.14662.
 - Zadeh, L. A. (1965). Fuzzy sets. Information and Control, 8, 338–353.
 - Zhang, L., Naitzat, G., & Lim, L.-H. (2018). Tropical geometry of deep neural networks. In Proceedings of the 35th International Conference on Machine Learning (ICML 2018), PMLR 80. arXiv:1805.07091.
-- Zhu, Y., Katt, S., & Kaski, S. (2026). More than irrational: Modeling belief-biased agents. In Proceedings of the 40th AAAI Conference on Artificial Intelligence (AAAI 2026). arXiv:2511.12359.
