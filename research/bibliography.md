@@ -46,6 +46,7 @@ Not as necessary, but provides some historical and philosophical context for all
 ## Technical core
 
 ### Fuzzy formal concept analysis - theory
+Belohlavek has developed fuzzy logic significantly, and the more complex aspects of this project are based directly or indirectly on his research.
 
 - Belohlavek, R. (c. 1998). Feedforward networks with fuzzy signals. Unpublished technical report, Institute for Research and Applications of Fuzzy Modeling / Department of Computer Science, Technical University of Ostrava. Available at: http://belohlavek.inf.upol.cz/publications/Bel_Fnfs.pdf
 - Belohlavek, R. (2000). Fuzzy bidirectional associative memories. Information Sciences, 128, 91–103.
@@ -54,6 +55,7 @@ Not as necessary, but provides some historical and philosophical context for all
 - Brito, A. M., de Barros, L. C., Laureano, E. E., Bertato, F. M., & Coniglio, M. E. (2018). Fuzzy formal concept analysis. In Fuzzy Information Processing (pp. 192–205). Communications in Computer and Information Science. Springer. DOI: 10.1007/978-3-319-95312-0_17.
 
 ### Fuzzy FCA - algorithms
+Some modules in this project are based on algorithms described in these papers.
 
 - Belohlavek, R., & Vychodil, V. (2010). Discovery of optimal factors in binary data via a novel method of matrix decomposition. Journal of Computer and System Sciences, 76(1), 3–20. DOI: 10.1016/j.jcss.2009.05.002.
 - Belohlavek, R., & Trnecka, M. (2015). From-below approximations in Boolean matrix factorization: Geometry and new algorithm. Journal of Computer and System Sciences, 81(8), 1678–1697. DOI: 10.1016/j.jcss.2015.06.002.
@@ -61,6 +63,7 @@ Not as necessary, but provides some historical and philosophical context for all
 - Trnecka, M., & Vyjidacek, R. (2020). Revisiting the GreCon algorithm for boolean matrix factorization. In F. J. Valverde-Albacete & M. Trnecka (Eds.), Proceedings of the 15th International Conference on Concept Lattices and Their Applications (CLA 2020), CEUR Workshop Proceedings, vol. 2668, pp. 59–70.
 
 ### FCA extended
+Some of the more abstract papers on fuzzy formal concept analysis.
 
 - Belohlavek, R., Krmelova, M., & Outrata, J. (2010). Computing the lattice of all fixpoints of a fuzzy closure operator. IEEE Transactions on Fuzzy Systems, 18(3), 546–557.
 - Alcântara, M. S. da S., Dias, T., de Oliveira, W. R., & de Melo, S. de B. (2021). A survey of categorical properties of L-fuzzy relations. Fuzzy Sets and Systems. DOI: 10.1016/j.fss.2021.03.010.
@@ -88,11 +91,13 @@ Not as necessary, but provides some historical and philosophical context for all
 ## Landscape and positioning
 
 ###  Modern Hopfield and attention
+The math behind the attention mechanism used in transformers and associative memory in Hopfield networks is the same. This is increasingly being recognized and has potential applications in neurosymbolic AI. There are strong structural parallels to the other research cited above on associative memory. This has been kept in mind when implementing Attention in this project.
 
 - Krotov, D., & Hopfield, J. (2021). Large associative memory problem in neurobiology and machine learning. In Proceedings of the International Conference on Learning Representations (ICLR 2021). arXiv:2008.06996.
 - Ramsauer, H., Schäfl, B., Lehner, J., Seidl, P., Widrich, M., Adler, T., Gruber, L., Holzleitner, M., Pavlović, M., Sandve, G. K., Greiff, V., Kreil, D., Kopp, M., Klambauer, G., Brandstetter, J., & Hochreiter, S. (2021). Hopfield networks is all you need. In Proceedings of the International Conference on Learning Representations (ICLR 2021). arXiv:2008.02217.
 
 ### Categorical deep learning
+This project relies on using category theory to derive an alternate approach to training a model using fuzzy logic. Category theory is being increasingly applied in data science, particularly in machine learning. These papers show that the project's approach is not that unique, and help support it.
 
 - Jones, I., Swan, J., & Giansiracusa, J. (2024). Algebraic dynamical systems in machine learning. Applied Categorical Structures, 32, article 4. DOI: 10.1007/s10485-023-09762-9.
 - Gavranović, B. (2024). Fundamental Components of Deep Learning: A category-theoretic approach. PhD thesis, University of Strathclyde. arXiv:2403.13001.
@@ -108,9 +113,9 @@ Not as necessary, but provides some historical and philosophical context for all
 - Alfarra, M., Bibi, A., Hammoud, H., Gaafar, M., & Ghanem, B. (2023). On the decision boundaries of neural networks: A tropical geometry perspective. IEEE Transactions on Pattern Analysis and Machine Intelligence, 45(4), 5027–5037. DOI: 10.1109/TPAMI.2022.3201490.
 
 ### Tensor logic and neurosymbolic reasoning
+In recent years there has been a lot of research into neurosymbolic AI, especially as the limits of LLMs become more apparent. This work sits alongside Domingos in the literature.
 
 - Serafini, L., d'Avila Garcez, A., Badreddine, S., Donadello, I., Spranger, M., & Bianchi, F. (2022). Logic tensor networks: Theory and applications. In P. Hitzler & M. K. Sarker (Eds.), Neuro-Symbolic Artificial Intelligence: The State of the Art (Ch. 17). IOS Press.
-
 - Goessmann, A., Schütte, J., Fröhlich, M., & Eigel, M. (2026). A tensor network formalism for neuro-symbolic AI. arXiv preprint, arXiv:2601.15442.
 - Ren W., Wan K., Leng J., & Li S. (2026). Inferring the Invisible: Neuro-Symbolic Rule Discovery for Missing Value Imputation. ICLR 2026. URL: https://openreview.net/forum?id=26Msp6pV5i
 
