@@ -4,7 +4,7 @@ The following is the full list of references has been collected during the cours
 
 ## Mathematic foundations
 
-### Unified Algebra
+### Unified Algebra & Tensor Logic
 Eric Hehner's Unified Algebra system was the original motivation for this research project. If logic and arithmetic are fundamentally the same, it should be possible to create an AI that runs on logic itself. Pedro Domingos' research on tensor logic was a secondary inspiration. His research shows that although typically thought of as separate, symbolic AI (think Datalog) and deep learning neural networks (transformer based architecture) use the same underlying math.
 
 - Hehner, E. C. R. (2004). From boolean algebra to unified algebra. The Mathematical Intelligencer, 26(2), 3–19. DOI: 10.1007/BF02985647.
