@@ -51,7 +51,7 @@ Belohlavek spent decades developing the mathematics of how to find natural group
 - Brito, A. M., de Barros, L. C., Laureano, E. E., Bertato, F. M., & Coniglio, M. E. (2018). Fuzzy formal concept analysis. In Fuzzy Information Processing (pp. 192–205). Communications in Computer and Information Science. Springer. DOI: 10.1007/978-3-319-95312-0_17.
 
 ### Fuzzy FCA - algorithms
-Some modules in this project are based on algorithms described in these papers.
+These papers ask how to find natural groupings in data efficiently, rather than what those groupings are. The GreConD algorithm (Belohlavek & Vychodil 2010) reframes the problem as matrix decomposition. Trnecka revisits and benchmarks this approach. Kriegel and Borchmann's NextClosures is the standard alternative, included here as a comparison point.
 
 - Belohlavek, R., & Vychodil, V. (2010). Discovery of optimal factors in binary data via a novel method of matrix decomposition. Journal of Computer and System Sciences, 76(1), 3–20. DOI: 10.1016/j.jcss.2009.05.002.
 - Belohlavek, R., & Trnecka, M. (2015). From-below approximations in Boolean matrix factorization: Geometry and new algorithm. Journal of Computer and System Sciences, 81(8), 1678–1697. DOI: 10.1016/j.jcss.2015.06.002.
@@ -59,19 +59,21 @@ Some modules in this project are based on algorithms described in these papers.
 - Trnecka, M., & Vyjidacek, R. (2020). Revisiting the GreCon algorithm for boolean matrix factorization. In F. J. Valverde-Albacete & M. Trnecka (Eds.), Proceedings of the 15th International Conference on Concept Lattices and Their Applications (CLA 2020), CEUR Workshop Proceedings, vol. 2668, pp. 59–70.
 
 ### FCA extended
-Some of the more abstract papers on fuzzy formal concept analysis.
+These push the core FCA framework into less standard territory. Belohlavek, Krmelova and Outrata (2010) address how to compute the full set of stable points of a fuzzy closure operator. Bazin et al. (2024) extend the framework from two-way object-attribute relations to relations involving three or more dimensions. Alcântara et al. (2021) is a survey situating fuzzy relations within a broader mathematical context.
 
 - Belohlavek, R., Krmelova, M., & Outrata, J. (2010). Computing the lattice of all fixpoints of a fuzzy closure operator. IEEE Transactions on Fuzzy Systems, 18(3), 546–557.
 - Alcântara, M. S. da S., Dias, T., de Oliveira, W. R., & de Melo, S. de B. (2021). A survey of categorical properties of L-fuzzy relations. Fuzzy Sets and Systems. DOI: 10.1016/j.fss.2021.03.010.
 - Bazin, A., Galasso-Carbonnel, J., & Kahn, G. (2024). Polyadic relational concept analysis. International Journal of Approximate Reasoning, 164, 109067. DOI: 10.1016/j.ijar.2023.109067.
 
 ### Morphological and associative memory
+These are the direct historical predecessors of the attention mechanism used in this project. Ritter, Sussner and Díaz-de-León showed in 1998–1999 that neural networks built on max and min operations — rather than multiply-and-add — can function as associative memories: given a partial or noisy pattern, they retrieve the closest stored one. Sussner and Valle (2006) extended this using fuzzy implication as the retrieval operation.
 
 - Ritter, G. X., Sussner, P., & Díaz-de-León, J. L. (1998). Morphological associative memories. IEEE Transactions on Neural Networks, 9(2), 281–293. DOI: 10.1109/72.661123.
 - Ritter, G. X., Díaz-de-León, J. L., & Sussner, P. (1999). Morphological bidirectional associative memories. Neural Networks, 12(6), 851–867. DOI: 10.1016/S0893-6080(99)00033-7.
 - Sussner, P., & Valle, M. E. (2006). Implicative fuzzy associative memories. IEEE Transactions on Fuzzy Systems, 14(6), 791–807.
 
 ### Semiring provenance and fixpoints
+When a query returns an answer, it is useful to know why — which facts and relationships produced it. This is called provenance. Green, Karvounarakis and Tannen (2007) developed the algebraic framework for tracking this through database queries. The later papers extend it to iterative computation and prove properties of the specific algebraic structure used in this project.
 
 - Green, T. J., Karvounarakis, G., & Tannen, V. (2007). Provenance semirings. In Proceedings of the 26th ACM SIGMOD-SIGACT-SIGART Symposium on Principles of Database Systems (PODS 2007), pp. 31–40. DOI: 10.1145/1265530.1265535.
 - Dannert, K. M., Grädel, E., Naaf, M., & Tannen, V. (2021). Semiring provenance for fixed-point logic. In Proceedings of the 29th EACSL Annual Conference on Computer Science Logic (CSL 2021), LIPIcs vol. 183, article 17. DOI: 10.4230/LIPIcs.CSL.2021.17.
@@ -79,6 +81,7 @@ Some of the more abstract papers on fuzzy formal concept analysis.
 - Naaf, M. (2024). Logic, semirings, and fixed points, PhD thesis, RWTH Aachen University. Defended 30 August 2024. DOI: 10.18154/RWTH-2024-10804. URL: https://publications.rwth-aachen.de/record/996756/files/996756.pdf
 
 ### Predictive coding / energy
+Iterative computation of the kind used in this project can be understood as minimising an energy function — each step brings the current state closer to a stable answer. Friston, Parr and Pezzulo (2022) develop this framing in the context of biological perception, where the same mathematics describes how the brain updates its model of the world given new evidence. Qi et al. and Burchi and Timofte bring this into contact with modern neural network training.
 
 - Friston, K. J., Parr, T., & Pezzulo, G. (2022). Active inference: The free energy principle in mind, brain, and behavior. MIT Press.
 - Qi, C., Lukasiewicz, T., & Salvatori, T. (2025). Training deep predictive coding networks. In New Frontiers in Associative Memory Workshop, ICLR 2025.
@@ -87,13 +90,13 @@ Some of the more abstract papers on fuzzy formal concept analysis.
 ## Landscape and positioning
 
 ###  Modern Hopfield and attention
-The math behind the attention mechanism used in transformers and associative memory in Hopfield networks is the same. This is increasingly being recognized and has potential applications in neurosymbolic AI. There are strong structural parallels to the other research cited above on associative memory. This has been kept in mind when implementing Attention in this project.
+Transformer attention and Hopfield network memory retrieval are mathematically equivalent — this was formally shown in 2021 by two independent papers arriving at the same result from different directions. Krotov and Hopfield derive it from the neuroscience side; Ramsauer et al. from the engineering side. Both are included because they frame the same equivalence differently, and together they connect the earlier morphological memory literature to the modern transformer architecture.
 
 - Krotov, D., & Hopfield, J. (2021). Large associative memory problem in neurobiology and machine learning. In Proceedings of the International Conference on Learning Representations (ICLR 2021). arXiv:2008.06996.
 - Ramsauer, H., Schäfl, B., Lehner, J., Seidl, P., Widrich, M., Adler, T., Gruber, L., Holzleitner, M., Pavlović, M., Sandve, G. K., Greiff, V., Kreil, D., Kopp, M., Klambauer, G., Brandstetter, J., & Hochreiter, S. (2021). Hopfield networks is all you need. In Proceedings of the International Conference on Learning Representations (ICLR 2021). arXiv:2008.02217.
 
 ### Categorical deep learning
-This project relies on using category theory to derive an alternate approach to training a model using fuzzy logic. Category theory is being increasingly applied in data science, particularly in machine learning. These papers show that the project's approach is not that unique, and help support it.
+Category theory is increasingly being applied to understand deep learning architectures from first principles rather than just describing them empirically. These papers represent that direction. Gavranović et al.'s 2024 ICML paper argues that all standard neural architectures are instances of a single categorical framework — where this project sits relative to that claim is a live theoretical question. Manin and Marcolli apply the same categorical language specifically to Hopfield-style memory dynamics.
 
 - Jones, I., Swan, J., & Giansiracusa, J. (2024). Algebraic dynamical systems in machine learning. Applied Categorical Structures, 32, article 4. DOI: 10.1007/s10485-023-09762-9.
 - Gavranović, B. (2024). Fundamental Components of Deep Learning: A category-theoretic approach. PhD thesis, University of Strathclyde. arXiv:2403.13001.
@@ -101,6 +104,7 @@ This project relies on using category theory to derive an alternate approach to 
 - Manin, Y. I., & Marcolli, M. (2024). Homotopy theoretic and categorical models of neural information networks. Compositionality, 6(4), 14135. DOI: 10.46298/compositionality-6-4.
 
 ### Tropical and morphological geometry
+Tropical geometry replaces the standard operations of arithmetic with max and addition, producing a piecewise-linear framework that has been used to characterise the decision boundaries of ReLU networks. This project uses max and min instead — a different algebra with different properties. These papers document the adjacent tropical geometry literature, which helps clarify what makes the two approaches distinct.
 
 - Maragos, P. (2005). Lattice image processing: A unification of morphological and fuzzy algebraic systems. Journal of Mathematical Imaging and Vision, 22, 83–118.
 - Zhang, L., Naitzat, G., & Lim, L.-H. (2018). Tropical geometry of deep neural networks. In Proceedings of the 35th International Conference on Machine Learning (ICML 2018), PMLR 80. arXiv:1805.07091.
@@ -108,7 +112,7 @@ This project relies on using category theory to derive an alternate approach to 
 - Maragos, P., Charisopoulos, V., & Theodosis, E. (2021). Tropical Geometry and Machine Learning. Proceedings of the IEEE, 109(5), 2073–2088. DOI: 10.1109/JPROC.2021.3065238.
 - Alfarra, M., Bibi, A., Hammoud, H., Gaafar, M., & Ghanem, B. (2023). On the decision boundaries of neural networks: A tropical geometry perspective. IEEE Transactions on Pattern Analysis and Machine Intelligence, 45(4), 5027–5037. DOI: 10.1109/TPAMI.2022.3201490.
 
-### Tensor logic and neurosymbolic reasoning
+### Neurosymbolic reasoning
 In recent years there has been a lot of research into neurosymbolic AI, especially as the limits of LLMs become more apparent. This work sits alongside Domingos in the literature.
 
 - Serafini, L., d'Avila Garcez, A., Badreddine, S., Donadello, I., Spranger, M., & Bianchi, F. (2022). Logic tensor networks: Theory and applications. In P. Hitzler & M. K. Sarker (Eds.), Neuro-Symbolic Artificial Intelligence: The State of the Art (Ch. 17). IOS Press.
@@ -116,6 +120,7 @@ In recent years there has been a lot of research into neurosymbolic AI, especial
 - Ren W., Wan K., Leng J., & Li S. (2026). Inferring the Invisible: Neuro-Symbolic Rule Discovery for Missing Value Imputation. ICLR 2026. URL: https://openreview.net/forum?id=26Msp6pV5i
 
 ### Interpretability
+These papers address the question of whether an AI system can show its reasoning — tracing an answer back to the specific facts that produced it, rather than producing an answer with no explanation. Wattenberg and Viégas (2024) specifically identify relational composition as an unsolved interpretability problem. Schmitt (2026) applies formal concept analysis directly to interpreting neural networks, making it a close parallel to work in the technical core section above.
 
 - Wattenberg, M., & Viégas, F. B. (2024). Relational composition in neural networks: A survey and call to action. arXiv preprint, arXiv:2407.14662.
 - Tan, X. W., Tan, N., Lee, G., & Kok, S. (2025). The shape of reasoning: Topological analysis of reasoning traces in large language models. arXiv preprint, arXiv:2510.20665.
