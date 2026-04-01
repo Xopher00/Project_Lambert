@@ -64,6 +64,7 @@ These push the core FCA framework into less standard territory. Belohlavek, Krme
 - Belohlavek, R., Krmelova, M., & Outrata, J. (2010). Computing the lattice of all fixpoints of a fuzzy closure operator. IEEE Transactions on Fuzzy Systems, 18(3), 546–557.
 - Alcântara, M. S. da S., Dias, T., de Oliveira, W. R., & de Melo, S. de B. (2021). A survey of categorical properties of L-fuzzy relations. Fuzzy Sets and Systems. DOI: 10.1016/j.fss.2021.03.010.
 - Bazin, A., Galasso-Carbonnel, J., & Kahn, G. (2024). Polyadic relational concept analysis. International Journal of Approximate Reasoning, 164, 109067. DOI: 10.1016/j.ijar.2023.109067.
+- Schmitt, I. (2026). Triadic concept analysis for logic interpretation of simple artificial networks. arXiv preprint, arXiv:2601.06229.
 
 ### Morphological and associative memory
 These are the direct historical predecessors of the attention mechanism used in this project. Ritter, Sussner and Díaz-de-León showed in 1998–1999 that neural networks built on max and min operations — rather than multiply-and-add — can function as associative memories: given a partial or noisy pattern, they retrieve the closest stored one. Sussner and Valle (2006) extended this using fuzzy implication as the retrieval operation.
@@ -71,6 +72,12 @@ These are the direct historical predecessors of the attention mechanism used in 
 - Ritter, G. X., Sussner, P., & Díaz-de-León, J. L. (1998). Morphological associative memories. IEEE Transactions on Neural Networks, 9(2), 281–293. DOI: 10.1109/72.661123.
 - Ritter, G. X., Díaz-de-León, J. L., & Sussner, P. (1999). Morphological bidirectional associative memories. Neural Networks, 12(6), 851–867. DOI: 10.1016/S0893-6080(99)00033-7.
 - Sussner, P., & Valle, M. E. (2006). Implicative fuzzy associative memories. IEEE Transactions on Fuzzy Systems, 14(6), 791–807.
+
+###  Modern Hopfield and attention
+Transformer attention and Hopfield network memory retrieval are mathematically equivalent — this was formally shown in 2021 by two independent papers arriving at the same result from different directions. Krotov and Hopfield derive it from the neuroscience side; Ramsauer et al. from the engineering side. Both are included because they frame the same equivalence differently, and together they connect the earlier morphological memory literature to the modern transformer architecture.
+
+- Krotov, D., & Hopfield, J. (2021). Large associative memory problem in neurobiology and machine learning. In Proceedings of the International Conference on Learning Representations (ICLR 2021). arXiv:2008.06996.
+- Ramsauer, H., Schäfl, B., Lehner, J., Seidl, P., Widrich, M., Adler, T., Gruber, L., Holzleitner, M., Pavlović, M., Sandve, G. K., Greiff, V., Kreil, D., Kopp, M., Klambauer, G., Brandstetter, J., & Hochreiter, S. (2021). Hopfield networks is all you need. In Proceedings of the International Conference on Learning Representations (ICLR 2021). arXiv:2008.02217.
 
 ### Semiring provenance and fixpoints
 When a query returns an answer, it is useful to know why — which facts and relationships produced it. This is called provenance. Green, Karvounarakis and Tannen (2007) developed the algebraic framework for tracking this through database queries. The later papers extend it to iterative computation and prove properties of the specific algebraic structure used in this project.
@@ -88,12 +95,6 @@ Iterative computation of the kind used in this project can be understood as mini
 - Burchi, M., & Timofte, R. (2025). Learning transformer-based world models with contrastive predictive coding. International Conference on Learning Representations (ICLR 2025).
 
 ## Landscape and positioning
-
-###  Modern Hopfield and attention
-Transformer attention and Hopfield network memory retrieval are mathematically equivalent — this was formally shown in 2021 by two independent papers arriving at the same result from different directions. Krotov and Hopfield derive it from the neuroscience side; Ramsauer et al. from the engineering side. Both are included because they frame the same equivalence differently, and together they connect the earlier morphological memory literature to the modern transformer architecture.
-
-- Krotov, D., & Hopfield, J. (2021). Large associative memory problem in neurobiology and machine learning. In Proceedings of the International Conference on Learning Representations (ICLR 2021). arXiv:2008.06996.
-- Ramsauer, H., Schäfl, B., Lehner, J., Seidl, P., Widrich, M., Adler, T., Gruber, L., Holzleitner, M., Pavlović, M., Sandve, G. K., Greiff, V., Kreil, D., Kopp, M., Klambauer, G., Brandstetter, J., & Hochreiter, S. (2021). Hopfield networks is all you need. In Proceedings of the International Conference on Learning Representations (ICLR 2021). arXiv:2008.02217.
 
 ### Categorical deep learning
 Category theory is increasingly being applied to understand deep learning architectures from first principles rather than just describing them empirically. These papers represent that direction. Gavranović et al.'s 2024 ICML paper argues that all standard neural architectures are instances of a single categorical framework — where this project sits relative to that claim is a live theoretical question. Manin and Marcolli apply the same categorical language specifically to Hopfield-style memory dynamics.
@@ -124,5 +125,4 @@ These papers address the question of whether an AI system can show its reasoning
 
 - Wattenberg, M., & Viégas, F. B. (2024). Relational composition in neural networks: A survey and call to action. arXiv preprint, arXiv:2407.14662.
 - Tan, X. W., Tan, N., Lee, G., & Kok, S. (2025). The shape of reasoning: Topological analysis of reasoning traces in large language models. arXiv preprint, arXiv:2510.20665.
-- Schmitt, I. (2026). Triadic concept analysis for logic interpretation of simple artificial networks. arXiv preprint, arXiv:2601.06229.
 - Hamilton, A., Wright, E. P., & Vance, C. (2026). Integrating symbolic reasoning into neural networks: A neuro-symbolic logic programming approach for enhanced explainability. Frontiers in Artificial Intelligence Research, 3(1), 54–62. DOI: 10.71465/fair602.
