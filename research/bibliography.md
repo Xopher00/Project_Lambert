@@ -1,11 +1,11 @@
 # Bibliography
 
-The following is the full list of references has been collected during the course of research. These papers cut across several specific disciplines of math and computer science that are otherwise unconnected. Part of the motivation for this research is identifying learning from, and applying these surprising connections that would otherwise go unnoticed.
+The following is the full list of references has been collected during the course of research. These papers span several disciplines — mathematics, computer science, philosophy — that rarely cite one another. The central observation motivating this research is that fuzzy logic, formal concept analysis, associative memory, and modern neural attention mechanisms are all doing similar computations, expressed in different notations and developed by communities unaware of each other. This bibliography documents those parallels.
 
 ## Mathematic foundations
 
 ### Unified Algebra & Tensor Logic
-Eric Hehner's Unified Algebra system was the original motivation for this research project. If logic and arithmetic are fundamentally the same, it should be possible to create an AI that runs on logic itself. Pedro Domingos' research on tensor logic was a secondary inspiration. His research shows that although typically thought of as separate, symbolic AI (think Datalog) and deep learning neural networks (transformer based architecture) use the same underlying math.
+Eric Hehner's Unified Algebra was the original motivation for this project — it shows that logical reasoning and arithmetic are special cases of the same algebra, not separate things. Pedro Domingos reaches a parallel conclusion from a completely different direction: starting from modern AI, he shows that neural networks and symbolic rule-based systems (like Datalog) use the same underlying tensor equations. These two threads, one from pure logic and one from machine learning, both point toward the same underlying structure that this project builds on.
 
 - Hehner, E. C. R. (2004). From boolean algebra to unified algebra. The Mathematical Intelligencer, 26(2), 3–19. DOI: 10.1007/BF02985647.
 - Hehner, E. C. R. (2007, revised 2021). Unified algebra. International Journal of Mathematical Sciences, 1(1), 20–37. Available at: https://www.cs.toronto.edu/~hehner/UA.pdf
@@ -13,19 +13,19 @@ Eric Hehner's Unified Algebra system was the original motivation for this resear
 - Shah, S., & Zadrozny, W. (2026). Implementing tensor logic: Unifying Datalog and neural reasoning via tensor contraction. arXiv preprint, arXiv:2601.17188.
 
 ### Fuzzy relations
-These give a good primer on fuzzy logic, from which this project's version of the tensor equation for relational composition is derived.
+Fuzzy logic replaces the binary true/false of classical logic with degrees of membership between 0 and 1. Zadeh's 1965 paper introduced this idea. Sanchez showed in 1976 how to solve relational equations under fuzzy composition. Dubois and Prade provide the broader theoretical context.
 
 - Zadeh, L. A. (1965). Fuzzy sets. Information and Control, 8(3), 338–353.
 - Sanchez, E. (1976). Resolution of composite fuzzy relation equations. Information and Control, 30(1), 38–48.
 - Dubois, D., & Prade, H. (1980). Fuzzy sets and systems: Theory and applications. Academic Press.
 
 ### Smooth approximation
-This explains how a fuzzy logic based equation can be made differentiable.
+Fuzzy max/min operations are not differentiable, which means they cannot be trained using standard gradient-based methods. Nesterov's work provides the mathematical basis for approximating these operations with smooth functions that can be. This is how Lambert bridges exact fuzzy logic and standard machine learning training.
 
 - Nesterov, Y. (2005). Smooth minimization of non-smooth functions. Mathematical Programming, Series A, 103, 127–152.
 
 ### Category theory
-An understanding of category theory is needed to explain why a fuzzy logic based AI can work similarly to one based in linear algebra.
+Category theory is a branch of mathematics that studies structure and relationships at a high level of abstraction. It provides the formal language for explaining why the parallels documented in this bibliography are not coincidences — why fuzzy logic, concept lattices, and neural attention share the same deep structure. 
 
 - Tarski, A. (1955). A lattice-theoretical fixpoint theorem and its applications. Pacific Journal of Mathematics, 5(2), 285–309.
 - Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories. *Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166. DOI: 10.1007/BF02924844. Republished as: *Reprints in Theory and Applications of Categories*, No. 1 (2002), pp. 1–37. Free PDF: http://www.tac.mta.ca/tac/reprints/articles/1/tr1abs.html
@@ -33,8 +33,8 @@ An understanding of category theory is needed to explain why a fuzzy logic based
 - Riehl, E. (2016). *Category theory in context*. Dover Publications. (Aurora: Dover Modern Math Originals series.) ISBN-13: 978-0-486-80903-8. 272 pp.
 - Shen, L., & Tang, X. (2021). Isbell adjunctions and Kan adjunctions via quantale-enriched two-variable adjunctions. Applied Categorical Structures, 29, 823–858. DOI: 10.1007/s10485-021-09654-w.
 
-### Context 
-Not as necessary, but provides some historical and philosophical context for all these weird parallels.
+### Historical and philosophical context 
+Burch's 1964 paper examines a seven-valued logic system from Jain philosophy, which has some interesting parallels with modern category theory. Grzejdziak-Zdziarski and Loog's 2026 report documents how the mathematical traditions represented in this bibliography developed in isolation from each other — which is itself part of the argument for why this project matters.
 
 - Burch, G. B. (1964). Seven-valued logic in Jain philosophy. International Philosophical Quarterly, 4(1), 68–93.
 - Grzejdziak-Zdziarski, M., & Loog, M. (2026). The missing interdiscipline: Reasons and ways to study the history of machine learning. External research report. Available at: https://hdl.handle.net/2066/328381.
@@ -42,7 +42,7 @@ Not as necessary, but provides some historical and philosophical context for all
 ## Technical core
 
 ### Fuzzy formal concept analysis - theory
-Belohlavek has developed fuzzy logic significantly, and the more complex aspects of this project are based directly or indirectly on his research.
+Belohlavek spent decades developing the mathematics of how to find natural groupings in data using fuzzy logic. This section contains his core theoretical papers, along with Brito et al.'s accessible introduction to the field.
 
 - Belohlavek, R. (c. 1998). Feedforward networks with fuzzy signals. Unpublished technical report, Institute for Research and Applications of Fuzzy Modeling / Department of Computer Science, Technical University of Ostrava. Available at: http://belohlavek.inf.upol.cz/publications/Bel_Fnfs.pdf
 - Belohlavek, R. (2000). Fuzzy bidirectional associative memories. Information Sciences, 128, 91–103.
