@@ -5,21 +5,16 @@ The following is the full list of references has been collected during the cours
 ## Mathematic foundations
 
 ### Unified Algebra
-Eric Hehner's Unified Algebra system was the original motivation for this research project. If logic and arithmetic are fundamentally the same, it should be possible to create an AI that runs on logic itself.
+Eric Hehner's Unified Algebra system was the original motivation for this research project. If logic and arithmetic are fundamentally the same, it should be possible to create an AI that runs on logic itself. Pedro Domingos' research on tensor logic was a secondary inspiration. His research shows that although typically thought of as separate, symbolic AI (think Datalog) and deep learning neural networks (transformer based architecture) use the same underlying math.
 
 - Hehner, E. C. R. (2004). From boolean algebra to unified algebra. The Mathematical Intelligencer, 26(2), 3–19. DOI: 10.1007/BF02985647.
 - Hehner, E. C. R. (2007, revised 2021). Unified algebra. International Journal of Mathematical Sciences, 1(1), 20–37. Available at: https://www.cs.toronto.edu/~hehner/UA.pdf
-
-### Tensor Logic
-Pedro Domingos' research on tensor logic was a secondary inspiration. His research shows that although typically thought of as separate, symbolic AI (think Datalog) and deep learning neural networks (transformer based architecture) use the same underlying math.
-
 - Domingos, P. (2025). Tensor logic: The language of AI. arXiv preprint, arXiv:2510.12269.
 - Shah, S., & Zadrozny, W. (2026). Implementing tensor logic: Unifying Datalog and neural reasoning via tensor contraction. arXiv preprint, arXiv:2601.17188.
 
 ### Fuzzy relations
 These give a good primer on fuzzy logic, from which this project's version of the tensor equation for relational composition is derived.
 
-- Tarski, A. (1955). A lattice-theoretical fixpoint theorem and its applications. Pacific Journal of Mathematics, 5(2), 285–309.
 - Zadeh, L. A. (1965). Fuzzy sets. Information and Control, 8(3), 338–353.
 - Sanchez, E. (1976). Resolution of composite fuzzy relation equations. Information and Control, 30(1), 38–48.
 - Dubois, D., & Prade, H. (1980). Fuzzy sets and systems: Theory and applications. Academic Press.
@@ -32,6 +27,7 @@ This explains how a fuzzy logic based equation can be made differentiable.
 ### Category theory
 An understanding of category theory is needed to explain why a fuzzy logic based AI can work similarly to one based in linear algebra.
 
+- Tarski, A. (1955). A lattice-theoretical fixpoint theorem and its applications. Pacific Journal of Mathematics, 5(2), 285–309.
 - Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories. *Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166. DOI: 10.1007/BF02924844. Republished as: *Reprints in Theory and Applications of Categories*, No. 1 (2002), pp. 1–37. Free PDF: http://www.tac.mta.ca/tac/reprints/articles/1/tr1abs.html
 - Kelly, G. M. (1982). Basic concepts of enriched category theory. Cambridge University Press, Lecture Notes in Mathematics 64. Republished as: *Reprints in Theory and Applications of Categories*, No. 10 (2005). Free PDF: http://www.tac.mta.ca/tac/reprints/articles/10/tr10abs.html
 - Riehl, E. (2016). *Category theory in context*. Dover Publications. (Aurora: Dover Modern Math Originals series.) ISBN-13: 978-0-486-80903-8. 272 pp.
