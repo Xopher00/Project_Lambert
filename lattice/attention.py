@@ -44,9 +44,10 @@ class Attention(Embed):
         Maximum iterations before stopping. Default is 100.
     """
 
-    def __init__(self, emb, temp=1.0, eps=1e-3, max_iters=100):
+    def __init__(self, emb, temp=1.0, eps=1e-3, max_iters=100, operator=None):
         super().__init__()
         self.emb = emb
+        self.operator = operator or self.Attend
         self.fp  = FixpointIterator(
             f         = self._step,
             state0    = emb[0].copy(),
@@ -84,7 +85,7 @@ class Attention(Embed):
         raw : ndarray, shape (k,)
             The uncorrected SoftMax output, returned as aux for energy computation.
         """
-        J   = self.Attend(q, self.emb, temp)
+        J   = self.operator(q, self.emb, temp)
         raw = self.SoftMax(J, temp, axis=0)
         allowed   = self.Residuate(raw[:, None], self.emb.T, temp).squeeze()
         corrected = self.SmoothMin((raw, self.Join(allowed[None,:], self.emb, temp).squeeze()), temp, axis=0)
@@ -322,7 +323,10 @@ class MultiHeadAttention(Embed):
             scores are the entity-level confidence values.
         """
         scores0 = np.zeros(self.heads[0].emb.shape[0])
-        scores0[idx] = 1.0
+        if isinstance(idx, np.ndarray) and idx.dtype.kind == 'f':
+            scores0 = idx                    # backward: pre-built scores vector
+        else:
+            scores0[idx] = 1.0               # forward: seed by entity indices
         self.fp.perturb(scores0)
         final_idx = np.where(self.fp.state >= self.fp.state.max() - self.eps)[0]
         return final_idx, self.intents

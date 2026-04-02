@@ -51,7 +51,7 @@ temperature guarantees the smooth operations are within any desired tolerance of
 the exact max-min semiring.
 
 **Reference:** Nesterov, Y. (2005). Smooth minimization of non-smooth functions.
-*Mathematical Programming*, 103(1), 127–152.
+*Mathematical Programming, Series A*, 103, 127–152.
 
 ## SmoothMax and SmoothMin
 

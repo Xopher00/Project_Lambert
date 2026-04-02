@@ -34,7 +34,7 @@ and storing the converged extent as a new category if its key has not been seen.
 Entities already assigned to a discovered category are skipped — the attractor
 they belong to is already known.
 
-> Brito, P. et al. *Fuzzy Formal Concept Analysis.* — Definition 15: fuzzy formal
+> Brito, A. M. et al. (2018). *Fuzzy Formal Concept Analysis.* — Definition 15: fuzzy formal
 > context as a triple `⟨O, A, I_f⟩`; Definition 17: fuzzy formal concept as a
 > simultaneous fixpoint of `O*` and `A∧`. The category here is the multi-relational
 > generalisation of that fixpoint.
@@ -112,5 +112,5 @@ The structure of higher-order concept compositions at this level of abstraction 
 what it means for a concept-of-concepts to be "correct" relative to the original
 data — is an open question.
 
-> Brito, P. et al. *Fuzzy Formal Concept Analysis.* — Theorem 8: completeness of
+> Brito, A. M. et al. (2018). *Fuzzy Formal Concept Analysis.* — Theorem 8: completeness of
 > the concept lattice guarantees all valid higher-order compositions are reachable.
