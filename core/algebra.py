@@ -92,7 +92,7 @@ def Implies(a, b):
     References
     ----------
     Sanchez, E. (1976). Resolution of composite fuzzy relation equations.
-    *Information and Control*, 30, 38–48. Section 6, the α operation.
+    *Information and Control*, 30, 38–48. Section 6, the α operation.  cite{sanchez1976}
     """
     return np.where(a <= b, Top, b)
 

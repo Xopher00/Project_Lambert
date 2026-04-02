@@ -61,7 +61,7 @@ class Activations:
         References
         ----------
         Nesterov, Y. (2005). Smooth minimization of non-smooth functions.
-        *Mathematical Programming, Series A*, 103, 127–152.
+        *Mathematical Programming, Series A*, 103, 127–152.  cite{nesterov2005}
         """
         temp = Abs(temp)
         # Binary fast path
