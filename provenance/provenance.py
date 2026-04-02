@@ -15,7 +15,7 @@ from .tree import Tree
 import networkx as nx
 from core.tensor import Tensor as t
 from .audit import format_proof
-from core.algebra import Implies, Refutes
+from core.algebra import Implies
 from collections import deque
 
 class Provenance(t):
@@ -75,12 +75,11 @@ class Provenance(t):
         provided, nodes that carry forward known errors.
         """
         polynomial = self._witnesses.get((u, v), {})
-        # Grade each witness by how much it exceeds the threshold
         graded = sorted(
-            [(y, Refutes(threshold, score)) for y, score in polynomial.items()],
+            [(y, score) for y, score in polynomial.items() if score > threshold],
             key=lambda x: x[1], reverse=True
         )
-        candidates = np.array([y for y, g in graded if g > 0], dtype=int)[:3]
+        candidates = np.array([y for y, _ in graded], dtype=int)[:3]
         # print(f"  [candidates] ({u},{v}): {len(polynomial)} witnesses, {len(candidates)} above threshold")
         if len(candidates) == 0:
             return candidates

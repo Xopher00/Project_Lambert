@@ -82,11 +82,9 @@ directly as `SmoothMin` in the activations layer and as `np.minimum` inline wher
 needed. It is documented here because understanding it is essential to understanding
 Join, Residuate, and the max-min semiring throughout the codebase.
 
-## Implies and Refutes
+## Implies
 
-These two functions implement fuzzy logical operators derived from fuzzy set theory.
-
-**Implies(a, b)** asks: does a imply b? In Unified Algebra, implication is the ordering relation ≤.
+`Implies(a, b)` asks: does a imply b? In Unified Algebra, implication is the ordering relation ≤.
 These are all the same statement:
 
 | Domain | Reading | Notation |
@@ -100,14 +98,6 @@ restriction. Otherwise it returns b, capping at the weaker value. This is the α
 operation from Sanchez (1976), the algebraic foundation of the Residuate operation in
 `tensor.py`.
 
-**Refutes(a, b)** is the dual of Implies. It is derived from the dual Brouwerian lattice
-— a lattice L where for all a, b ∈ L, the set {x ∈ L : sup(a, x) > b} has a greatest
-lower bound, denoted a ε b (Kaufmann). By duality with α: if a ≥ b, b is fully dominated
-and the result is Bottom; otherwise b stands. The name "Refutes" is our own — the source
-does not use it.
-
-**References:**
+**Reference:**
 - Sanchez, E. (1976). Resolution of composite fuzzy relation equations.
-  *Information and Control*, 30, 38–48. (Implies / α operation)
-- Kaufmann, A. *Introduction to the Theory of Fuzzy Subsets.* Ch. 1, p. 39.
-  (Refutes / dual Brouwerian ε operation)
+  *Information and Control*, 30, 38–48. (α operation)

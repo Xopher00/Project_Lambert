@@ -62,7 +62,7 @@ this starting point finds entities satisfying all query constraints simultaneous
 The dual — supremum, pointwise maximum — is available via `EmbedSet` but not used
 here.
 
-> Brito, P. et al. *Fuzzy Formal Concept Analysis.* — Theorem 8, infimum and
+> Brito, A. M. et al. (2018). *Fuzzy Formal Concept Analysis.* — Theorem 8, infimum and
 > supremum of concepts in the complete lattice.
 
 ---
@@ -82,8 +82,8 @@ each head's stable points form a complete lattice, and the intersection of compl
 lattices closed under meet is also a complete lattice. The current implementation
 uses hard `np.minimum` in `_outer_step`, which is the correct operation.
 
-> Brito, P. et al. *Fuzzy Formal Concept Analysis.* — Theorem 8, infimum of concepts.
+> Brito, A. M. et al. (2018). *Fuzzy Formal Concept Analysis.* — Theorem 8, infimum of concepts.
 
 > Bělohlávek, R. (2000). Fuzzy logical bidirectional associative memory.
-> *Neural Network World*, 10(5). — Theorem 2: stable points of each head form a
+> *Information Sciences*, 128, 91–103. — Theorem 2: stable points of each head form a
 > complete lattice; their intersection is the multi-relational concept lattice.

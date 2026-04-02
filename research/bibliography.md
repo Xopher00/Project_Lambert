@@ -45,7 +45,7 @@ Burch's 1964 paper examines a seven-valued logic system from Jain philosophy, wh
 Belohlavek spent decades developing the mathematics of how to find natural groupings in data using fuzzy logic. This section contains his core theoretical papers, along with Brito et al.'s accessible introduction to the field.
 
 - Belohlavek, R. (c. 1998). Feedforward networks with fuzzy signals. Unpublished technical report, Institute for Research and Applications of Fuzzy Modeling / Department of Computer Science, Technical University of Ostrava. Available at: http://belohlavek.inf.upol.cz/publications/Bel_Fnfs.pdf
-- Belohlavek, R. (2000). Fuzzy bidirectional associative memories. Information Sciences, 128, 91–103.
+- Belohlavek, R. (2000). Fuzzy logical bidirectional associative memory. Information Sciences, 128, 91–103.
 - Bělohlávek, R., & Vychodil, V. (2007). Fuzzy concept lattices constrained by hedges. Journal of Advanced Computational Intelligence and Intelligent Informatics, 11(6), 536–545. Publisher: Fuji Technology Press Ltd. ISSN: 1343-0130. URL: https://www.fujipress.jp/jaciii/jc/jacii001100060536/
 - Belohlavek, R., & Vychodil, V. (2009). Formal concept analysis with background knowledge: Attribute priorities. IEEE Transactions on Systems, Man, and Cybernetics—Part C: Applications and Reviews, 39(4), 399–409.
 - Brito, A. M., de Barros, L. C., Laureano, E. E., Bertato, F. M., & Coniglio, M. E. (2018). Fuzzy formal concept analysis. In Fuzzy Information Processing (pp. 192–205). Communications in Computer and Information Science. Springer. DOI: 10.1007/978-3-319-95312-0_17.

@@ -29,7 +29,7 @@ A formal concept is a fixpoint of their composition. Brito et al. prove that all
 such fixpoints form a complete lattice — the **concept lattice** of `R` (Theorem 25).
 This completeness is what guarantees `_concept_fixpoint` converges.
 
-> Brito, P. et al. *Fuzzy Formal Concept Analysis.* — adjoint maps `O*`, `A∧`;
+> Brito, A. M. et al. (2018). *Fuzzy Formal Concept Analysis.* — adjoint maps `O*`, `A∧`;
 > concept lattice completeness, Theorem 25.
 
 Bělohlávek (2000) provides a stronger and more specific convergence result directly
@@ -43,7 +43,7 @@ points forms a complete lattice. Lambert's `max_iters=20` is conservative — th
 algebra guarantees convergence in at most 2 steps.
 
 > Bělohlávek, R. (2000). Fuzzy logical bidirectional associative memory.
-> *Neural Network World*, 10(5). — Theorem 1: two-step convergence of the
+> *Information Sciences*, 128, 91–103. — Theorem 1: two-step convergence of the
 > `O*`/`A∧` alternation; Theorem 2: stable points form the concept lattice.
 
 ---
@@ -156,7 +156,7 @@ second reconstructs the output as a max-min combination of those patterns.
 Structurally identical to one update step of a modern Hopfield network,
 implemented under max-min composition rather than softmax dot-product attention.
 
-> Ramsauer, H. et al. (2020). Hopfield Networks is All You Need. *arXiv:2008.07320.*
+> Ramsauer, H. et al. (2020, revised 2021). Hopfield Networks is All You Need. *arXiv:2008.02217.*
 
 Called inside `Attention._step` on every iteration of every attention head's
 fixpoint loop. Not intended to be called directly by external code.

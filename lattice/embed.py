@@ -120,8 +120,9 @@ class Embed(Tensor):
 
         References
         ----------
-        Belohlavek, R., Outrata, J. & Trnecka, M. (2010). Decomposing matrices
-        by formal concepts. *JCSS*, 76(1), 3–20.
+        Belohlavek, R. & Vychodil, V. (2010). Discovery of optimal factors in
+        binary data via a novel method of matrix decomposition. *Journal of
+        Computer and System Sciences*, 76(1), 3–20.
         """
         seen    = seen    if seen    is not None else {}
         covered = covered if covered is not None else set()
@@ -261,8 +262,8 @@ class Embed(Tensor):
 
         References
         ----------
-        Ramsauer, H. et al. (2020). Hopfield Networks is All You Need.
-        *arXiv:2008.07320*.
+        Ramsauer, H. et al. (2020, revised 2021). Hopfield Networks is All You Need.
+        *arXiv:2008.02217*.
         """
         q2d     = q.reshape(1, -1)           # (1, d)
         scores  = self.Join(q2d, emb.T, temp)  # (1, n_entities)

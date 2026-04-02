@@ -2,8 +2,8 @@
 The bottom layer. Every other module imports from this one.
 
 Defines the core operation — max (∨) — plus basic arithmetic helpers
-(Sum, Log, Exp, Abs, Negate) and two logical operators (Implies, Refutes)
-borrowed from fuzzy set theory.
+(Sum, Log, Exp, Abs, Negate) and the logical operator Implies borrowed
+from fuzzy set theory.
 
 Top and Bottom mark the endpoints of whatever ordered domain the system
 is working in. In boolean logic they are True and False; on the real
@@ -95,35 +95,6 @@ def Implies(a, b):
     *Information and Control*, 30, 38–48. Section 6, the α operation.
     """
     return np.where(a <= b, Top, b)
-
-def Refutes(a, b):
-    """
-    The dual of Implies. Given two values a and b, ask "does a refute b?"
-
-    Returns Bottom (−∞) if b <= a, meaning b is fully refuted by a.
-    Returns b otherwise.
-
-    Works elementwise on numpy arrays.
-
-    Parameters
-    ----------
-    a : array-like
-        The refuting value.
-    b : array-like
-        The value being tested.
-
-    Returns
-    -------
-    ndarray
-        Bottom where b <= a, otherwise b.
-
-    References
-    ----------
-    Dual of the α operation from:
-    Sanchez, E. (1976). Resolution of composite fuzzy relation equations.
-    *Information and Control*, 30, 38–48.
-    """
-    return np.where(a >= b, Bottom, b)
 
 def Log(args):
     """
