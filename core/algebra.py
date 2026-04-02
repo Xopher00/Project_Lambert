@@ -11,8 +11,8 @@ number line they are +∞ and −∞. Here they are set to 1e9 and -1e9 as
 practical stand-ins for infinity.
 """
 
-import time
 import numpy as np
+import torch
 
 Top = 1e9
 Bottom = -1e9
@@ -37,14 +37,22 @@ def Max(*args, axis=None, keepdims=False):
 
     Returns
     -------
-    ndarray
+    ndarray or Tensor
         The maximum values.
     """
     if len(args) == 1:
-        return np.max(args[0], axis=axis, keepdims=keepdims)
+        x = args[0]
+        if isinstance(x, torch.Tensor):
+            return torch.amax(x, dim=axis, keepdim=keepdims)
+        return np.max(x, axis=axis, keepdims=keepdims)
     elif len(args) == 2:
-        return np.maximum(args[0], args[1])
+        a, b = args
+        if isinstance(a, torch.Tensor) or isinstance(b, torch.Tensor):
+            return torch.maximum(a, b)
+        return np.maximum(a, b)
     else:
+        if isinstance(args[0], torch.Tensor):
+            return torch.amax(torch.stack(list(args)), dim=0)
         return np.maximum.reduce(np.array(args))
 
 def Sum(args, axis=None, keepdims=False):
@@ -62,9 +70,11 @@ def Sum(args, axis=None, keepdims=False):
 
     Returns
     -------
-    ndarray or scalar
+    ndarray or Tensor or scalar
         The sum.
     """
+    if isinstance(args, torch.Tensor):
+        return torch.sum(args, dim=axis, keepdim=keepdims if axis is not None else False)
     return np.sum(args, axis=axis, keepdims=keepdims)
 
 def Implies(a, b):
@@ -75,8 +85,6 @@ def Implies(a, b):
     implication holds without restriction. Returns b otherwise, capping
     the result at the weaker value.
 
-    Works elementwise on numpy arrays.
-
     Parameters
     ----------
     a : array-like
@@ -86,7 +94,7 @@ def Implies(a, b):
 
     Returns
     -------
-    ndarray
+    ndarray or Tensor
         Top where a <= b, otherwise b.
 
     References
@@ -94,6 +102,8 @@ def Implies(a, b):
     Sanchez, E. (1976). Resolution of composite fuzzy relation equations.
     *Information and Control*, 30, 38–48. Section 6, the α operation.  cite{sanchez1976}
     """
+    if isinstance(a, torch.Tensor) or isinstance(b, torch.Tensor):
+        return torch.where(a <= b, torch.full_like(b, Top), b)
     return np.where(a <= b, Top, b)
 
 def Log(args):
@@ -107,9 +117,11 @@ def Log(args):
 
     Returns
     -------
-    ndarray
+    ndarray or Tensor
         The natural logarithm of each element.
     """
+    if isinstance(args, torch.Tensor):
+        return torch.log(args)
     return np.log(args)
 
 def Exp(args):
@@ -123,9 +135,11 @@ def Exp(args):
 
     Returns
     -------
-    ndarray
+    ndarray or Tensor
         e ** args, elementwise.
     """
+    if isinstance(args, torch.Tensor):
+        return torch.exp(args)
     return np.exp(args)
 
 def Abs(x):
@@ -139,17 +153,19 @@ def Abs(x):
 
     Returns
     -------
-    ndarray
+    ndarray or Tensor
         The absolute value of each element.
     """
+    if isinstance(x, torch.Tensor):
+        return torch.abs(x)
     return np.abs(x)
 
 def Negate(x):
     """
     Negate the input.
 
-    Handles scalars, numpy arrays, and tuples or lists of arrays —
-    negating each element in the collection individually.
+    Handles scalars, numpy arrays, torch tensors, and tuples or lists
+    of arrays — negating each element in the collection individually.
 
     Parameters
     ----------
@@ -158,7 +174,7 @@ def Negate(x):
 
     Returns
     -------
-    scalar, ndarray, or tuple
+    scalar, ndarray, Tensor, or tuple
         The negated value(s).
     """
     if isinstance(x, (tuple, list)):

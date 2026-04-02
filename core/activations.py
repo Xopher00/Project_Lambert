@@ -8,15 +8,13 @@ The gap shrinks back to zero as T approaches zero.
 """
 
 import numpy as np
+import torch
 from scipy.special import logsumexp
 from core.algebra import *
 
 class Activations:
     """
     Collection of temperature-controlled activation functions.
-
-    All methods are stateless except for the witness tracking attributes,
-    which are used by the layer above this one.
 
     Parameters
     ----------
@@ -25,9 +23,6 @@ class Activations:
     """
     def __init__(self, temp=1.0):
         self.temp = temp
-        self._witness_cache = []
-        self._witnesses = {}
-        self.tracking = False
 
     # ∨f  ≤  T × ln(+(exp(f/T)))  ≤  ∨f + T × ln(#f)
     def LogSumExp(self, x, temp, axis=None, keepdims=False):
@@ -44,7 +39,7 @@ class Activations:
 
         Parameters
         ----------
-        x : array-like or 2-tuple of arrays
+        x : array-like, Tensor, or 2-tuple
             Input values. If a 2-tuple, a fast binary path is used.
         temp : float
             Temperature. Must be non-negative.
@@ -55,7 +50,7 @@ class Activations:
 
         Returns
         -------
-        ndarray or scalar
+        ndarray or Tensor or scalar
             T × ln(∑ exp(x / T)), or max(x) when T=0.
 
         References
@@ -68,19 +63,23 @@ class Activations:
         if isinstance(x, (tuple, list)) and len(x) == 2:
             a, b = x
             if temp < 1e-12:
-               return Max(a, b)           
-            return temp * np.logaddexp(a/temp, b/temp)
-        # Array path - use scipy
+                return Max(a, b)
+            if isinstance(a, torch.Tensor) or isinstance(b, torch.Tensor):
+                return temp * torch.logaddexp(a / temp, b / temp)
+            return temp * np.logaddexp(a / temp, b / temp)
+        # Array path
         if temp == 0 or temp is None:
             return Max(x, axis=axis, keepdims=keepdims)
-        return temp * logsumexp(x/temp, axis=axis, keepdims=keepdims)
-    
+        if isinstance(x, torch.Tensor):
+            return temp * torch.logsumexp(x / temp, dim=axis)
+        return temp * logsumexp(x / temp, axis=axis, keepdims=keepdims)
+
     # Use as an alias for LSE
     # T × ln(+(exp(f/T))) -> smooth ∨f
     def SmoothMax(self, x, temp, axis=0):
         """Smooth maximum via LogSumExp. An alias — see LogSumExp for full details."""
         return self.LogSumExp(x, temp, axis)
-    
+
     # -T × ln(+(exp(-f/T))) -> smooth ∧f
     def SmoothMin(self, x, temp, axis=0):
         """
@@ -96,7 +95,7 @@ class Activations:
 
         Parameters
         ----------
-        x : array-like or 2-tuple of arrays
+        x : array-like, Tensor, or 2-tuple
             Input values.
         temp : float
             Temperature. Must be non-negative.
@@ -105,7 +104,7 @@ class Activations:
 
         Returns
         -------
-        ndarray or scalar
+        ndarray or Tensor or scalar
             The smooth minimum of x.
         """
         # De Morgan's Duality Law:  -(x ∨ y) = -x ∧ -y
@@ -124,7 +123,7 @@ class Activations:
 
         Parameters
         ----------
-        x : array-like
+        x : array-like or Tensor
             Input values.
         temp : float
             Temperature. Must be non-negative.
@@ -133,7 +132,7 @@ class Activations:
 
         Returns
         -------
-        ndarray or scalar
+        ndarray or Tensor or scalar
             The smooth approximation of max(x, 0).
         """
         return self.LogSumExp((0.0, x), temp, axis=axis)
@@ -157,7 +156,7 @@ class Activations:
 
         Parameters
         ----------
-        x : array-like
+        x : array-like or Tensor
             Input values.
         temp : float
             Temperature. At T=0 returns the hard maximum.
@@ -166,19 +165,17 @@ class Activations:
 
         Returns
         -------
-        ndarray
+        ndarray or Tensor
             Values in (0, 1) summing to 1 along the given axis.
         """
         if temp == 0:
             return Max(x, axis=axis, keepdims=False)
-        # Binary/sigmoid mode without stacking: softmax([x, 0])[:, 0]
         if axis is None:
             lse = self.Softplus(x, temp, axis=axis)
         else:
-            # General case (also covers temp == 0 via your division override)
             lse = self.LogSumExp(x, temp, axis=axis, keepdims=True)
         return Exp((x - lse) / temp)
-    
+
     # -exp(-f n / T) / +(exp(-f/T))
     def SoftMin(self, x, temp, axis):
         """De Morgan dual of SoftMax. An alias — see SoftMax for full details."""

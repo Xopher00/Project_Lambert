@@ -13,7 +13,7 @@ much the current state still needs to change, and each iteration reduces
 it by updating the state in the direction that minimises the error.
 """
 
-import numpy as np
+import torch
 from core.algebra import Abs, Sum, Log, Bottom
 
 
@@ -46,7 +46,7 @@ class FixpointIterator:
     def __init__(self, f, state0, eps=1e-3, max_iters=100, temp=1.0):
         self.f         = f          # (state, temp) -> new_state  OR  (new_state, aux)
         self.energy_fn = self.default_energy  # (new_state, old_state, aux) -> float
-        self.state     = state0.copy()
+        self.state     = state0.clone()
         self.energy    = Bottom
         self.temp      = temp
         self._init_temp = temp
@@ -110,9 +110,9 @@ class FixpointIterator:
             The state before this iteration. Used to compute the log-mean
             magnitude, which acts as a normalising factor.
         """
-        log_mean = np.mean(Log(np.clip(old_state, self.eps, 1.0)))
+        log_mean = torch.mean(Log(torch.clamp(old_state, self.eps, 1.0)))
         if log_mean != 0:
-            self.temp = Abs(-self.energy / (old_state.size * log_mean))
+            self.temp = Abs(-self.energy / (old_state.numel() * log_mean))
 
     def step(self):
         """
@@ -186,7 +186,7 @@ class FixpointIterator:
         ndarray
             The final state after convergence.
         """
-        self.state = new_state.copy()
+        self.state = new_state.clone()
         self.energy = Bottom
         self._iter  = 0
         self.temp   = self._init_temp

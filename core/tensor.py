@@ -8,150 +8,122 @@ Relational operations layer. Implements three core operations on matrices:
 - Closure: iterates Join to fixpoint, computing transitive reachability
   across the relation.
 
-All operations are sparse — only non-zero entries are visited — and
-temperature-controlled via the smooth activations from the layer below.
+Join and Residuate are implemented via torch-semiring-einsum using the
+(SmoothMax, SmoothMin) and (SmoothMin, Implies) semirings respectively.
+Computation runs on GPU when available. Inputs and outputs are numpy arrays;
+conversion happens once at the boundary of each public method.
 """
 
 import numpy as np
+import torch
+import torch_semiring_einsum as tse
+
 from core.algebra import *
 from core.activations import Activations
 from core.fixpoint import FixpointIterator
+
+_DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+def _block_size(n, p, k, budget):
+    """
+    Compute a safe tse block size given output dimensions n and p.
+
+    tse's intermediate term tensor has shape (n, p, block_size). Its automatic
+    sizing ignores the output dimensions, so we derive block_size from the
+    caller-supplied memory budget: block_size = budget / (n * p * sizeof(float32)).
+    """
+    block = max(1, budget // (n * p * 4))
+    return min(block, k)
+
 
 class Tensor(Activations):
     """
     Relational operations built on top of Activations.
 
     Inherits all temperature-controlled activation functions and adds
-    matrix-level operations: Join, Residuate, Closure, and ChainJoin.
+    matrix-level operations: Join, Residuate, and Closure.
 
-    Also provides optional witness tracking: when enabled, every
-    intermediate node y that connects x to z during a Join is recorded.
-    This allows logical paths through the relation to be reconstructed
-    later for auditing the model's internal reasoning and identifying
-    where errors originate.
-
-    # Under review — witness tracking may become redundant as new layers are added.
+    All methods accept and return numpy arrays. Internally, computation
+    is performed on torch tensors on the available device (GPU if present).
     """
 
-    def _track_witnesses(self, xs, y, zs, contrib, th):
-        """
-        Record intermediate node y as a witness for each (x, z) pair it connects.
+    def _to_device(self, x):
+        if isinstance(x, torch.Tensor):
+            return x.to(_DEVICE)
+        return torch.as_tensor(np.asarray(x), dtype=torch.float32).to(_DEVICE)
 
-        For every (x, z) pair where y's contribution exceeds the threshold,
-        stores the contribution score in self._witnesses[(x, z)][y]. Called
-        during Join when tracking is enabled.
-
-        Parameters
-        ----------
-        xs : array of int
-            Row indices (x values) active for this y.
-        y : int
-            The intermediate node being evaluated.
-        zs : array of int
-            Column indices (z values) active for this y.
-        contrib : ndarray
-            Contribution scores, shape (len(xs), len(zs)).
-        th : float
-            Threshold below which a witness is not recorded.
-        """
-        if not self.tracking:
-            return
-        i, j = np.where(contrib > th)
-        for ii, jj in zip(i, j):
-            key = (xs[ii], zs[jj])
-            if key not in self._witnesses:
-                self._witnesses[key] = {}
-            self._witnesses[key][y] = contrib[ii, jj]
-
-    def _clear_witnesses(self):
-        """Reset the witness store."""
-        self._witnesses = {}
+    def _to_numpy(self, x, dtype):
+        return x.detach().cpu().numpy().astype(dtype)
 
     # v (y: A[x,y] ∧ B[y,z])
-    def Join(self, Tensor_A, Tensor_B, temp, threshold=1e-6):
+    def Join(self, Tensor_A, Tensor_B, temp, equation='ik,kj->ij'):
         """
         Relational composition of two matrices.
 
         For each output cell (x, z), finds the best intermediate node y by
         taking the min of A[x, y] and B[y, z], then taking the max over all y:
 
-            result[x, z] = max over y of min(A[x, y], B[y, z])
+            result[x, z] = SmoothMax_y( SmoothMin(A[x, y], B[y, z]) )
 
-        Only non-zero entries are visited for efficiency. If witness tracking
-        is enabled, records each y's contribution for later path reconstruction.
+        Implemented via the (SmoothMax, SmoothMin) semiring over the blocked
+        einsum 'ik,kj->ij'. Degenerates to hard (max, min) as temp → 0.
 
         Parameters
         ----------
-        Tensor_A : ndarray, shape (n, m)
+        Tensor_A : ndarray or Tensor, shape (n, m)
             Left relation matrix.
-        Tensor_B : ndarray, shape (m, p)
+        Tensor_B : ndarray or Tensor, shape (m, p)
             Right relation matrix.
         temp : float
             Temperature passed to SmoothMin and SmoothMax.
-        threshold : float, optional
-            Entries below this value are treated as zero. Default is 1e-6.
+        equation : str, optional
+            Einsum equation. Default is 'ik,kj->ij'.
 
         Returns
         -------
         ndarray, shape (n, p)
             The composed relation matrix.
         """
+        T = float(temp)
+        A = self._to_device(Tensor_A)
+        B = self._to_device(Tensor_B)
+        eq = tse.compile_equation(equation)
 
-        A, B = Tensor_A, Tensor_B
-        n, m = A.shape
-        _, p = B.shape
-        result    = np.full((n, p), Bottom, dtype=float)
-        absA, absB = Abs(A), Abs(B)
-        xs_list = [np.flatnonzero(absA[:, y] > threshold) for y in range(m)]
-        zs_list = [np.flatnonzero(absB[y, :] > threshold) for y in range(m)]
+        def func(compute_sum):
+            def mul_in_place(a, b):
+                a.copy_(self.SmoothMin((a, b), T))
+            def add_in_place(a, b):
+                a.copy_(self.SmoothMax((a, b), T))
+            def sum_block(a, dims):
+                return self.SmoothMax(a, T, axis=dims) if dims else a
+            return compute_sum(add_in_place, sum_block, mul_in_place)
 
-        # we first filter for non zero entries, then loop over intermediate nodes
-        # in past versions we used numpy broadcasting to compare the entire matrices at once
-        # this creates O(n3) complexity. the current setup effectively avoids this by only comparing subsections of 2d matrices
-        for y in range(m):
-            xs = xs_list[y]
-            zs = zs_list[y]
-            if not (len(xs) and len(zs)): continue
-            ix = np.ix_(xs, zs)
+        return tse.semiring_einsum_forward(eq, [A, B], _block_size(A.shape[0], B.shape[1], A.shape[1]), func)
 
-            a_col = A[:, y]
-            b_row = B[y, :]
-            contrib = self.SmoothMin((a_col[xs, None], b_row[None, zs]), temp, axis=0)
-            old = result[ix]
-            result[ix] = self.SmoothMax((old, contrib), temp, axis=0)
-
-            self._track_witnesses(xs, y, zs, contrib, threshold) # if witness tracking is enabled, save intermediate nodes y connecting x to z
-
-        return result
-    
     # ∧ (A[x,y]-¹ α C[x,z]) <= B[y,z]
-    def Residuate(self, Tensor_A, Tensor_C, temp, threshold=1e-6):
+    def Residuate(self, Tensor_A, Tensor_C, temp):
         """
         The adjoint of Join. Given A and C, finds the greatest B such that
         Join(A, B) stays within C.
 
         For each cell (y, z), computes the tightest upper bound that every
-        row i of A places on B[y, z], using the Implies operation from
-        algebra.py:
+        row i of A places on B[y, z], using the Implies operation:
 
-            B[y, z] = min over i of Implies(A[i, y], C[i, z])
+            B[y, z] = SmoothMin_i( Implies(A[i, y], C[i, z]) )
 
-        If Join is relational composition forward, Residuate is its inverse:
-        it asks "given what we know about A and the target C, how large can
-        B be?"
+        where Implies(a, b) = Top if a ≤ b, else b.
 
-        Only non-zero entries are visited for efficiency.
+        Implemented via the (SmoothMin, Implies) semiring over the blocked
+        einsum 'iy,iz->yz'.
 
         Parameters
         ----------
-        Tensor_A : ndarray, shape (n, m)
+        Tensor_A : ndarray or Tensor, shape (n, m)
             The left relation matrix.
-        Tensor_C : ndarray, shape (n, p)
+        Tensor_C : ndarray or Tensor, shape (n, p)
             The target relation matrix. Must share the row dimension with A.
         temp : float
             Temperature passed to SmoothMin.
-        threshold : float, optional
-            Entries below this value are treated as zero. Default is 1e-6.
 
         Returns
         -------
@@ -163,34 +135,22 @@ class Tensor(Activations):
         Sanchez, E. (1976). Resolution of composite fuzzy relation equations.
         *Information and Control*, 30, 38–48. Theorem 5.  cite{sanchez1976}
         """
+        T = float(temp)
+        A = self._to_device(Tensor_A)
+        C = self._to_device(Tensor_C)
+        eq = tse.compile_equation('iy,iz->yz')
 
-        A, C = Tensor_A, Tensor_C
-        n, m = A.shape
-        o, p = C.shape
-        assert n == o, "Shared (row) dimension mismatch"
-        # min-reduction identity is Top (e.g., 1.0)
-        B = np.full((m, p), Top, dtype=float)
-        # Find non-zero columns in A[i,:] and C[i,:]
-        absA, absC = Abs(A), Abs(C)
-        js_list = [np.flatnonzero(absA[i, :] > threshold) for i in range(n)]
-        ks_list = [np.flatnonzero(absC[i, :] > threshold) for i in range(n)]
+        def func(compute_sum):
+            def mul_in_place(a, b):
+                a.copy_(Implies(a, b))
+            def add_in_place(a, b):
+                a.copy_(self.SmoothMin((a, b), T))
+            def sum_block(a, dims):
+                return self.SmoothMin(a, T, axis=dims) if dims else a
+            return compute_sum(add_in_place, sum_block, mul_in_place)
 
-        # this code is structured the same way as its adjoint operation for the same reasons: to avoid O(n3) complexity,
-        # we filter for non zero entries and than iterate over subsets of 2d matrices
-        for i in range(n):
-            js = js_list[i] # Active columns in A
-            ks = ks_list[i] # Active columns in C
-            if not (len(js) and len(ks)): continue
-            ix = np.ix_(js, ks)
+        return tse.semiring_einsum_forward(eq, [A, C], _block_size(A.shape[1], C.shape[1], A.shape[0]), func)
 
-            a_row = A[i, js]  # (len(js),)
-            c_row = C[i, ks]  # (len(ks),)
-            contrib = Implies(a_row[:, None], c_row[None, :])  # (len(js), len(ks))
-            old = B[ix]
-            B[ix] = self.SmoothMin((old, contrib), temp, axis=0)
-
-        return B
-    
     def Closure(self, E, R=None, temp=None, max_iters=100, eps=1e-3):
         """
         Compute the transitive closure of relation E.
@@ -221,22 +181,19 @@ class Tensor(Activations):
         ndarray, shape (n, n)
             The converged closure of E.
         """
-        if R is None: R = E.copy()
+        if R is None: R = E.clone() if isinstance(E, torch.Tensor) else E.copy()
+        E_t = self._to_device(E)
 
-        # This code was very relevant during earlier testing.
-        # However it has largely been subsumed by the more complex Attention mechanism several layers above
-        # That mechanism works essentially the same way. Under review whether or not this function is worth keeping.
         def _f(R, temp):
-            J            = self.Join(R, E, temp)
-            Rn           = self.SmoothMax((J, E), temp, axis=0)
-            np.fill_diagonal(Rn, 0)
-            R_allowed    = self.Residuate(Rn, E, temp)
+            J            = self.Join(R, E_t, temp)
+            Rn           = self.SmoothMax((J, E_t), temp, axis=0)
+            Rn.fill_diagonal_(0)
+            R_allowed    = self.Residuate(Rn, E_t, temp)
             Rn_corrected = self.SmoothMin((Rn, R_allowed), temp, axis=0)
             return Rn_corrected, Rn  # aux = Rn (before correction)
 
-        fp = FixpointIterator(f=_f, state0=R, eps=eps, max_iters=max_iters)
+        fp = FixpointIterator(f=_f, state0=self._to_device(R), eps=eps, max_iters=max_iters)
         result = fp.run()
         if fp.energy == 0:
             print(f"✓ CONVERGED at iteration {fp._iter}")
         return result
-
