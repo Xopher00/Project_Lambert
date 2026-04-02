@@ -107,11 +107,64 @@ Project:  emb.T ∘ R ∘ emb   → (k, k)   relation in concept space
 Expand:   emb   ∘ M ∘ emb.T → (n, n)   approximate reconstruction
 ```
 
-Intended for multi-hop reasoning in concept space — replacing `R: (n, m)` with a
-compressed `EmbR: (k, k)` for downstream operations. Both are currently **under
-review** and not called by any active code. `Project` is dimensionally compatible
-only when `n_attributes == n_entities`, which does not hold for typical rectangular
-relation matrices.
+`Project` is dimensionally compatible only when `n_attributes == n_entities`, which
+does not hold for typical rectangular relation matrices. For the standard case
+(`R: n_entities × n_features`), `emb: (n_entities, k)` and the Tucker core
+`EmbR: (k, k)` is a concept-to-concept relation.
+
+`EmbR` is computed by `ConceptEmbed` and stored in `self.heads[name]['EmbR']` after
+`Lambert.run()`. It is currently **not wired into any query path** — `Query` goes
+directly to MHA on entity-space embeddings. This is the primary structural reason
+the model is retrievative rather than generative.
+
+**What `EmbR` would enable.** A query in concept space — `q: (k,)` — traversed
+through `EmbR` via `Join(q, EmbR)` produces a new concept-space vector representing
+one relational hop. Chaining multiple `EmbR` matrices (one per relation type) would
+support multi-hop inference: "concept C₁ relates to concept C₂ via relation R₁, and
+C₂ relates to C₃ via R₂." Projecting back to entity space via `Expand` or
+`Join(result, emb.T)` would produce entity-level predictions for entities not
+explicitly observed in any single training example — generation rather than recall.
+
+This is the intended purpose of `Project` and `Expand`. The algebra is sound; the
+missing piece is wiring `EmbR` into the query path.
+
+---
+
+## The learning rule
+
+The model currently reads relation matrices but never writes back to them. Belohlavek
+(2000, Algorithm, eq. 2) gives the construction rule for an FLBAM weight matrix from
+stored pattern pairs `{(Aᵖ, Bᵖ)}`:
+
+```
+I_ij = ∨_p  A^p(gᵢ) ⊗ B^p(mⱼ)
+```
+
+where `⊗` is the Gödel residuum — Lambert's `Residuate`. In Sussner & Valle (2006)
+the same construction appears as:
+
+```
+W = Y ⊗ₙ Xᵀ  =  Residuate(Y, X)
+```
+
+This builds the weight matrix directly from a set of input/output pattern pairs
+`(X, Y)`. In Lambert's terms: given a set of `(entity_vector, concept_vector)` pairs,
+`Residuate(Y, X)` constructs the relation matrix `R` that stores all of them as
+stable attractors.
+
+The algebra for this is already present (`Residuate` is implemented and correct).
+What is absent is the layer that calls it with training pairs and writes the result
+back into the embeddings. Without this, the model cannot accumulate new knowledge
+incrementally or synthesise relation values for entities not observed during
+construction.
+
+> Belohlavek, R. (2000). Fuzzy logical bidirectional associative memory.
+> *Information Sciences*, 128, 91–103. — Algorithm, eq. 2: construction of I from
+> stored patterns.  cite{belohlavek2000}
+
+> Sussner, P., & Valle, M. E. (2006). Implicative fuzzy associative memories.
+> *IEEE Transactions on Fuzzy Systems*, 14(6), 791–807. — eq. for W = Y ⊗ₙ Xᵀ;
+> construction rule identical to Lambert's Residuate.  cite{sussner2006}
 
 ---
 

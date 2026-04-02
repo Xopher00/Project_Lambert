@@ -11,8 +11,7 @@ scores.
 
 MultiHeadAttention runs one Attention head per embedding, combines their
 scores via a belief-propagation-like outer fixpoint, and returns the union
-of matching entities across all heads. The combination step is currently
-under review — see _outer_step for details.
+of matching entities across all heads.
 """
 
 import numpy as np
@@ -188,13 +187,6 @@ class MultiHeadAttention(Embed):
     entities, each head retrieves against that active set, and the results
     are merged back into the combined scores.
 
-    # The combination step is under review. An earlier version used
-    # elementwise minimum (hard intersection) across heads, which was
-    # effective on simple datasets but produced instability on complex ones.
-    # The current belief-propagation-like approach resolves the instability
-    # but causes category collapse — distinct categories merge into fewer,
-    # broader ones. See _outer_step for details.
-
     Parameters
     ----------
     heads : list of Attention
@@ -260,7 +252,7 @@ class MultiHeadAttention(Embed):
 
         # A belief-propagation-like soft merge was tried previously — see
         # commented-out code below. It resolved instability on complex datasets
-        # but caused category collapse. Currently under review.
+        # but caused category collapse.
 
         Parameters
         ----------

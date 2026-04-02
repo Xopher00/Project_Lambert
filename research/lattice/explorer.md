@@ -41,23 +41,28 @@ they belong to is already known.
 
 ---
 
-## The closure operator at this layer
+## Redundancies in the current implementation
 
-`CategoryExplorer` overrides `_concept_fixpoint` from `Embed`. The parent
-alternates two `Residuate` steps — the `O*` / `A∧` adjoint pair applied to a
-single relation matrix. This finds a concept closed within one relational space.
+**`_concept_fixpoint` override.** `CategoryExplorer` overrides `_concept_fixpoint`
+from `Embed`, replacing the parent's alternating `Residuate` steps with a call to
+`mha.retrieve`. The override is only ever called by `ConceptEmbed` inside
+`explore_lattice` (phase 2). At that point it receives columns of `emb_new` as
+seeds — but each column of `emb_new` is already a converged MHA extent vector from
+phase 1. Re-running `mha.retrieve` on an already-converged state returns the same
+state. The override adds no new concepts or categories; no entity ever enumerated in
+phase 1 is reclassified.
 
-At this layer there is no single `R`. The relevant closure condition requires
-simultaneous stability across all heads. The override replaces the Residuate
-alternation with a call to `mha.retrieve`: each iteration queries all heads at
-once and takes the outer fixpoint state as the new state. The fixpoint converges
-when the entity set is stable under every head's retrieval simultaneously — the
-correct closure operator for a multi-relational context.
+The parent `Embed._concept_fixpoint` (alternating `Residuate` on `emb_new`) is the
+algebraically correct operation for phase 2: it finds formal concepts of the
+category-extent matrix, which is second-order FCA on a well-defined rectangular
+context. Belohlavek (2000) Theorem 1 guarantees convergence in two steps for that
+operation. The override loses that guarantee and does the same work more slowly.
 
-This is not an approximation of the Residuate-based closure. It is the
-appropriate operation for a richer formal context: a single `Residuate` step can
-only satisfy the adjoint condition for one relation, while `mha.retrieve` satisfies
-it for all relations jointly.
+**`learn=True` parameter on `explore`.** The parameter is declared in the method
+signature but never read inside the method body. It is dead.
+
+These are not blocking issues — the pipeline produces correct results despite them —
+but they obscure what the code is doing and make phase 2 harder to reason about.
 
 ---
 
@@ -107,10 +112,38 @@ valid higher-order compositions: every entity grouping that has a closed
 realisation in the space of first-order categories will appear as a concept column
 in the returned embedding.
 
-The theoretical status of the resulting embedding is still under investigation.
-The structure of higher-order concept compositions at this level of abstraction —
-what it means for a concept-of-concepts to be "correct" relative to the original
-data — is an open question.
-
 > Brito, A. M. et al. (2018). *Fuzzy Formal Concept Analysis.* — Theorem 8: completeness of
 > the concept lattice guarantees all valid higher-order compositions are reachable.
+
+---
+
+## What the explorer does not do: the generation gap
+
+After `explore_lattice` completes, the model has:
+
+- A set of first-order categories (entity clusters closed under all relation types simultaneously).
+- A second-order embedding `emb: (n_entities, k)` over the closed concept lattice.
+- A Tucker core `EmbR: (k, k)` per head and one for the category matrix.
+
+What it cannot do is **generate** — produce relation values or category memberships
+for situations not directly observed. All queries go through MHA retrieval, which
+returns entities already stored in the embedding. Nothing is inferred beyond recall.
+
+Two things are structurally absent:
+
+**1. `EmbR` is not wired into any query path.** The Tucker core `EmbR` compresses
+each relation into concept space. Chaining `Join(q, EmbR₁)`, `Join(result, EmbR₂)`,
+... across relation types would support multi-hop relational inference — traversing
+concept-to-concept links to reach entity predictions not directly encoded in any
+single head. The algebra is implemented (`Project`, `Join`); the query path that
+uses it is not. See `embed.md` § `Project` and `Expand` for details.
+
+**2. The learning rule is not implemented.** The FLBAM / IFAM construction rule
+`W = Residuate(Y, X)` (Belohlavek 2000, eq. 2; Sussner & Valle 2006) builds a
+relation matrix from stored `(input, output)` pattern pairs such that all patterns
+are stable attractors. In Lambert's algebra, this is a single `Residuate` call.
+Implementing it would allow the model to accumulate new knowledge — adding entities
+or relation instances incrementally — and to synthesise `R` values for unseen
+combinations. The operation exists; the layer that calls it with training pairs and
+writes back into the embeddings does not. See `embed.md` § `The learning rule` for
+details.
