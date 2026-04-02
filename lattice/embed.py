@@ -68,7 +68,7 @@ class Embed(Tensor):
         References
         ----------
         Bělohlávek, R. (2000). Fuzzy logical bidirectional associative memory.
-        *Information Sciences*, 128, 91–103.
+        *Information Sciences*, 128, 91–103.  cite{belohlavek2000}
         """
         active = np.flatnonzero(seed > 0)
         R_active = R.copy() if full else R[active, :]
@@ -122,7 +122,7 @@ class Embed(Tensor):
         ----------
         Belohlavek, R. & Vychodil, V. (2010). Discovery of optimal factors in
         binary data via a novel method of matrix decomposition. *Journal of
-        Computer and System Sciences*, 76(1), 3–20.
+        Computer and System Sciences*, 76(1), 3–20.  cite{belohlavek2010}
         """
         seen    = seen    if seen    is not None else {}
         covered = covered if covered is not None else set()
@@ -263,7 +263,7 @@ class Embed(Tensor):
         References
         ----------
         Ramsauer, H. et al. (2020, revised 2021). Hopfield Networks is All You Need.
-        *arXiv:2008.02217*.
+        *arXiv:2008.02217*.  cite{ramsauer2021}
         """
         q2d     = q.reshape(1, -1)           # (1, d)
         scores  = self.Join(q2d, emb.T, temp)  # (1, n_entities)

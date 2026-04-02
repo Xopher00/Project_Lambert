@@ -161,7 +161,7 @@ class Tensor(Activations):
         References
         ----------
         Sanchez, E. (1976). Resolution of composite fuzzy relation equations.
-        *Information and Control*, 30, 38–48. Theorem 5.
+        *Information and Control*, 30, 38–48. Theorem 5.  cite{sanchez1976}
         """
 
         A, C = Tensor_A, Tensor_C
