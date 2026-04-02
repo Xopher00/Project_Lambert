@@ -24,7 +24,7 @@ from core.fixpoint import FixpointIterator
 
 _DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def _block_size(n, p, k, budget):
+def _block_size(n, p, k):
     """
     Compute a safe tse block size given output dimensions n and p.
 
@@ -32,6 +32,11 @@ def _block_size(n, p, k, budget):
     sizing ignores the output dimensions, so we derive block_size from the
     caller-supplied memory budget: block_size = budget / (n * p * sizeof(float32)).
     """
+    if torch.cuda.is_available():
+        free = torch.cuda.mem_get_info()[0]
+        budget = int(free * 0.5)  # use 50% of free memory
+    else:
+        budget = 2**28
     block = max(1, budget // (n * p * 4))
     return min(block, k)
 
@@ -51,9 +56,6 @@ class Tensor(Activations):
         if isinstance(x, torch.Tensor):
             return x.to(_DEVICE)
         return torch.as_tensor(np.asarray(x), dtype=torch.float32).to(_DEVICE)
-
-    def _to_numpy(self, x, dtype):
-        return x.detach().cpu().numpy().astype(dtype)
 
     # v (y: A[x,y] ∧ B[y,z])
     def Join(self, Tensor_A, Tensor_B, temp, equation='ik,kj->ij'):
