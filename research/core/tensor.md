@@ -60,6 +60,18 @@ C[i,z]) — the tightest constraint that every row of A places on B[y,z].
 
 **Reference:** Sanchez, E. (1976). Theorem 5.
 
+The adjoint relationship between Join and Residuate is a special case of the
+quantale-enriched two-variable adjunction framework of Shen & Tang (2021).
+Lambert's quantale V = ([0,1], min, 1) with Gödel implication satisfies their
+Definition 3.3, so Proposition 5.3 applies: Join and Residuate arise as the
+Kan adjunctions induced by the relation matrix φ: A^op ⊗ B → V. The concept
+lattice Mφ = Fix(Residuate ∘ Join) is the complete V-category characterised by
+their Theorem 6.2.
+
+**Reference:** Shen, L., & Tang, X. (2021). Isbell adjunctions and Kan
+adjunctions via quantale-enriched two-variable adjunctions. *Applied
+Categorical Structures*, 29, 823–858.
+
 ## Closure: transitive reachability
 
 Closure iterates Join to fixpoint, computing all transitive connections implied

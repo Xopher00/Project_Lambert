@@ -46,6 +46,19 @@ algebra guarantees convergence in at most 2 steps.
 > *Information Sciences*, 128, 91–103. — Theorem 1: two-step convergence of the
 > `O*`/`A∧` alternation; Theorem 2: stable points form the concept lattice.
 
+The set of all fixed points — the concept lattice Mφ — is characterised more
+generally by Shen & Tang (2021) as the complete V-category of fixed points of
+the Isbell adjunction induced by the relation matrix φ: A^op ⊗ B → V (Theorem
+6.2). This is the categorical home of Lambert's embedding: each column of `emb`
+is an element of Mφ, and the completeness of Mφ as a V-category is why
+multi-head combination by elementwise minimum (lattice meet) produces a valid
+concept rather than an arbitrary vector.
+
+> Shen, L., & Tang, X. (2021). Isbell adjunctions and Kan adjunctions via
+> quantale-enriched two-variable adjunctions. *Applied Categorical Structures*,
+> 29, 823–858. — Theorem 6.2: Mφ = Fix(φ↓φ↑) is a complete V-category;
+> Proposition 5.3: Kan adjunctions recover Join and Residuate.
+
 ---
 
 ## `_concept_fixpoint`

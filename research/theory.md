@@ -56,6 +56,8 @@ This is exactly what `_concept_fixpoint` computes. Bělohlávek (2000) Theorem 1
   — foundation of the max-min semiring; max-min relational composition. Referenced in [tensor](core/tensor.md).
 - Sanchez, E. (1976). Resolution of composite fuzzy relation equations. *Information and Control*, 30, 38–48.
   — greatest solution to `A ∘ B = C` under max-min composition (Theorem 5); basis for `Residuate`, Join, and the attention correction step. Referenced in [tensor](core/tensor.md), [embed](lattice/embed.md), [attention](lattice/attention.md).
+- Shen, L., & Tang, X. (2021). Isbell adjunctions and Kan adjunctions via quantale-enriched two-variable adjunctions. *Applied Categorical Structures*, 29, 823–858.
+  — situates Lambert's Join ⊣ Residuate pair inside the framework of quantale-enriched two-variable adjunctions (Definition 3.3). Lambert's quantale is V = ([0,1], min, 1) with Gödel implication as residuum — one of the paper's canonical cases. Key results: (1) every V-bifunctor φ: A^op ⊗ B → Z induces an Isbell adjunction φ↑ ⊣ φ↓ whose fixed points Mφ form a complete V-category (Theorem 6.2) — this is Lambert's concept lattice; (2) the Kan adjunctions (Proposition 5.3) arising from suitable associated two-variable adjunctions are exactly Lambert's Join and Residuate in vector form (equations 5.iv–5.v); (3) multi-head combination by lattice meet is justified because Mφ is a complete V-category, so arbitrary meets exist. Referenced in [tensor](core/tensor.md), [embed](lattice/embed.md).
 ### Smooth approximations
 
 - Nesterov, Y. (2005). Smooth minimization of non-smooth functions. *Mathematical Programming*, 103(1), 127–152.
