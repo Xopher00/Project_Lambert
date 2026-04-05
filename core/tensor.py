@@ -30,42 +30,7 @@ class Tensor(Activations):
     later for auditing the model's internal reasoning and identifying
     where errors originate.
 
-    # Under review — witness tracking may become redundant as new layers are added.
     """
-
-    def _track_witnesses(self, xs, y, zs, contrib, th):
-        """
-        Record intermediate node y as a witness for each (x, z) pair it connects.
-
-        For every (x, z) pair where y's contribution exceeds the threshold,
-        stores the contribution score in self._witnesses[(x, z)][y]. Called
-        during Join when tracking is enabled.
-
-        Parameters
-        ----------
-        xs : array of int
-            Row indices (x values) active for this y.
-        y : int
-            The intermediate node being evaluated.
-        zs : array of int
-            Column indices (z values) active for this y.
-        contrib : ndarray
-            Contribution scores, shape (len(xs), len(zs)).
-        th : float
-            Threshold below which a witness is not recorded.
-        """
-        if not self.tracking:
-            return
-        i, j = np.where(contrib > th)
-        for ii, jj in zip(i, j):
-            key = (xs[ii], zs[jj])
-            if key not in self._witnesses:
-                self._witnesses[key] = {}
-            self._witnesses[key][y] = contrib[ii, jj]
-
-    def _clear_witnesses(self):
-        """Reset the witness store."""
-        self._witnesses = {}
 
     # v (y: A[x,y] ∧ B[y,z])
     def Join(self, Tensor_A, Tensor_B, temp, threshold=1e-6):
@@ -77,8 +42,7 @@ class Tensor(Activations):
 
             result[x, z] = max over y of min(A[x, y], B[y, z])
 
-        Only non-zero entries are visited for efficiency. If witness tracking
-        is enabled, records each y's contribution for later path reconstruction.
+        Only non-zero entries are visited for efficiency.
 
         Parameters
         ----------
@@ -119,8 +83,6 @@ class Tensor(Activations):
             contrib = self.SmoothMin((a_col[xs, None], b_row[None, zs]), temp, axis=0)
             old = result[ix]
             result[ix] = self.SmoothMax((old, contrib), temp, axis=0)
-
-            self._track_witnesses(xs, y, zs, contrib, threshold) # if witness tracking is enabled, save intermediate nodes y connecting x to z
 
         return result
     

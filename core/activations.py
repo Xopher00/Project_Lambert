@@ -25,9 +25,6 @@ class Activations:
     """
     def __init__(self, temp=1.0):
         self.temp = temp
-        self._witness_cache = []
-        self._witnesses = {}
-        self.tracking = False
 
     # ∨f  ≤  T × ln(+(exp(f/T)))  ≤  ∨f + T × ln(#f)
     def LogSumExp(self, x, temp, axis=None, keepdims=False):
