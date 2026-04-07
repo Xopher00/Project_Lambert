@@ -4,17 +4,19 @@
 
 - **PRD:** `../spec.md`
 - **Sprint:** 5 of 5
-- **Depends on:** Sprint 4 (all tests passing; implementation complete)
+- **Depends on:** Sprint 4 (all tests passing; integration confirmed)
 - **Batch:** 5 (sequential)
 - **Model:** sonnet
 - **Estimated effort:** S
 
 ## Objective
 
-Update the research documentation to reflect that the dead code has been removed, the
-learning rule is implemented, and the multi-hop query path is live. Mark the generation
-gap as closed in `theory.md`. Do not add new theory — only update status and forward
-references.
+Update the research documentation to reflect what was actually implemented across
+Sprints 1–4. Be accurate: describe what exists, how it works, and what its current
+limitations are. Do NOT overstate. Do NOT claim the generation gap is "fully closed"
+— the learning-rule-to-model round-trip (re-embedding after `Learner.learn()`) is
+not yet wired, and that is documented as an open question. Mark what IS done: dead
+code removed, `hop` and `multihop` implemented, `Learner` algebraic rule implemented.
 
 ## File Boundaries
 
@@ -24,22 +26,24 @@ references.
 
 ### Modifies (can touch)
 
-- `research/lattice/explorer.md` — remove or update the §"Redundancies in the current
-  implementation" section to reflect Sprint 1 completion.
-- `research/lattice/embed.md` — update §"Project and Expand" and §"The learning rule"
-  to reflect that both features are now implemented; replace "not wired" / "absent"
-  language with accurate status.
-- `research/theory.md` — update §"The Kan framing" and §"The adjoint triple and
-  multi-hop queries" to note that the left Kan path and learning rule are now
-  implemented; update status language in the generation gap discussion.
+- `research/lattice/explorer.md` — update §"Redundancies in the current implementation"
+  to past tense; Sprint 1 removed `_concept_fixpoint` override and `learn=True` param.
+- `research/lattice/embed.md` — update §"Project and Expand" to describe implemented
+  `hop` and `Query.multihop`; update §"The learning rule" to describe `Learner.learn()`
+  as implemented, with its limitation (R-only update, re-embedding required).
+- `research/theory.md` — update generation gap discussion to reflect current status:
+  left Kan path (`hop`/`multihop`) is implemented; learning rule is implemented at the
+  algebraic layer; the round-trip from `Learner.learn()` to a queryable Lambert model
+  is the remaining open problem.
 
 ### Read-Only (reference but do NOT modify)
 
 - `tests/test_learn.py` — to confirm accurate description of what was implemented
 - `tests/test_multihop.py` — to confirm accurate description of what was implemented
 - `tests/test_integration.py` — to reference integration test names in docs
-- `lattice/embed.py` — to confirm exact method names (for accurate documentation)
-- `query.py` — to confirm exact method names
+- `lattice/embed.py` — to confirm exact method/class names (Embed.hop, Learner.learn)
+- `query.py` — to confirm exact method name (Query.multihop)
+- `lattice/explorer.py` — to confirm dead code is absent
 
 ### Shared Contracts
 
@@ -48,79 +52,108 @@ references.
 ### Consumed Invariants
 
 - `python tools/check_citations.py` must exit 0 after all edits.
-- No new bibliography entries required for this sprint (all cited papers were already
-  integrated in prior sessions).
+- No new bibliography entries required (all cited papers already integrated).
 
 ## Tasks
 
-- [ ] Read the test files (test_learn.py, test_multihop.py, test_integration.py) to
-  understand exactly what was implemented before editing the docs.
+- [ ] Read `lattice/explorer.py` to confirm `_concept_fixpoint` override is absent and
+  `learn=True` parameter is absent from `explore`. Use this as the source of truth for
+  what was removed.
+
+- [ ] Read `lattice/embed.py` to confirm exact signatures for `Embed.hop` and
+  `Learner.learn`. Use these verbatim in documentation updates.
+
+- [ ] Read `query.py` to confirm exact signature for `Query.multihop`.
+
+- [ ] Read `tests/test_integration.py` to know which integration tests exist, so docs
+  can reference them accurately.
+
 - [ ] In `research/lattice/explorer.md`:
-  - Update §"Redundancies in the current implementation" to past tense:
-    "These redundancies have been removed in Sprint 1 of the generation-gap PRD."
-    Keep the explanation of why the override was wrong — it is still valuable theory.
-  - Do NOT remove the section; it documents an important design lesson.
+  - Locate §"Redundancies in the current implementation" (or equivalent section about
+    `_concept_fixpoint` and `learn=True`).
+  - Rewrite to past tense: state that these were removed in Sprint 1 of the
+    generation-gap PRD. Keep the explanation of WHY the override was wrong — it is
+    theoretically instructive. Retain the section; do not delete it.
+
 - [ ] In `research/lattice/embed.md`:
-  - §"Project and Expand": replace the paragraph starting "EmbR is currently not
-    wired into any query path" with a paragraph describing the new `hop` method and
-    `Query.multihop`. Include the method signature from the actual implementation.
-  - §"The learning rule": replace "The operation exists; the layer that calls it ...
-    does not" with a description of the new `learn()` implementation. Reference the
-    Belohlavek (2000) eq. 2 construction and the np.maximum merge. Note the limitation
-    that re-embedding is required after learn for queries to reflect new knowledge.
+  - Locate the paragraph stating EmbR is "not wired into any query path" (or equivalent).
+    Replace with: describe `Embed.hop(q, EmbR, temp)` and `Query.multihop(entity, chain)`
+    as the wiring. Include the actual method signatures from the code. Describe the
+    semantics: one left-Kan step per hop, final projection back to entity space via emb.T.
+  - Locate the paragraph about the learning rule stating "the layer that calls it does not
+    exist" (or equivalent). Replace with: describe `Learner(R).learn(X, Y)` as the
+    implementation. State explicitly: `R_new = np.maximum(R_old, Residuate(Y, X))` (the
+    Belohlavek 2000 eq. 2 construction). State the current limitation: `Learner.learn()`
+    updates R only; callers must re-run `ConceptEmbed` on the updated R to refresh `emb`
+    and `EmbR`, and reconstruct the Lambert model to make new knowledge queryable. This
+    round-trip is the remaining open problem.
+
 - [ ] In `research/theory.md`:
-  - §"The Kan framing": replace "Lambert currently implements only the right Kan path"
-    with a description of both paths now being implemented.
-  - §"The adjoint triple and multi-hop queries": replace future-tense language with
-    present-tense ("the chain is implemented as `Query.multihop`").
-  - Add a brief status note at the top of the §"Query semantics" section or at the
-    end of the generation gap discussion: "As of [date], both Kan directions are
-    implemented. The generation gap described below has been closed."
+  - Locate "Lambert currently implements only the right Kan path" (or equivalent phrase).
+    Update to: both directions are now implemented. Right Kan = `mha.retrieve` (unchanged).
+    Left Kan = `Embed.hop` + `Query.multihop` (new). Learning rule = `Learner.learn()`
+    (new, algebraic layer only).
+  - Locate the generation gap discussion. Add a status note: the left Kan path and
+    algebraic learning rule are implemented. The remaining gap is the re-embedding
+    step: after `Learner.learn()`, a new `ConceptEmbed` + Lambert rebuild is required
+    before new knowledge is queryable via `model.query`. This step is not yet automated.
+  - Do NOT claim the gap is fully closed. Use precise language about what is done.
+
 - [ ] Run `python tools/check_citations.py` and confirm 0 errors.
-- [ ] Proofread all three files for consistency: the descriptions should match the
-  actual method names and signatures in the code.
+
+- [ ] Proofread: method names in docs must exactly match names in code. If a name
+  changed during implementation, use the actual implemented name.
 
 ## Acceptance Criteria
 
-- [ ] `research/lattice/explorer.md` §"Redundancies" uses past tense and references
-  the completed sprint.
-- [ ] `research/lattice/embed.md` §"Project and Expand" describes `hop` and `multihop`
-  as implemented features, not future directions.
-- [ ] `research/lattice/embed.md` §"The learning rule" describes `learn()` as
-  implemented, with the np.maximum merge documented and the re-embedding caveat noted.
+- [ ] `research/lattice/explorer.md` no longer describes `_concept_fixpoint` override
+  or `learn=True` as present features; uses past tense and explains why they were removed.
+- [ ] `research/lattice/embed.md` §"Project and Expand" (or equivalent) describes
+  `Embed.hop` and `Query.multihop` as implemented with their actual signatures.
+- [ ] `research/lattice/embed.md` §"The learning rule" describes `Learner.learn()` as
+  implemented; includes the `np.maximum` merge formula; states the re-embedding limitation.
 - [ ] `research/theory.md` no longer contains the phrase "Lambert currently implements
-  only the right Kan path" (or equivalent future-tense claim about the left Kan being
-  absent).
+  only the right Kan path" (or any equivalent present-tense claim that the left Kan is
+  absent). The generation gap discussion accurately reflects current status.
 - [ ] `python tools/check_citations.py` exits 0.
-- [ ] `python -m pytest tests/ -v` exits 0 (unchanged — no code was touched).
+- [ ] `python -m pytest tests/ -v` exits 0 (docs-only sprint; no code was touched).
 
 ## Verification
 
 - [ ] `python tools/check_citations.py` exits 0
-- [ ] `python -m pytest tests/ -v` exits 0 (regression check — docs only were changed)
-- [ ] `grep -n "currently implements only the right Kan" research/theory.md` returns 0
+- [ ] `python -m pytest tests/ -v` exits 0 (regression check — only docs were changed)
+- [ ] `grep -rn "only the right Kan" research/` returns 0 matches
 
 ## Context
 
-The key phrases to find and update in each file:
+### Accurate status of each feature after Sprints 1–4
+
+| Feature | Status | Where implemented | Limitation |
+|---------|--------|-------------------|-----------|
+| Dead code removal (`_concept_fixpoint` override, `learn=True`) | Done | `lattice/explorer.py` Sprint 1 | None |
+| Algebraic learning rule (`Learner.learn`) | Done | `lattice/embed.py` Sprint 2 | R-only update; re-embedding required for query |
+| Left Kan hop (`Embed.hop`) | Done | `lattice/embed.py` Sprint 3 | None |
+| Multi-hop query (`Query.multihop`) | Done | `query.py` Sprint 3 | Provenance empty (no MHA.retrieve call) |
+| `Learner` ↔ `Lambert` round-trip | Not done | Open question in PRD §14 | Requires `refit()` API or equivalent |
+| Integration test (run + query + multihop) | Done | `tests/test_integration.py` Sprint 4 | — |
+
+### Key phrases to update in each file
 
 **`research/lattice/embed.md`:**
-- "EmbR is currently **not wired into any query path**" — update
-- "The operation exists; the layer that calls it ... **does not**" — update
+- "EmbR is currently not wired into any query path" → describe `hop` and `multihop`
+- "The operation exists; the layer that calls it ... does not" → describe `Learner.learn()`
 
 **`research/lattice/explorer.md`:**
-- "These are not blocking issues" / "make phase 2 harder to reason about" — update
-  to past tense since the override is now removed
+- Present-tense descriptions of `_concept_fixpoint` override → past tense + Sprint 1 reference
+- Present-tense descriptions of `learn=True` dead parameter → past tense + Sprint 1 reference
 
 **`research/theory.md`:**
-- "Lambert currently implements **only the right Kan path**" — update
-- "The missing generation capability is the left Kan path" — update
-- "The algebra is present; the query path is not" — update
+- "Lambert currently implements only the right Kan path" → both paths implemented; learning
+  rule implemented at algebra layer; re-embedding round-trip is the remaining gap
 
-When writing updated text: be accurate, not promotional. If the implementation has
-known limitations (e.g., re-embedding required after learn), document them clearly.
-The research notes are the authoritative theoretical record — they should remain
-honest about what the system does and does not do.
+When writing: be precise, not promotional. The research notes are the authoritative
+theoretical record. "The round-trip from Learner.learn() to a queryable Lambert model
+is not yet automated" is accurate and useful. "The generation gap is closed" is false.
 
 ## Agent Notes (filled during execution)
 

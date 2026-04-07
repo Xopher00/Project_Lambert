@@ -17,28 +17,28 @@
       "id": 2,
       "file": "sprints/02-learning-rule.md",
       "title": "Learning rule",
-      "status": "not_started",
+      "status": "complete",
       "depends_on": [1],
       "batch": 2,
       "model": "sonnet",
       "branch": null,
-      "merged": false
+      "merged": true
     },
     {
       "id": 3,
       "file": "sprints/03-multihop-traversal.md",
       "title": "Multi-hop traversal",
-      "status": "not_started",
+      "status": "complete",
       "depends_on": [2],
       "batch": 3,
       "model": "sonnet",
       "branch": null,
-      "merged": false
+      "merged": true
     },
     {
       "id": 4,
       "file": "sprints/04-integration-tests.md",
-      "title": "Integration tests",
+      "title": "Integration tests (revised: real Lambert + fix test_embed)",
       "status": "not_started",
       "depends_on": [3],
       "batch": 4,
@@ -49,7 +49,7 @@
     {
       "id": 5,
       "file": "sprints/05-research-notes-update.md",
-      "title": "Research notes update",
+      "title": "Research notes update (revised: accurate status, no overclaim)",
       "status": "not_started",
       "depends_on": [4],
       "batch": 5,
