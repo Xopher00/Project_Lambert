@@ -34,6 +34,7 @@ Category theory is a branch of mathematics that studies structure and relationsh
 - Shen, L., & Tang, X. (2021). Isbell adjunctions and Kan adjunctions via quantale-enriched two-variable adjunctions. Applied Categorical Structures, 29, 823–858. DOI: 10.1007/s10485-021-09654-w. <!-- [shen2021] -->
 - Kan, D. M. (1958). Adjoint functors. *Transactions of the American Mathematical Society*, 87(2), 294–329. DOI: 10.2307/1993102. <!-- [kan1958] --> 
 - Schultz, P., Wisnesky, R., Vasilakopoulou, C., & Spivak, D. I. (2017). Algebraic databases. *Theory and Applications of Categories*, 32(16), 547–619. Free PDF: http://www.tac.mta.ca/tac/volumes/32/16/32-16abs.html <!-- [schultz2017] --> 
+Schultz, P., & Wisnesky, R. (2025). Algebraic data integration. *Journal of Functional Programming*, 27. DOI: 10.1017/S0956796817000168.  arXiv:1503.03571v8. <!-- [schultz2025] --> 
 - Fong, B., & Spivak, D. I. (2019). *An Invitation to Applied Category Theory: Seven Sketches in Compositionality*. Cambridge University Press. Free PDF: https://arxiv.org/abs/1803.05316. <!-- [fong2019] --> 
 
 ### Historical and philosophical context 
