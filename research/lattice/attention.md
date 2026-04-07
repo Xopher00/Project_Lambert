@@ -115,11 +115,13 @@ explicitly stored.
 
 **Grounding (the correction / Δ direction).** The correction step in `_step`
 pulls the raw `Attend` output back to the greatest entity-space vector the current
-embedding can actually support, via `Residuate`. This is the right-adjoint
-direction — the universal, restrictive direction. In the CQL triple it corresponds
-to Δ_F (the pullback functor), which restricts instances along a schema morphism
-without adding content. Residuate finds the greatest solution consistent with the
-stored relation; the correction step clips the query to stay within that solution.
+embedding can actually support, via `Residuate`. This is the middle functor
+direction — the restrictive direction. In the CQL triple it corresponds to Δ_F
+(the pullback functor), which restricts instances along a schema morphism without
+adding content. Δ is the middle functor in Σ_F ⊣ Δ_F ⊣ Π_F: it is right adjoint
+to Σ_F and left adjoint to Π_F. Π_F (the learning rule direction) is the right
+adjoint. Residuate finds the greatest solution consistent with the stored relation;
+the correction step clips the query to stay within that solution.
 
 **Learning / construction (the right pushforward / Π direction).** The learning
 rule `W = Residuate(Y, X)` (described in `embed.md`) is the right-adjoint extreme:
@@ -170,8 +172,9 @@ matrix, and both Kan extensions (left and right) exist within it.
 > schema mapping; Σ as left pushforward (coend / existential), Δ as pullback, Π as
 > right pushforward (end / universal).
 
-> Schultz, P., Spivak, D. I., Vasilakopoulou, C. & Wisnesky, R. (2025). Algebraic
-> Databases. *arXiv:1602.03501v3.* — §7: Definition 7.1 (Δ_F as pullback), Proposition
+> Schultz, P., Spivak, D. I., Vasilakopoulou, C. & Wisnesky, R. (2017). Algebraic
+> Databases. *Theory and Applications of Categories*, 32(16), 547–619.
+> arXiv:1602.03501v3. — §7: Definition 7.1 (Δ_F as pullback), Proposition
 > 7.3 (Π_F as right Kan extension right adjoint to Δ_F), Proposition 7.4 (Σ_F as
 > left Kan extension left adjoint to Δ_F); Lemma 8.18: Σ_F ≅ Λ_{F̂} ⊣ Δ_F ≅ Λ_{F̃} ≅
 > Γ_{F̃} ⊣ Π_F ≅ Γ_{F̃} establishing the full adjoint triple in the equipment Data.

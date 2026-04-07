@@ -220,8 +220,9 @@ active at runtime.
 > §4.2: the three adjoint data-migration functors Σ_F ⊣ Δ_F ⊣ Π_F; intuition: Δ as
 > projection, Π as product/filter, Σ as union/merge.
 
-> Schultz, P., Spivak, D. I., Vasilakopoulou, C. & Wisnesky, R. (2025). Algebraic
-> Databases. *arXiv:1602.03501v3.* — §7, Propositions 7.3–7.4: Π_F as right Kan
+> Schultz, P., Spivak, D. I., Vasilakopoulou, C. & Wisnesky, R. (2017). Algebraic
+> Databases. *Theory and Applications of Categories*, 32(16), 547–619.
+> arXiv:1602.03501v3. — §7, Propositions 7.3–7.4: Π_F as right Kan
 > extension (right adjoint to Δ_F), Σ_F as left Kan extension (left adjoint to Δ_F);
 > §8.18: full triple Σ_F ≅ Λ_{F̂} ⊣ Δ_F ⊣ Π_F ≅ Γ_{F̃} in the equipment Data.
 
