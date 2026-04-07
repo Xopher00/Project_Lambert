@@ -37,8 +37,10 @@ machine-verifiable after the relevant sprint completes.
 ## Learn Merge is Max-Based
 
 - **Owner:** `lattice/embed.py :: Learner` (or `Embed.learn`)
-- **Preconditions:** Caller supplies X: (n_patterns, n_entities) and
-  Y: (n_patterns, n_attributes) compatible with R's shape.
+- **Preconditions:** Caller supplies Y: (n_patterns, n_entities) and
+  X: (n_patterns, n_attributes) compatible with R's shape. Argument order follows
+  W = Y ⊗ₙ Xᵀ = Residuate(Y, X) (Belohlavek 2000 eq. 2; ⊗ is the Gödel residuum,
+  not min-composition — this is Residuate, not Join).
 - **Postconditions:** `R_new = np.maximum(R_old, Residuate(Y, X))`.
   Existing attractors are preserved (R_new >= R_old element-wise).
 - **Invariants:** The merge operation is always elementwise max. Never replace R
@@ -46,7 +48,26 @@ machine-verifiable after the relevant sprint completes.
   the join (supremum) over stored pattern contributions.
 - **Verify:** `python -m pytest tests/test_learn.py::test_learn_merge_is_max -v` exits 0
 - **Fix:** If old attractors are being lost, confirm the merge is `np.maximum` and
-  not assignment (`R = delta_R`).
+  not assignment (`R = delta_R`). If shapes are wrong, confirm Y columns = n_entities
+  and X columns = n_attributes (not swapped).
+
+---
+
+## EmbR Square Constraint
+
+- **Owner:** `lattice/embed.py :: ConceptEmbed`
+- **Preconditions:** `ConceptEmbed` is called on a relation matrix R with shape
+  `(n_entities, n_attributes)` and an embedding `emb: (n_entities, k)`.
+- **Postconditions:** `EmbR = emb.T ∘ R ∘ emb` has shape `(k, n_attributes_projected)`.
+  EmbR is square `(k, k)` only when `n_attributes == n_entities`. For rectangular R,
+  the current `Project` implementation may produce a non-square result.
+- **Invariants:** Sprint 3 must validate `EmbR.shape[0] == EmbR.shape[1]` for every
+  head in a multihop chain before performing any hop. If any EmbR is non-square, raise
+  `ValueError` identifying the head name and actual shape.
+- **Verify:** `python -m pytest tests/test_multihop.py::test_multihop_shape_mismatch -v` exits 0
+- **Fix:** If EmbR is non-square, the relation matrix R for that head has
+  `n_attributes ≠ n_entities`. Either use a square relation matrix, or implement a
+  generalised projection that handles rectangular R (out of scope for this PRD).
 
 ---
 
@@ -75,6 +96,23 @@ machine-verifiable after the relevant sprint completes.
   re-introduced in future edits.
 - **Verify:** `python -c "import ast; src=open('lattice/explorer.py').read(); tree=ast.parse(src); names=[n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]; assert '_concept_fixpoint' not in names or True; print('ok')"` — more precisely: `grep -c 'def _concept_fixpoint' lattice/explorer.py` must return 0.
 - **Fix:** If the override reappears, remove it. The parent implementation is correct.
+
+---
+
+## QueryResult Mode Vocabulary
+
+- **Owner:** `query.py :: Query` (and Sprint 3's `multihop` implementation)
+- **Preconditions:** A `QueryResult` is returned from any Query method.
+- **Postconditions:** `QueryResult.mode` is one of the declared vocabulary strings.
+- **Invariants:** The set of valid mode strings is: `'forward'`, `'intersection'`,
+  `'backward'`, `'multihop'`. The string `'multihop'` is defined by Sprint 3 and
+  consumed by Sprint 4's integration tests. It must not change (no underscores,
+  no suffix). Any new query mode must be declared here before use.
+- **Verify:** `grep -E "mode='multihop'" query.py` returns at least one match (after
+  Sprint 3 is complete).
+- **Fix:** If Sprint 4's `assert result.mode == 'multihop'` fails, confirm that
+  Sprint 3's `multihop` method sets `mode='multihop'` exactly (check for typos such
+  as `'multi_hop'` or `'multihop_chain'`).
 
 ---
 

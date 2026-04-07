@@ -108,10 +108,10 @@ relation types), the query should raise a descriptive error rather than return a
 
 - Belohlavek (2000) `fuzzy-logic-bidirectional-associative-mem.pdf`: Algorithm eq. 2
   gives the FLBAM weight construction rule directly. The construction is `I_ij =
-  ∨_p A^p(g_i) ⊗ B^p(m_j)` — which in Lambert's algebra is `R = Join(A.T, B)` across
-  all stored pattern pairs (taking the max over patterns, using the Gödel residuum for
-  each pair). Theorem 6 proves perfect recall if the training set forms a consistent
-  conceptual structure.
+  ∨_p A^p(g_i) ⊗ B^p(m_j)` where `⊗` is the Gödel residuum — which in Lambert's
+  algebra is `R = Residuate(Y, X)` (not Join; the ⊗ in Belohlavek is the Gödel
+  residuum, i.e., Implies / Residuate, not min-composition). Theorem 6 proves perfect
+  recall if the training set forms a consistent conceptual structure.
 
 - Domingos (2025) `tensor-logic.pdf`: The Tucker decomposition reduces rank-3 relational
   tensors to a core and three factor matrices. Multi-hop queries in tensor logic are
@@ -256,6 +256,12 @@ The existing data model is unchanged. The relevant structures are:
 
 **EmbR (Tucker core):** `ndarray, shape (k, k)` — stored in
 `self.heads[head_name]['EmbR']` after `Lambert.run()`. One per head.
+**Constraint:** EmbR has shape `(k, k)` (square) only when `n_attributes == n_entities`
+for that head's relation matrix. For rectangular relation matrices (`n_attributes ≠
+n_entities`), the current `Project` implementation (`emb.T ∘ R ∘ emb`) may produce a
+non-square result or fail. Sprint 3 must validate `EmbR.shape[0] == EmbR.shape[1]`
+before chaining and raise `ValueError` if the constraint is violated, with a message
+identifying the head name and the actual shape.
 
 **Relation matrix R:** `ndarray, shape (n_entities, n_attributes)` — the primary data
 structure. The learning rule updates this in place (or returns a new R, to be decided).
@@ -290,9 +296,11 @@ def hop(self, q: np.ndarray, EmbR: np.ndarray, temp: float) -> np.ndarray:
 ```python
 def learn(self, X: np.ndarray, Y: np.ndarray) -> np.ndarray:
     """Construct weight update from pattern pairs and merge into R.
-    X: (n_patterns, n_entities) — input patterns (entity-space)
-    Y: (n_patterns, n_attributes) — output patterns (attribute-space)
+    X: (n_patterns, n_attributes) — output patterns (attribute-space)
+    Y: (n_patterns, n_entities) — input patterns (entity-space)
     Returns updated R: (n_entities, n_attributes)
+    Merge: R_new = np.maximum(R_old, Residuate(Y, X))
+    Note: argument order follows W = Y ⊗ₙ Xᵀ = Residuate(Y, X) from Belohlavek (2000).
     """
 ```
 
@@ -302,6 +310,15 @@ def multihop(self, entity: str, chain: list[str], top_k: int = 10) -> QueryResul
     """Multi-hop relational inference via chained left-Kan extensions.
     entity: starting entity name
     chain: ordered list of head names to traverse
+
+    Seed embedding: the initial concept-space vector q is taken from the FIRST
+    head's per-head emb matrix: q = heads[chain[0]]['emb'][entity_idx, :].
+    This requires all heads in the chain to have the same k (enforced by the
+    EmbR shape contract). If heads have different k values, a ValueError is raised
+    before any hop is performed.
+    Final projection: after the last hop, entity scores are obtained via
+    Join(result[np.newaxis,:], heads[chain[0]]['emb'].T)[0], using the first head's
+    emb as the projection basis.
     """
 ```
 
@@ -311,10 +328,12 @@ def multihop(self, entity: str, chain: list[str], top_k: int = 10) -> QueryResul
 
 | Concept | Owner | Format/Values | Verify Command |
 |---------|-------|---------------|----------------|
-| EmbR shape | `lattice/embed.py :: ConceptEmbed` | `(k, k)` where k = `emb.shape[1]` for the head | `python -c "import sys; sys.path.insert(0,'.'); from model import Lambert; ..."` — verified by test |
-| Hop input/output type | `lattice/embed.py :: hop` | Input and output are both `(k,)` concept-space vectors; never entity-space vectors | `pytest tests/test_multihop.py::test_hop_shape` exits 0 |
-| Learn merge is max-based | `lattice/embed.py :: Learner` | `R_new = np.maximum(R_old, Residuate(Y, X))` — never replace, never average | `pytest tests/test_learn.py::test_learn_preserves_old` exits 0 |
-| Entity-space projection | `lattice/embed.py :: Expand` | Multi-hop final result is always projected back through `emb` before ranking | `pytest tests/test_multihop.py::test_multihop_entity_space` exits 0 |
+| EmbR shape | `lattice/embed.py :: ConceptEmbed` | `(k, k)` where k = `emb.shape[1]` for the head; square only when `n_attributes == n_entities` | `python -c "import sys; sys.path.insert(0,'.'); from model import Lambert; ..."` — verified by test |
+| EmbR square constraint | `lattice/embed.py :: ConceptEmbed` | Sprint 3 must validate `EmbR.shape[0] == EmbR.shape[1]` per chain head; raise `ValueError` if not | `pytest tests/test_multihop.py::test_multihop_shape_mismatch` exits 0 |
+| Hop input/output type | `lattice/embed.py :: hop` | Input and output are both `(k,)` concept-space vectors; seed from first head's emb, never from R rows | `pytest tests/test_multihop.py::test_hop_shape` exits 0 |
+| Learn merge is max-based | `lattice/embed.py :: Learner` | `R_new = np.maximum(R_old, Residuate(Y, X))`; Y: (n_patterns, n_entities), X: (n_patterns, n_attributes) — never replace, never average | `pytest tests/test_learn.py::test_learn_preserves_old` exits 0 |
+| Entity-space projection | `lattice/embed.py :: Expand` | Multi-hop final result is always projected back through first head's `emb` before ranking | `pytest tests/test_multihop.py::test_multihop_entity_space` exits 0 |
+| QueryResult mode vocabulary | `query.py :: Query` | Valid modes: `'forward'`, `'intersection'`, `'backward'`, `'multihop'` (exact strings) | `grep -E "mode='multihop'" query.py` returns a match after Sprint 3 |
 | Dead code absent | `lattice/explorer.py` | No `_concept_fixpoint` override; no `learn` parameter on `explore` | `python -c "import ast; ..."` — verified by test assertion |
 
 ---

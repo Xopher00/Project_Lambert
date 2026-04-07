@@ -45,38 +45,38 @@ lattice closure.
 
 ## Tasks
 
-- [ ] Read `research/lattice/explorer.md` §"Redundancies in the current implementation"
+- [x] Read `research/lattice/explorer.md` §"Redundancies in the current implementation"
   to confirm the exact methods and parameters to remove.
-- [ ] In `lattice/explorer.py`: delete the `_concept_fixpoint` method override entirely.
+- [x] In `lattice/explorer.py`: delete the `_concept_fixpoint` method override entirely.
   The parent `Embed._concept_fixpoint` (alternating Residuate steps) is the correct
   implementation and will be used automatically after removal.
-- [ ] In `lattice/explorer.py`: remove `learn=True` (or `learn=False`) from the `explore`
+- [x] In `lattice/explorer.py`: remove `learn=True` (or `learn=False`) from the `explore`
   method signature. Remove any reference to `learn` inside the method body if any exists.
   If it is only in the signature and never read, this is a single-line change.
-- [ ] Grep for any other dead parameters or unreferenced local variables introduced in the
+- [x] Grep for any other dead parameters or unreferenced local variables introduced in the
   same function while you have the file open. Document findings in Agent Notes. Do NOT
   fix anything outside the two named items unless they are trivially one-line removals
   with no semantic risk.
-- [ ] Run `python -m pytest tests/test_core.py -v` and confirm 13/13 pass.
-- [ ] Run `python tools/check_citations.py` and confirm it exits 0.
-- [ ] Run a quick smoke test: `python -c "from lattice.explorer import CategoryExplorer;
+- [x] Run `python -m pytest tests/test_core.py -v` and confirm 13/13 pass.
+- [x] Run `python tools/check_citations.py` and confirm it exits 0.
+- [x] Run a quick smoke test: `python -c "from lattice.explorer import CategoryExplorer;
   print('ok')"` to confirm the import still works.
 
 ## Acceptance Criteria
 
-- [ ] `lattice/explorer.py` contains no `_concept_fixpoint` method defined at the
+- [x] `lattice/explorer.py` contains no `_concept_fixpoint` method defined at the
   `CategoryExplorer` class level (the class no longer overrides the parent method).
-- [ ] `explore` in `CategoryExplorer` has no `learn` parameter in its signature.
-- [ ] `python -m pytest tests/test_core.py -v` exits 0 (13/13).
-- [ ] `python -c "from lattice.explorer import CategoryExplorer; print('ok')"` exits 0.
-- [ ] `python tools/check_citations.py` exits 0.
+- [x] `explore` in `CategoryExplorer` has no `learn` parameter in its signature.
+- [x] `python -m pytest tests/test_core.py -v` exits 0 (13/13).
+- [x] `python -c "from lattice.explorer import CategoryExplorer; print('ok')"` exits 0.
+- [x] `python tools/check_citations.py` exits 0.
 
 ## Verification
 
-- [ ] `python -m pytest tests/test_core.py -v` exits 0
-- [ ] `python -c "from lattice.explorer import CategoryExplorer; print('ok')"` exits 0
-- [ ] `python tools/check_citations.py` exits 0
-- [ ] `grep -c '_concept_fixpoint' lattice/explorer.py` returns 0
+- [x] `python -m pytest tests/test_core.py -v` exits 0
+- [x] `python -c "from lattice.explorer import CategoryExplorer; print('ok')"` exits 0
+- [x] `python tools/check_citations.py` exits 0
+- [x] `grep -c '_concept_fixpoint' lattice/explorer.py` returns 0
 
 ## Context
 
@@ -101,9 +101,21 @@ better.
 
 ## Agent Notes (filled during execution)
 
-- Assigned to: [Agent ID / session]
-- Started: [timestamp]
-- Completed: [timestamp]
-- Decisions made: []
-- Assumptions: []
-- Issues found: []
+- Assigned to: claude-sonnet-4-6 / session 2026-04-07
+- Started: 2026-04-07 (prior session — exact timestamp not recorded)
+- Completed: 2026-04-07T15:xx (verified and accepted 2026-04-07T session 7)
+- Decisions made:
+  - Both removals were already applied before this sprint was formally executed. The dead
+    code (`_concept_fixpoint` override and `learn=True` parameter) had been removed during
+    earlier cleanup work. Sprint accepted as complete on verification.
+- Assumptions:
+  - The prior removal was complete and correct — confirmed by grep returning no matches and
+    all 13 tests passing without modification.
+- Issues found:
+  - No other dead parameters or unreferenced locals found in `explore` beyond the two named
+    items. The `covered` local variable in `explore` is actively used. Nothing else to remove.
+- Verification results (2026-04-07):
+  - `pytest tests/test_core.py -v`: 13/13 passed (0.11s)
+  - `python -c "from lattice.explorer import CategoryExplorer; print('ok')"`: ok
+  - `python tools/check_citations.py`: ok — 5 citations checked against 58 bibliography entries
+  - `grep -c '_concept_fixpoint' lattice/explorer.py`: 0 (exit code 1 = no match)

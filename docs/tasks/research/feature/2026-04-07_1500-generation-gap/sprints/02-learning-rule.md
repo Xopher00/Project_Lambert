@@ -41,9 +41,11 @@ become stable attractors while existing attractors are preserved.
   ```python
   def learn(self, X: np.ndarray, Y: np.ndarray) -> np.ndarray:
       """
-      X: (n_patterns, n_entities) — input patterns (entity-space row vectors)
-      Y: (n_patterns, n_attributes) — output patterns (attribute-space row vectors)
+      X: (n_patterns, n_attributes) — output patterns (attribute-space row vectors)
+      Y: (n_patterns, n_entities)   — input patterns (entity-space row vectors)
       Returns updated R: (n_entities, n_attributes)
+      Merge: R_new = np.maximum(R_old, Residuate(Y, X))
+      Argument order follows W = Y ⊗ₙ Xᵀ = Residuate(Y, X) (Belohlavek 2000 eq. 2).
       """
   ```
 
@@ -51,9 +53,9 @@ become stable attractors while existing attractors are preserved.
 
 - Learn merge is max-based: `R_new = np.maximum(R_old, Residuate(Y, X))`.
   Never replace R, never average.
-- Input validation: X.shape must be compatible with R (X.shape[1] == R.shape[0]);
-  Y.shape must be compatible with R (Y.shape[1] == R.shape[1]). Raise `ValueError`
-  with descriptive message on mismatch.
+- Input validation: Y.shape[1] must match R.shape[0] (n_entities);
+  X.shape[1] must match R.shape[1] (n_attributes). Raise `ValueError` with a
+  descriptive message that includes the expected and actual shapes on mismatch.
 
 ## Tasks
 
@@ -67,8 +69,13 @@ become stable attractors while existing attractors are preserved.
   Agent Notes with reasoning.
 - [ ] Implement the learning rule in `lattice/embed.py`. Requirements:
   - Call `self.Residuate(Y, X, temp=0)` (exact, T=0 for the construction step).
+    Arguments: Y (n_patterns, n_entities), X (n_patterns, n_attributes) — follows
+    W = Y ⊗ₙ Xᵀ = Residuate(Y, X). The result has shape (n_entities, n_attributes)
+    matching R.
   - Merge result into R via `np.maximum(R, delta_R)`.
-  - Validate X and Y shapes before computation; raise `ValueError` on mismatch.
+  - Validate shapes before computation: Y.shape[1] must equal R.shape[0] (n_entities);
+    X.shape[1] must equal R.shape[1] (n_attributes). Raise `ValueError` with a message
+    that includes the expected shapes and the actual shapes on mismatch.
   - Do not update `emb` or `EmbR` automatically — R update only. Document this
     limitation in a docstring: "Call ConceptEmbed on updated R to refresh embeddings."
 - [ ] Write `tests/test_learn.py` with the following test cases:

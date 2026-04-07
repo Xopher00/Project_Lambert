@@ -6,12 +6,12 @@
       "id": 1,
       "file": "sprints/01-dead-code-removal.md",
       "title": "Dead code removal",
-      "status": "not_started",
+      "status": "complete",
       "depends_on": [],
       "batch": 1,
       "model": "sonnet",
       "branch": null,
-      "merged": false
+      "merged": true
     },
     {
       "id": 2,

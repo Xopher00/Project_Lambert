@@ -58,6 +58,11 @@ relational inference.
   ```
 - EmbR shape contract: all EmbR matrices chained must have the same k. Raise
   `ValueError` if shapes differ.
+- EmbR square constraint: each EmbR in the chain must satisfy `EmbR.shape[0] ==
+  EmbR.shape[1]`. Raise `ValueError` if not, including the head name and actual shape.
+- `QueryResult.mode` for multihop queries is exactly the string `'multihop'` (no
+  underscores between 'multi' and 'hop', no trailing suffix). This string is consumed
+  by Sprint 4's integration tests and must not be changed without updating both sprints.
 
 ### Consumed Invariants
 
@@ -82,17 +87,21 @@ relational inference.
   - Validate: `q.shape == (EmbR.shape[0],)` and `EmbR.shape[0] == EmbR.shape[1]`.
     Raise `ValueError` on mismatch.
 - [ ] Implement `multihop(entity, chain, top_k)` on `Query` in `query.py`:
-  - Resolve entity to an index; get its embedding row: `q = emb[entity_idx, :]`.
+  - Validate that all EmbR matrices in the chain have the same shape AND that each is
+    square (`shape[0] == shape[1]`). Raise `ValueError` before any hop if not, with a
+    message that includes the head names and their shapes.
+  - Resolve entity to an index; get its concept-space seed from the FIRST head's emb:
+    `q = heads[chain[0]]['emb'][entity_idx, :]` (shape `(k,)`). Do NOT use
+    `R[entity_idx, :]` (that is entity-space, not concept-space).
   - For each head name in `chain`, look up `heads[name]['EmbR']` and call
     `embed.hop(q, EmbR, temp=model.attn_temp)`. The `embed` instance can be
     constructed from `Embed()` (stateless operations) or obtained from the model.
-  - Validate that all EmbR matrices in the chain have the same shape. Raise
-    `ValueError` if not, with a message that includes the head names and their shapes.
-  - After the final hop, project back to entity space:
+  - After the final hop, project back to entity space using the first head's emb:
+    `emb = heads[chain[0]]['emb']`
     `entity_scores = embed.Join(result[np.newaxis,:], emb.T, temp=model.attn_temp)[0]`.
   - Rank using `_rank`, build provenance using available intents (may be empty for a
     pure multi-hop — document this in a docstring), return a `QueryResult` with
-    `mode='multihop'`.
+    `mode='multihop'` (exact string — consumed by Sprint 4 integration tests).
 - [ ] Write `tests/test_multihop.py` with the following test cases:
   - `test_hop_shape`: `hop(q, EmbR, temp=0)` returns a vector of shape `(k,)`.
   - `test_hop_reachability`: on a synthetic 3-concept EmbR with one nonzero path
