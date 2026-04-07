@@ -53,9 +53,41 @@ Lambert's attention mechanism performs retrieval over concept embeddings using m
 #### **Provenance:**
 Because every conclusion is a formal concept, provenance is a structural property of the lattice the computation produces — not added on top of it. The concept itself is the proof: its extent identifies which entities are implicated, its intent identifies why [(Green et. al., 2007)](https://dl.acm.org/doi/10.1145/1265530.1265535).
 
+## Project Structure
+
+The codebase is organised as a layered stack. Each layer inherits from the one below.
+
+```
+core/
+  algebra.py      — base constants (Top, Bottom), Max, Implies, and arithmetic helpers
+  activations.py  — temperature-controlled smooth operators (LogSumExp, SmoothMax, SmoothMin, SoftMax)
+  fixpoint.py     — FixpointIterator: iterates any operator to convergence with energy-derived temperature annealing
+  tensor.py       — relational operations (Join, Residuate, Closure) built on top of Activations
+
+lattice/
+  embed.py        — concept embedding: selects representative formal concepts from a relation matrix
+  attention.py    — single-head and multi-head retrieval over concept embeddings via fixpoint iteration
+  explorer.py     — CategoryExplorer: systematic discovery and closure of the full concept lattice
+
+model.py          — Lambert: top-level pipeline (chunking, embedding, exploration, feature mapping)
+query.py          — Query: high-level interface for entity and feature retrieval with provenance
+
+legacy/
+  lattice.py      — earlier Concept/Lattice utilities, superseded by the attention and explorer layers
+  language.py     — LLM-based category labeller (not currently wired into the pipeline)
+  provenance/     — retired witness-based proof tree implementation
+```
+
+The `tests/` directory contains Jupyter notebooks covering join operations, attention, embeddings, and domain-specific experiments (knowledge graphs, PyPI dependencies, countries). Research notes are in `research/`.
+
 ## Status
 
-The core algebraic framework, embedding, attention, and lattice exploration components are implemented and functional. The system discovers multi-relational concepts invisible to standard similarity measures, and produces fully traceable provenance via the concept lattice.
+The full pipeline — relational algebra, concept embedding, multi-head attention, lattice exploration, and the `Lambert`/`Query` interface — is implemented and functional. The system discovers multi-relational concepts invisible to standard similarity measures. Provenance is structural: the concept lattice identifies which features caused each entity grouping, with no separate mechanism required.
+
+**Known gaps:**
+
+- The Tucker core `EmbR` is computed but not wired into any query path. Chaining `Join(q, EmbR)` across relation types would support multi-hop inference and generation; currently all queries go through direct embedding retrieval.
+- The learning rule (`W = Residuate(Y, X)`) is algebraically present but has no calling layer. The model reads relation matrices but cannot accumulate new knowledge incrementally.
 
 **Active research directions:**
 

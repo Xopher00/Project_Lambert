@@ -72,6 +72,46 @@ their Theorem 6.2.
 adjunctions via quantale-enriched two-variable adjunctions. *Applied
 Categorical Structures*, 29, 823–858.
 
+The Join ⊣ Residuate adjoint pair is a specific instance of a **Kan extension** — one
+of the fundamental constructions in category theory. Given a functor (here: the relation
+matrix φ: A^op ⊗ B → V), the right Kan extension along φ produces the greatest solution
+consistent with φ, and the left Kan extension produces the least co-solution. In the
+quantale-enriched setting, these are exactly Residuate (right Kan) and Join (left Kan)
+— Shen & Tang (2021) use the name "Kan adjunctions" explicitly (Proposition 5.3) to
+identify them as such.
+
+The same construction appears in the **Categorical Query Language (CQL)** of Schultz,
+Wisnesky et al. (2017). CQL models a database schema as a category and an instance as a
+functor from schema to Set. Data migration along a functor F: S → T between schemas
+decomposes into an adjoint triple:
+
+```
+Σ_F  ⊣  Δ_F  ⊣  Π_F
+```
+
+where Δ_F is restriction (pull data back along F), Σ_F is the left Kan extension
+(push forward — existential: "there exists a row that maps to..."), and Π_F is the
+right Kan extension (push forward — universal: "for all rows that map to..."). Every
+well-typed query in CQL is one of these three operations, or a composition of them.
+
+Lambert's operations are the same triple, restricted to the quantale V = ([0,1], min, 1):
+
+| CQL operation | Lambert operation | Semantics |
+|---|---|---|
+| Δ_F (restriction) | slice R by active rows/columns | fix context, read known values |
+| Σ_F (left Kan / existential) | Join(q, R) | forward inference: q reaches z if ∃y |
+| Π_F (right Kan / universal) | Residuate(R, q) | backward inference: greatest B s.t. A∘B ≤ q |
+
+The concept fixpoint — alternating Residuate(R, ·) and Residuate(R.T, ·) — is
+restriction followed by the right Kan extension in each direction, settling to the
+fixed point of their composition: the formal concept containing q.
+
+**Reference:** Schultz, P., Wisnesky, R., Vasilakopoulou, C., & Spivak, D. I. (2017). Algebraic databases.
+*Theory and Applications of Categories*, 32(16), 547–619.  cite{schultz2017}
+
+**Reference:** Kan, D. M. (1958). Adjoint functors. *Transactions of the American
+Mathematical Society*, 87(2), 294–329.  cite{kan1958}
+
 ## Closure: transitive reachability
 
 Closure iterates Join to fixpoint, computing all transitive connections implied
@@ -129,6 +169,7 @@ a conclusion (x relates to z), the witnesses identify exactly which intermediate
 entities justified it and how strongly. This makes the system's reasoning
 auditable by construction.
 
-Witness tracking is currently under review. As the concept lattice layer
-matures, lattice traversal paths may supersede explicit witness-based proof
-trees.
+The provenance package has been retired to `legacy/provenance/`. Lattice
+traversal paths through the concept hierarchy are the forward path for
+interpretability — the concept lattice provides a richer and more structured
+account of inference than explicit witness-based proof trees.

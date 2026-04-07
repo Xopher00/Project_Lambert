@@ -32,6 +32,9 @@ Category theory is a branch of mathematics that studies structure and relationsh
 - Kelly, G. M. (1982). Basic concepts of enriched category theory. Cambridge University Press, Lecture Notes in Mathematics 64. Republished as: *Reprints in Theory and Applications of Categories*, No. 10 (2005). Free PDF: http://www.tac.mta.ca/tac/reprints/articles/10/tr10abs.html <!-- [kelly1982] -->
 - Riehl, E. (2016). *Category theory in context*. Dover Publications. (Aurora: Dover Modern Math Originals series.) ISBN-13: 978-0-486-80903-8. 272 pp. <!-- [riehl2016] -->
 - Shen, L., & Tang, X. (2021). Isbell adjunctions and Kan adjunctions via quantale-enriched two-variable adjunctions. Applied Categorical Structures, 29, 823–858. DOI: 10.1007/s10485-021-09654-w. <!-- [shen2021] -->
+- Kan, D. M. (1958). Adjoint functors. *Transactions of the American Mathematical Society*, 87(2), 294–329. DOI: 10.2307/1993102. <!-- [kan1958] --> 
+- Schultz, P., Wisnesky, R., Vasilakopoulou, C., & Spivak, D. I. (2017). Algebraic databases. *Theory and Applications of Categories*, 32(16), 547–619. Free PDF: http://www.tac.mta.ca/tac/volumes/32/16/32-16abs.html <!-- [schultz2017] --> 
+- Fong, B., & Spivak, D. I. (2019). *An Invitation to Applied Category Theory: Seven Sketches in Compositionality*. Cambridge University Press. Free PDF: https://arxiv.org/abs/1803.05316. <!-- [fong2019] --> 
 
 ### Historical and philosophical context 
 Burch's 1964 paper examines a seven-valued logic system from Jain philosophy, which has some interesting parallels with modern category theory. Grzejdziak-Zdziarski and Loog's 2026 report documents how the mathematical traditions represented in this bibliography developed in isolation from each other — which is itself part of the argument for why this project matters.

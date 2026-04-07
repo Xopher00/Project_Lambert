@@ -6,31 +6,53 @@
       "id": 1,
       "file": "sprints/01-integrate-kan-research.md",
       "title": "Integrate Kan/CQL research notes",
-      "status": "not_started",
+      "status": "complete",
       "depends_on": [],
       "batch": 1,
       "model": "sonnet",
       "branch": null,
-      "merged": false
+      "merged": true
     },
     {
       "id": 2,
       "file": "sprints/02-retire-provenance.md",
       "title": "Retire provenance to legacy",
-      "status": "not_started",
+      "status": "complete",
       "depends_on": [],
       "batch": 1,
       "model": "sonnet",
       "branch": null,
-      "merged": false
+      "merged": true
     },
     {
       "id": 3,
       "file": "sprints/03-remove-dead-code.md",
       "title": "Remove dead code from CategoryExplorer",
+      "status": "complete",
+      "depends_on": [2],
+      "batch": 2,
+      "model": "sonnet",
+      "branch": null,
+      "merged": true
+    },
+    {
+      "id": 4,
+      "file": "sprints/04-triage-tests.md",
+      "title": "Triage and clean up tests/",
       "status": "not_started",
       "depends_on": [2],
       "batch": 2,
+      "model": "sonnet",
+      "branch": null,
+      "merged": false
+    },
+    {
+      "id": 5,
+      "file": "sprints/05-core-unit-tests.md",
+      "title": "Core operation unit tests",
+      "status": "not_started",
+      "depends_on": [4],
+      "batch": 3,
       "model": "sonnet",
       "branch": null,
       "merged": false

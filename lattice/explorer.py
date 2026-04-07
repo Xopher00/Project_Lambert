@@ -17,8 +17,6 @@ Inspired by category theory: a category is defined by its relations, and
 new categories can be defined by composing existing ones.
 """
 
-from core.fixpoint import FixpointIterator
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 from core.algebra import *
 from lattice.embed import Embed
@@ -88,7 +86,7 @@ class CategoryExplorer(Embed):
         extent = self.mha.fp.state
         return tuple((extent / self.eps).astype(int))
     
-    def explore(self, n_entities=None, seeds=None, learn=True):
+    def explore(self, n_entities=None, seeds=None):
         """
         Perform the initial category discovery phase.
 
@@ -130,55 +128,6 @@ class CategoryExplorer(Embed):
                 self.categories[key] = {'intents': dict(self.mha.intents), 'extent': extent}
                 covered.update(np.flatnonzero(extent > self.eps).tolist())
         return self.categories
-
-    def _concept_fixpoint(self, R, seed, temp, max_iters=20, eps=1e-3):
-        """
-        Override of Embed._concept_fixpoint using MHA retrieval as the fixpoint step.
-
-        Instead of alternating Residuate calls, each iteration queries the
-        MultiHeadAttention with the currently active entities and takes the
-        converged outer fixpoint state as the new state. This finds the stable
-        set of relational connections — how entities are defined by combinations
-        of features across all heads — rather than a single concept vector.
-
-        Like Closure, this is a form of transitive closure: the fixpoint is
-        reached when the set of entities and their relational structure stops
-        changing.
-
-        Returns the seed unchanged if no entities are active above eps.
-
-        Parameters
-        ----------
-        R : ndarray
-            The relation matrix. Passed through to satisfy the Embed interface
-            but not used directly — retrieval is handled by the MHA.
-        seed : ndarray, shape (n,)
-            Starting state vector. Active entities are those with value > eps.
-        temp : float
-            Temperature passed to the inner FixpointIterator.
-        max_iters : int, optional
-            Maximum iterations before stopping. Default is 20.
-        eps : float, optional
-            Activity threshold and convergence threshold. Default is 1e-3.
-
-        Returns
-        -------
-        ndarray, shape (n,)
-            The converged state vector.
-        """
-        active = np.flatnonzero(seed > eps)
-        if len(active) == 0:
-            return seed
-        def _f(state, temp):
-            hits, _ = self.mha.retrieve(np.flatnonzero(state > eps).tolist())
-            return self.mha.fp.state.copy(), None
-        fp = FixpointIterator(
-            f         = _f,
-            state0    = seed.copy(),
-            eps       = eps,
-            max_iters = max_iters,
-        )
-        return fp.run()
 
     def explore_lattice(self, n_entities=None, seeds=None, verbose=False):
         """

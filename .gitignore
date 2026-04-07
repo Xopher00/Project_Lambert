@@ -1,2 +1,39 @@
 __pycache__/
 venv/
+
+# Local dev files
+.ctxray.toml
+archive/
+klotski
+research_sym
+lattice/lattice.py
+
+# tests/ — data files (large, reproducible, not source)
+tests/distill_data.json
+tests/distill_embeddings_*.npz
+tests/glove_cache.pkl
+tests/kg.csv
+tests/pypi_ai_training_data.pkl
+
+# tests/ — gitignored notebooks (user decision; files remain on disk)
+tests/hydra.ipynb
+tests/lambert_vs_hydra.ipynb
+tests/benchmarks.ipynb
+tests/closure.ipynb
+tests/fixpoint.ipynb
+tests/kan_extensions.ipynb
+tests/lattices.ipynb
+tests/medical_kg.ipynb
+tests/primekg.ipynb
+tests/reasoning_embedding_space.ipynb
+tests/semiring_einsum.ipynb
+tests/software_dependencies.ipynb
+tests/sprint3_smoke.ipynb
+tests/tokenize.ipynb
+tests/tool_graph.ipynb
+tests/training_loop.ipynb
+tests/ua-tests.ipynb
+
+# Session / artifacts
+.artifacts/
+docs/session-learnings.md

@@ -147,3 +147,39 @@ or relation instances incrementally — and to synthesise `R` values for unseen
 combinations. The operation exists; the layer that calls it with training pairs and
 writes back into the embeddings does not. See `embed.md` § `The learning rule` for
 details.
+
+### The generation gap as a Kan extension problem
+
+The two structural absences identified above have a unified categorical diagnosis: Lambert
+implements the **right Kan** direction (Residuate, universal, retrieval) but not the
+**left Kan** direction (Join-forward, existential, generation).
+
+The concept lattice Mφ is closed under both operations — its completeness as a V-category
+(Shen & Tang 2021, Theorem 6.2) guarantees that both Kan extensions exist and remain
+within the lattice. The algebra is sound for both directions. What is absent is the query
+path that uses the left Kan direction.
+
+**`EmbR` not wired in** is the left Kan path through concept space. Calling `Join(q, EmbR)`
+is a left Kan extension step: it asks "given concept q, what concepts are existentially
+reachable via this relation?" Chaining it gives multi-hop reachability. The `Project` and
+`Expand` operations implement the encoding and decoding steps around this chain; the
+chain itself — the sequential Join through EmbR matrices — is what is missing from the
+query path.
+
+**The learning rule** (`W = Residuate(Y, X)`) is the right Kan extension applied to
+pattern pairs: it finds the greatest weight matrix consistent with all stored
+(input, output) pairs simultaneously. Writing it back into R is the construction step
+that moves the model from read-only to writable.
+
+The CQL literature frames this precisely: a schema migration that cannot express left
+Kan extensions cannot generate new instances — it can only restrict existing ones. A
+Lambert model that only uses Residuate is in the same position: it can find the tightest
+concept above a query, but it cannot project forward to entities not observed during
+construction.
+
+**Reference:** Schultz, P., Wisnesky, R., Vasilakopoulou, C., & Spivak, D. I. (2017). Algebraic databases.
+*Theory and Applications of Categories*, 32(16), 547–619.  cite{schultz2017}
+
+**Reference:** Shen, L., & Tang, X. (2021). Isbell adjunctions and Kan adjunctions via
+quantale-enriched two-variable adjunctions. *Applied Categorical Structures*, 29, 823–858.
+cite{shen2021}

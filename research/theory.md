@@ -41,6 +41,67 @@ This is exactly what `_concept_fixpoint` computes. Bělohlávek (2000) Theorem 1
 - **Lattice navigation**: More specific = meet with another concept (add constraints). More general = join (relax constraints). Both are operations on `emb` columns via the partial order.
 - **Tucker decomposition**: Once query semantics is grounded, `Project(R, emb)` is the correct object for multi-hop queries in compressed concept space (Domingos 2025).
 
+### The Kan framing
+
+The query semantics defined above — find the smallest formal concept whose intent
+contains q — is the **right Kan extension** of the query q along the relation R,
+evaluated at the identity. Concretely:
+
+```
+Π_R(q) = Residuate(R, q)      # right Kan: universal, "all entities consistent with q"
+Σ_R(q) = Join(q, R)           # left Kan:  existential, "entities reachable from q"
+```
+
+These are dual operations. The right Kan gives the tightest upper bound — the minimal
+set of entities that must be in the answer given the constraints. The left Kan gives
+the broadest reachable set — all entities that can be reached from q through at least
+one path in R.
+
+Lambert currently implements only the right Kan path. Every query goes through
+`Residuate` (as `_concept_fixpoint`), retrieving the smallest concept above q. This
+is the **universal** semantics: an entity appears in the answer only if it is
+consistent with all constraints simultaneously.
+
+The **left Kan path** — `Join(q, EmbR)` chained across relation types — would give the
+existential semantics: entities reachable from q through at least one relational chain.
+This is generation rather than retrieval. The algebra is present; the query path is not.
+
+### The adjoint triple and multi-hop queries
+
+CQL's adjoint triple (Σ ⊣ Δ ⊣ Π) applied to Lambert's concept space gives the correct
+structure for multi-hop inference. Let EmbR_i be the Tucker core for relation type i.
+A two-hop query "entities related to q via R₁, then R₂" is:
+
+```
+q₁ = Join(q,  EmbR₁)     # one hop forward (left Kan along R₁)
+q₂ = Join(q₁, EmbR₂)     # second hop forward (left Kan along R₂)
+A  = Join(q₂, emb.T)     # project back to entity space
+```
+
+Each `Join` step is a left Kan extension in concept space. The chain is well-typed:
+`EmbR: (k, k)` maps concept vectors to concept vectors, so the composition is valid.
+Projecting back through `emb.T` gives the entity-level answer.
+
+The right Kan version (universal multi-hop: "entities consistent with all relations
+simultaneously") uses Residuate at each step instead:
+
+```
+B  = Residuate(EmbR₁, q)
+B₂ = Residuate(EmbR₂, B)
+A  = Residuate(emb.T, B₂)
+```
+
+The meet-based multi-head combination in `_outer_step` is the right Kan path applied
+across heads in parallel. The missing generation capability is the left Kan path applied
+sequentially across hops.
+
+Schultz, Wisnesky, Vasilakopoulou & Spivak (2017) show that all standard relational
+algebra operations factor through the adjoint triple (Σ ⊣ Δ ⊣ Π) — every query is a
+composition of left Kan extension, restriction, and right Kan extension.
+
+**Reference:** Schultz, P., Wisnesky, R., Vasilakopoulou, C., & Spivak, D. I. (2017). Algebraic databases.
+*Theory and Applications of Categories*, 32(16), 547–619.  cite{schultz2017}
+
 ---
 
 ## References

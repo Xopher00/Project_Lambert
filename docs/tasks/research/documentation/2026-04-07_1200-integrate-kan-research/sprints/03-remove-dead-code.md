@@ -3,9 +3,9 @@
 ## Meta
 
 - **PRD:** `../spec.md`
-- **Sprint:** 3 of 3
+- **Sprint:** 3 of 5
 - **Depends on:** Sprint 2
-- **Batch:** 2 (sequential after Sprint 2)
+- **Batch:** 2 (parallel with Sprint 4)
 - **Model:** sonnet
 - **Estimated effort:** S
 
@@ -40,16 +40,16 @@ Remove two documented dead-code items from `lattice/explorer.py`: the `_concept_
 
 ## Tasks
 
-- [ ] Read `lattice/explorer.py` in full before making any changes — understand the full class structure
-- [ ] Read `lattice/embed.py` `_concept_fixpoint` implementation to confirm the parent is the correct operation (alternating Residuate on `R_active` and `R_active.T`)
-- [ ] Verify Sprint 2 completed: `test ! -d /home/scanbot/ua_tensors/provenance` exits 0
-- [ ] In `lattice/explorer.py`, locate the `_concept_fixpoint` method override on `CategoryExplorer` (the one that calls `self.mha.retrieve` instead of using Residuate)
-- [ ] Delete the entire `_concept_fixpoint` method from `CategoryExplorer` — do not modify any other method
-- [ ] In `lattice/explorer.py`, locate the `explore` method signature containing the `learn=True` parameter
-- [ ] Remove `learn=True` (and `learn` if it appears as a local variable) from `explore` — do not change any other part of the method body (the method body never uses `learn` per the research note)
-- [ ] Run `python -c "from lattice import CategoryExplorer; print('ok')"` — must print "ok"
-- [ ] Run `python -c "from model import Lambert; print('ok')"` — must print "ok"
-- [ ] Run the smoke test below to confirm the pipeline still produces categories
+- [x] Read `lattice/explorer.py` in full before making any changes — understand the full class structure
+- [x] Read `lattice/embed.py` `_concept_fixpoint` implementation to confirm the parent is the correct operation (alternating Residuate on `R_active` and `R_active.T`)
+- [x] Verify Sprint 2 completed: `test ! -d /home/scanbot/ua_tensors/provenance` exits 0
+- [x] In `lattice/explorer.py`, locate the `_concept_fixpoint` method override on `CategoryExplorer` (the one that calls `self.mha.retrieve` instead of using Residuate)
+- [x] Delete the entire `_concept_fixpoint` method from `CategoryExplorer` — do not modify any other method
+- [x] In `lattice/explorer.py`, locate the `explore` method signature containing the `learn=True` parameter
+- [x] Remove `learn=True` (and `learn` if it appears as a local variable) from `explore` — do not change any other part of the method body (the method body never uses `learn` per the research note)
+- [x] Run `python -c "from lattice import CategoryExplorer; print('ok')"` — must print "ok"
+- [x] Run `python -c "from model import Lambert; print('ok')"` — must print "ok"
+- [x] Run the smoke test below to confirm the pipeline still produces categories
 
 ### Smoke test (run after changes)
 
@@ -79,16 +79,16 @@ This must print "ok".
 
 ## Acceptance Criteria
 
-- [ ] `grep -n "_concept_fixpoint" lattice/explorer.py` returns nothing
-- [ ] `grep -n "learn=" lattice/explorer.py` returns nothing (parameter gone)
-- [ ] `python -c "from lattice import CategoryExplorer"` exits 0
-- [ ] Smoke test exits 0 and prints "ok"
+- [x] `grep -n "_concept_fixpoint" lattice/explorer.py` returns nothing
+- [x] `grep -n "learn=" lattice/explorer.py` returns nothing (parameter gone)
+- [x] `python -c "from lattice import CategoryExplorer"` exits 0
+- [x] Smoke test exits 0 and prints "ok"
 
 ## Verification
 
-- [ ] `grep -c "_concept_fixpoint" lattice/explorer.py` returns 0
-- [ ] `python -c "from lattice import CategoryExplorer; print('ok')"` prints "ok"
-- [ ] Smoke test passes
+- [x] `grep -c "_concept_fixpoint" lattice/explorer.py` returns 0
+- [x] `python -c "from lattice import CategoryExplorer; print('ok')"` prints "ok"
+- [x] Smoke test passes
 
 ## Context
 
@@ -114,9 +114,9 @@ Only these two items are to be removed. Do not:
 
 ## Agent Notes (filled during execution)
 
-- Assigned to: —
-- Started: —
-- Completed: —
-- Decisions made: —
-- Assumptions: —
-- Issues found: —
+- Assigned to: Claude Sonnet 4.6
+- Started: 2026-04-07
+- Completed: 2026-04-07
+- Decisions made: Also removed the `FixpointIterator` import and `ThreadPoolExecutor`/`as_completed` imports that became orphaned once `_concept_fixpoint` was deleted. These were direct dead-code consequences of the removal and strictly within scope.
+- Assumptions: Sprint 2 verified complete (provenance/ absent). Parent `Embed._concept_fixpoint` confirmed as the correct alternating-Residuate implementation.
+- Issues found: None. Smoke test produced 2 categories from the 4x4 block-diagonal relation as expected. All invariants passed.
