@@ -1,0 +1,39 @@
+{
+  "prd": "spec.md",
+  "created": "2026-04-07T12:00:00Z",
+  "sprints": [
+    {
+      "id": 1,
+      "file": "sprints/01-integrate-kan-research.md",
+      "title": "Integrate Kan/CQL research notes",
+      "status": "not_started",
+      "depends_on": [],
+      "batch": 1,
+      "model": "sonnet",
+      "branch": null,
+      "merged": false
+    },
+    {
+      "id": 2,
+      "file": "sprints/02-retire-provenance.md",
+      "title": "Retire provenance to legacy",
+      "status": "not_started",
+      "depends_on": [],
+      "batch": 1,
+      "model": "sonnet",
+      "branch": null,
+      "merged": false
+    },
+    {
+      "id": 3,
+      "file": "sprints/03-remove-dead-code.md",
+      "title": "Remove dead code from CategoryExplorer",
+      "status": "not_started",
+      "depends_on": [2],
+      "batch": 2,
+      "model": "sonnet",
+      "branch": null,
+      "merged": false
+    }
+  ]
+}
