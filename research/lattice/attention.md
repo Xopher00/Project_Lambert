@@ -87,3 +87,100 @@ uses hard `np.minimum` in `_outer_step`, which is the correct operation.
 > Bělohlávek, R. (2000). Fuzzy logical bidirectional associative memory.
 > *Information Sciences*, 128, 91–103. — Theorem 2: stable points of each head form a
 > complete lattice; their intersection is the multi-relational concept lattice.
+
+---
+
+## Attend/Recall duality — architectural invariant
+
+Every operation in the attention stack is an instance of one of two dual directions
+inherited from the adjoint structure of max-min composition. Naming this duality
+makes the asymmetry between what the model currently does and what it could do
+explicit.
+
+**Encode → decode (the forward / Σ direction).** `Attend` pushes a query forward
+through the embedding:
+
+```
+q → Join(q, emb.T) → Join(scores, emb)
+```
+
+The first `Join` scores the query against every stored entity; the second
+reconstructs a new entity-space vector as a max-min combination of the patterns
+that scored highest. This is the left-adjoint direction — the existential,
+generative direction. In the CQL data-migration formalism of Schultz & Wisnesky
+(2025), this corresponds to the left pushforward functor Σ_F, which maps instances
+forward along a schema morphism by constructing new instances via a coend. Σ is the
+creative half of the adjoint triple: it can produce outputs that go beyond what is
+explicitly stored.
+
+**Grounding (the correction / Δ direction).** The correction step in `_step`
+pulls the raw `Attend` output back to the greatest entity-space vector the current
+embedding can actually support, via `Residuate`. This is the right-adjoint
+direction — the universal, restrictive direction. In the CQL triple it corresponds
+to Δ_F (the pullback functor), which restricts instances along a schema morphism
+without adding content. Residuate finds the greatest solution consistent with the
+stored relation; the correction step clips the query to stay within that solution.
+
+**Learning / construction (the right pushforward / Π direction).** The learning
+rule `W = Residuate(Y, X)` (described in `embed.md`) is the right-adjoint extreme:
+it finds the greatest weight matrix simultaneously consistent with all stored
+pattern pairs. In the CQL triple this is Π_F (the right pushforward), which is
+right adjoint to Δ_F. Π is universal-over-all-inputs; it builds a structure that
+accommodates every stored observation as a necessary consequence.
+
+Together these three directions form a Galois adjoint triple:
+
+```
+Σ_F ⊣ Δ_F ⊣ Π_F
+```
+
+that is, Σ_F is left adjoint to Δ_F, and Δ_F is left adjoint to Π_F. In Lambert's
+algebra the same triple appears as:
+
+```
+Attend (forward Join)  ⊣  Residuate-correction (pullback)  ⊣  Learning rule (Residuate(Y,X))
+```
+
+The current implementation uses only the middle functor continuously (correction in
+every `_step` iteration) and the right functor not at all (learning rule is absent).
+The left functor, `Attend`, is used for retrieval but its output is immediately
+corrected back by Δ, so the net effect is restriction rather than generation. The
+model is structurally a Δ/Π machine. Σ is available at the algebraic level (Join is
+implemented) but is not wired into any stand-alone generative query path.
+
+This adjoint triple is the categorical home of the encode→decode pattern:
+- **Encode:** `ConceptEmbed` maps the entity relation matrix R into concept space
+  via the Galois adjunction O*/A∧ (Bělohlávek 2000, Theorems 1–2).
+- **Decode via Δ (recall):** `Attend` followed by the `Residuate` correction retrieves
+  the tightest existing concept above the query — a restriction, not a generation.
+- **Decode via Σ (generate):** chaining `Join(q, EmbR)` steps through the Tucker
+  core would produce concept-space predictions for entities not observed during
+  construction — the Σ direction. This path is architecturally sound but not yet
+  wired.
+
+The Galois adjunction underlying fixpoint convergence (Ore 1944, via Bělohlávek
+2000) is the two-step version of the same triple: O* and A∧ are mutually adjoint,
+and their composition is idempotent because adjunctions compose. Shen & Tang (2021)
+place this in the enriched categorical setting: the fixpoint lattice M_φ is the
+complete V-category of fixed points of the Isbell adjunction induced by the relation
+matrix, and both Kan extensions (left and right) exist within it.
+
+> Schultz, P. & Wisnesky, R. (2025). Algebraic Data Integration. *arXiv:1503.03571v8.* —
+> §4.2: Σ_F ⊣ Δ_F ⊣ Π_F as the three adjoint data migration functors induced by a
+> schema mapping; Σ as left pushforward (coend / existential), Δ as pullback, Π as
+> right pushforward (end / universal).
+
+> Schultz, P., Spivak, D. I., Vasilakopoulou, C. & Wisnesky, R. (2025). Algebraic
+> Databases. *arXiv:1602.03501v3.* — §7: Definition 7.1 (Δ_F as pullback), Proposition
+> 7.3 (Π_F as right Kan extension right adjoint to Δ_F), Proposition 7.4 (Σ_F as
+> left Kan extension left adjoint to Δ_F); Lemma 8.18: Σ_F ≅ Λ_{F̂} ⊣ Δ_F ≅ Λ_{F̃} ≅
+> Γ_{F̃} ⊣ Π_F ≅ Γ_{F̃} establishing the full adjoint triple in the equipment Data.
+
+> Bělohlávek, R. (2000). Fuzzy logical bidirectional associative memory.
+> *Information Sciences*, 128, 91–103. — Theorems 1–2: two-step convergence and
+> completeness of the concept lattice via the O*/A∧ Galois adjunction.
+
+> Shen, L., & Tang, X. (2021). Isbell adjunctions and Kan adjunctions via
+> quantale-enriched two-variable adjunctions. *Applied Categorical Structures*,
+> 29, 823–858. — Theorem 6.2: the fixpoint lattice M_φ is a complete V-category
+> in which both left and right Kan extensions exist.

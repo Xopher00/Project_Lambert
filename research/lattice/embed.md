@@ -173,11 +173,57 @@ construction.
 
 > Belohlavek, R. (2000). Fuzzy logical bidirectional associative memory.
 > *Information Sciences*, 128, 91–103. — Algorithm, eq. 2: construction of I from
-> stored patterns.  cite{belohlavek2000}
+> stored patterns.
 
 > Sussner, P., & Valle, M. E. (2006). Implicative fuzzy associative memories.
 > *IEEE Transactions on Fuzzy Systems*, 14(6), 791–807. — eq. for W = Y ⊗ₙ Xᵀ;
-> construction rule identical to Lambert's Residuate.  cite{sussner2006}
+> construction rule identical to Lambert's Residuate.
+
+---
+
+## Attend/Recall duality — relation to the CQL adjoint triple
+
+The operations in this file occupy specific positions in the Galois adjoint triple
+Σ_F ⊣ Δ_F ⊣ Π_F that governs all data migration in the CQL / algebraic-database
+framework (Schultz & Wisnesky 2025; Schultz, Spivak, Vasilakopoulou & Wisnesky 2025).
+
+**`ConceptEmbed` and `Project` (encode direction).** `ConceptEmbed` builds the
+embedding `emb` by closing columns of `R` under the O*/A∧ adjunction — the
+lattice-theoretic analogue of the pullback Δ. `Project` compresses the relation
+matrix into concept space via `emb.T ∘ R ∘ emb`, producing `EmbR: (k, k)`. This
+is the encoding step: it moves data from entity space into the compact concept
+representation that the adjoint triple operates on.
+
+**`Expand` and the unwired `EmbR` path (Σ direction).** The intended generative
+query path — `Join(q, EmbR)` chained across relation types, then decoded back to
+entity space via `Expand` — is the left-adjoint (Σ_F) direction. Σ constructs new
+instances existentially: it produces entity-level predictions for situations not
+explicitly observed during construction. This direction is algebraically sound (all
+required operations exist) but is not currently wired into any query path. See
+`attention.md § Attend/Recall duality` for the full categorical framing.
+
+**The learning rule (Π direction).** `W = Residuate(Y, X)` is the right-adjoint
+extreme Π_F: it finds the greatest weight matrix simultaneously consistent with all
+stored pattern pairs, which in the CQL formalism is the right Kan extension (right
+pushforward) along the schema mapping. Every stored `(entity_vector,
+concept_vector)` pair is a necessary consequence of the constructed W. The
+operation is algebraically present (Residuate is implemented) but the layer that
+calls it with training pairs and writes back to R is absent.
+
+The consequence of this asymmetry is the generation gap described in `explorer.md`:
+a model that uses only Δ (restriction via correction) and lacks Σ (forward
+projection via EmbR) and Π (learning rule via Residuate write-back) is a read-only
+retrieval machine. All three operations exist in the algebra; only Δ is continuously
+active at runtime.
+
+> Schultz, P. & Wisnesky, R. (2025). Algebraic Data Integration. *arXiv:1503.03571v8.* —
+> §4.2: the three adjoint data-migration functors Σ_F ⊣ Δ_F ⊣ Π_F; intuition: Δ as
+> projection, Π as product/filter, Σ as union/merge.
+
+> Schultz, P., Spivak, D. I., Vasilakopoulou, C. & Wisnesky, R. (2025). Algebraic
+> Databases. *arXiv:1602.03501v3.* — §7, Propositions 7.3–7.4: Π_F as right Kan
+> extension (right adjoint to Δ_F), Σ_F as left Kan extension (left adjoint to Δ_F);
+> §8.18: full triple Σ_F ≅ Λ_{F̂} ⊣ Δ_F ⊣ Π_F ≅ Γ_{F̃} in the equipment Data.
 
 ---
 
