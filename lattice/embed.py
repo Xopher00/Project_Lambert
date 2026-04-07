@@ -270,6 +270,59 @@ class Embed(Tensor):
         out     = self.Join(scores, emb, temp) # (1, d)
         return out.squeeze()                 # back to (d,)
     
+    def hop(self, q: np.ndarray, EmbR: np.ndarray, temp: float) -> np.ndarray:
+        """
+        One left-Kan step in concept space: Join(q[np.newaxis,:], EmbR)[0].
+
+        Advances a concept-space query vector one relational hop forward
+        using a concept-to-concept relation matrix EmbR. This is the
+        existential (Σ_R) direction of the Kan adjunction:
+
+            Σ_R(q) = Join(q, EmbR)
+
+        The result is a new concept-space vector representing all concepts
+        reachable from q via EmbR.
+
+        Parameters
+        ----------
+        q : ndarray, shape (k,)
+            Concept-space query vector. Must satisfy q.shape[0] == EmbR.shape[0].
+        EmbR : ndarray, shape (k, k)
+            Concept-to-concept relation matrix (Tucker core). Must be square:
+            EmbR.shape[0] == EmbR.shape[1].
+        temp : float
+            Temperature passed to Join.
+
+        Returns
+        -------
+        ndarray, shape (k,)
+            Updated concept-space vector after one relational hop.
+
+        Raises
+        ------
+        ValueError
+            If q.shape[0] != EmbR.shape[0] (dimension mismatch) or
+            EmbR.shape[0] != EmbR.shape[1] (EmbR is not square).
+
+        References
+        ----------
+        Domingos, P. (2025). Tensor logic. — Multi-hop query chains as
+        compositions of Tucker-core einsums.  cite{domingos2025}
+        """
+        if EmbR.ndim != 2 or EmbR.shape[0] != EmbR.shape[1]:
+            raise ValueError(
+                f"EmbR must be square (shape (k, k)). "
+                f"Got EmbR.shape={EmbR.shape}."
+            )
+        k = EmbR.shape[0]
+        if q.shape != (k,):
+            raise ValueError(
+                f"q.shape must equal (EmbR.shape[0],) = ({k},). "
+                f"Got q.shape={q.shape}."
+            )
+        result = self.Join(q[np.newaxis, :], EmbR, temp=temp)  # (1, k)
+        return result[0]                                        # (k,)
+
     def Recall(self, a, emb, temp=0.0):
         """
         One step of concept closure via alternating Residuate.
@@ -300,3 +353,114 @@ class Embed(Tensor):
         a2d = a.reshape(-1, 1)                              # (n, 1)  mirrors q.reshape(1, -1)
         b   = self.Residuate(emb, a2d, temp).reshape(-1, 1) # (k, 1)
         return self.Residuate(emb.T, b, temp).reshape(-1)   # (n,)
+
+
+class Learner(Embed):
+    """
+    Algebraic learning rule for Lambert relation matrices.
+
+    Wraps an existing relation matrix R and provides a learn() method
+    that updates R using the FLBAM weight construction rule
+    (Belohlavek 2000, Algorithm eq. 2; Sussner & Valle 2006):
+
+        W = Y ⊗ₙ Xᵀ  =  Residuate(Y, X)
+
+    Given a set of (entity_vector, attribute_vector) pattern pairs stored
+    as rows of Y and X respectively, Residuate(Y, X) constructs the
+    relation matrix contribution that stores all of them as stable
+    attractors.  The contribution is merged into R via elementwise max:
+
+        R_new = np.maximum(R_old, Residuate(Y, X))
+
+    This is a join (∨) over stored pattern pairs — the algebraic
+    construction from Belohlavek (2000) eq. 2.  Replacing R would lose
+    existing attractors.  Averaging would violate the algebraic semantics
+    (the construction rule is not defined for averages).
+
+    Limitation: learn() updates R only. Call ConceptEmbed on the updated
+    R to refresh emb and EmbR so that subsequent queries reflect the new
+    knowledge.
+
+    Parameters
+    ----------
+    R : ndarray, shape (n_entities, n_attributes)
+        The initial relation matrix. Stored as self.R; updated in-place
+        by each learn() call.
+
+    References
+    ----------
+    Belohlavek, R. (2000). Fuzzy logical bidirectional associative memory.
+    *Information Sciences*, 128, 91–103. — Algorithm eq. 2: I_ij = ∨_p
+    A^p(g_i) ⊗ B^p(m_j); construction of the weight matrix from stored
+    pattern pairs.  cite{belohlavek2000}
+
+    Sussner, P., & Valle, M. E. (2006). Implicative fuzzy associative
+    memories. *IEEE Transactions on Fuzzy Systems*, 14(6), 791–807. —
+    W = Y ⊗ₙ Xᵀ = Residuate(Y, X); construction rule identical to
+    Lambert's Residuate.  cite{sussner2006}
+    """
+
+    def __init__(self, R: np.ndarray):
+        super().__init__()
+        self.R = R.copy()
+
+    def learn(self, X: np.ndarray, Y: np.ndarray) -> np.ndarray:
+        """
+        Construct a weight update from pattern pairs and merge into R.
+
+        Implements the FLBAM construction rule (Belohlavek 2000 eq. 2):
+
+            delta_R = Residuate(Y, X)
+            R_new   = np.maximum(R_old, delta_R)
+
+        The argument order follows W = Y ⊗ₙ Xᵀ = Residuate(Y, X) from
+        Belohlavek (2000): Y carries the entity-space (row) patterns and
+        X carries the attribute-space (row) patterns.
+
+        Limitation: this method updates self.R only. Call ConceptEmbed
+        on the updated R to refresh emb and EmbR so that subsequent
+        queries reflect the new knowledge.
+
+        Parameters
+        ----------
+        X : ndarray, shape (n_patterns, n_attributes)
+            Output patterns in attribute space.  X.shape[1] must equal
+            self.R.shape[1] (the number of attributes).
+        Y : ndarray, shape (n_patterns, n_entities)
+            Input patterns in entity space.  Y.shape[1] must equal
+            self.R.shape[0] (the number of entities).
+
+        Returns
+        -------
+        ndarray, shape (n_entities, n_attributes)
+            The updated relation matrix (also stored as self.R).
+
+        Raises
+        ------
+        ValueError
+            If Y.shape[1] != self.R.shape[0] or X.shape[1] != self.R.shape[1],
+            with a message that includes the expected and actual shapes.
+        """
+        n_entities, n_attributes = self.R.shape
+
+        if Y.shape[1] != n_entities:
+            raise ValueError(
+                f"Y.shape[1] must equal R.shape[0] (n_entities). "
+                f"Expected Y.shape[1]={n_entities}, got Y.shape[1]={Y.shape[1]}. "
+                f"R.shape={self.R.shape}, Y.shape={Y.shape}."
+            )
+        if X.shape[1] != n_attributes:
+            raise ValueError(
+                f"X.shape[1] must equal R.shape[1] (n_attributes). "
+                f"Expected X.shape[1]={n_attributes}, got X.shape[1]={X.shape[1]}. "
+                f"R.shape={self.R.shape}, X.shape={X.shape}."
+            )
+
+        # Construct the weight update: Residuate(Y, X) at T=0 (exact construction).
+        # Y: (n_patterns, n_entities), X: (n_patterns, n_attributes)
+        # Residuate(A, C) returns (A.shape[1], C.shape[1]) = (n_entities, n_attributes)
+        delta_R = self.Residuate(Y, X, temp=0)
+
+        # Merge via elementwise max (join over stored pattern pairs, Belohlavek 2000 eq. 2).
+        self.R = np.maximum(self.R, delta_R)
+        return self.R

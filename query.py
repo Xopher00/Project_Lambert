@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from functools import reduce
 import numpy as np
+from lattice.embed import Embed
 
 @dataclass
 class QueryResult:
@@ -160,6 +161,102 @@ class Query:
             [self.model.entity_labels[i] for i in ranked],
             state[ranked], intents, prov, mode
         ))
+
+
+    def multihop(self, entity: str, chain: list, top_k: int = 10) -> 'QueryResult':
+        """
+        Multi-hop relational inference via chained left-Kan extensions.
+
+        Traverses a sequence of named relation heads from a starting entity,
+        applying one `hop` step per head in concept space, then projects the
+        final concept-space vector back to entity space to rank results.
+
+        Algebraic chain (from research/theory.md §"The adjoint triple"):
+
+            q₁ = Join(q,  EmbR₁)     # one hop forward (left Kan along R₁)
+            q₂ = Join(q₁, EmbR₂)     # second hop forward (left Kan along R₂)
+            A  = Join(q₂, emb.T)     # project back to entity space
+
+        The seed concept-space vector is taken from the FIRST head's per-head
+        emb matrix: q = heads[chain[0]]['emb'][entity_idx, :].  This requires
+        all heads in the chain to share the same k (enforced by the EmbR shape
+        contract).
+
+        Provenance note: multi-hop queries do not produce per-head intents
+        (there is no MHA.retrieve call). The `intents` field of the returned
+        QueryResult is an empty dict {}.
+
+        Parameters
+        ----------
+        entity : str
+            Starting entity name. Must appear in model.entity_labels.
+        chain : list of str
+            Ordered list of head names to traverse. Each head must have
+            'emb' (n_entities, k) and 'EmbR' (k, k) in model.heads.
+        top_k : int, optional
+            Maximum number of results to return. Default is 10.
+
+        Returns
+        -------
+        QueryResult
+            mode is exactly 'multihop'.  entities are drawn from
+            model.entity_labels and ranked by their concept-space scores.
+
+        Raises
+        ------
+        ValueError
+            If any EmbR in the chain is not square, or if EmbR shapes differ
+            across the chain heads.  The error message includes the head names
+            and their actual shapes.
+        """
+        heads = self.model.heads
+
+        # --- Validate: all EmbR must be square and share the same k ---
+        shapes = {}
+        for name in chain:
+            EmbR = heads[name]['EmbR']
+            if EmbR.ndim != 2 or EmbR.shape[0] != EmbR.shape[1]:
+                raise ValueError(
+                    f"EmbR for head '{name}' must be square (shape (k, k)). "
+                    f"Got EmbR.shape={EmbR.shape}."
+                )
+            shapes[name] = EmbR.shape[0]
+
+        k_values = list(shapes.values())
+        if len(set(k_values)) > 1:
+            shape_summary = ', '.join(
+                f"'{name}': ({k},{k})" for name, k in shapes.items()
+            )
+            raise ValueError(
+                f"All EmbR matrices in the chain must have the same k. "
+                f"Got: {shape_summary}."
+            )
+
+        # --- Seed: entity → concept-space vector from first head's emb ---
+        entity_idx = self.model.entity_labels.index(entity)
+        q = heads[chain[0]]['emb'][entity_idx, :].copy()   # (k,)
+
+        # --- Hop: traverse each head in the chain ---
+        embed = Embed()
+        for name in chain:
+            EmbR = heads[name]['EmbR']
+            q = embed.hop(q, EmbR, temp=self.model.attn_temp)   # (k,)
+
+        # --- Project back to entity space via first head's emb ---
+        emb = heads[chain[0]]['emb']                        # (n_entities, k)
+        entity_scores = embed.Join(
+            q[np.newaxis, :], emb.T, temp=self.model.attn_temp
+        )[0]                                                # (n_entities,)
+
+        # --- Rank and build result ---
+        ranked = self._rank(entity_scores, top_k)
+        return QueryResult(
+            entities=[self.model.entity_labels[i] for i in ranked],
+            scores=entity_scores[ranked],
+            intents={},
+            provenance=[],
+            mode='multihop',
+        )
 
 
 def show(r, show_provenance=True):
