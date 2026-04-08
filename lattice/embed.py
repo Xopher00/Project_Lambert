@@ -228,6 +228,107 @@ class Embed(Tensor):
         """
         return self.Join(M, M.T, temp)
 
+    def _fixpoint_step(self, x, emb, encode, decode, temp):
+        """
+        One encode→decode fixpoint step using a caller-supplied operation pair.
+
+        Captures the shared structure of Attend (Σ direction, Join/Join) and
+        Recall (Π direction, Residuate/Residuate):
+
+            intermediate = encode(x, emb, temp)
+            return decode(intermediate, emb, temp)
+
+        The encode and decode callables are responsible for all reshaping.
+        This method performs no reshaping.
+
+        In the CQL adjoint triple (Σ_F ⊣ Δ_F ⊣ Π_F):
+        - Σ direction: encode = Join(x, emb.T, temp), decode = Join(·, emb, temp)
+        - Π direction: encode = Residuate(emb, x, temp), decode = Residuate(emb.T, ·, temp)
+
+        Parameters
+        ----------
+        x : ndarray
+            Input vector. Shape depends on the direction: (k,) for Σ, (n,) for Π.
+        emb : ndarray, shape (n, k)
+            Embedding matrix.
+        encode : callable(x, emb, temp) -> intermediate
+            Encodes x into an intermediate representation through emb.
+        decode : callable(intermediate, emb, temp) -> output
+            Decodes the intermediate representation back through emb.
+        temp : float
+            Temperature passed to encode and decode.
+
+        Returns
+        -------
+        ndarray
+            Output vector. Shape and semantics determined by decode.
+
+        References
+        ----------
+        Schultz, P., Spivak, D. I., Vasilakopoulou, C. & Wisnesky, R. (2025).
+        Algebraic Databases. §7: Σ_F ⊣ Δ_F ⊣ Π_F triple.  cite{schultz2017}
+        Sanchez, E. (1976). Residuate adjoint structure.  cite{sanchez1976}
+        """
+        intermediate = encode(x, emb, temp)
+        return decode(intermediate, emb, temp)
+
+    def _conjoint_hom(self, emb, x, temp):
+        """
+        Right-hom through the conjoint bimodule F̃. Π direction. emb\\x.
+
+        Delegates to Residuate(emb, x, temp). The argument order encodes the
+        role: emb is first (schema constraint), x is second (data target).
+        Residuate solves for the greatest vector b such that Join(emb, b) ≤ x.
+
+        This is the Π_F universal / right Kan direction in the CQL adjoint
+        triple Σ_F ⊣ Δ_F ⊣ Π_F. Used in Recall's encode and decode callables.
+
+        Parameters
+        ----------
+        emb : ndarray
+            The schema constraint matrix (left argument to Residuate).
+        x : ndarray
+            The data target (right argument to Residuate).
+        temp : float
+            Temperature passed to Residuate.
+
+        Returns
+        -------
+        ndarray
+            Residuate(emb, x, temp).
+        """
+        return self.Residuate(emb, x, temp)
+
+    def _companion_hom(self, x, emb, temp):
+        """
+        Pullback through the companion bimodule F̂. Δ direction. x\\emb.T.
+
+        Delegates to Residuate(x, emb.T, temp). The argument order encodes the
+        role: x is first (data constraint), emb is second (schema limit).
+        Residuate solves for the greatest entity vector b such that
+        Join(x, b) ≤ emb.T.
+
+        This is the Δ_F pullback / restriction direction in the CQL adjoint
+        triple Σ_F ⊣ Δ_F ⊣ Π_F. The correction step in Attention._step uses
+        this direction (defined here to establish the vocabulary before Sprint 2
+        introduces _delta_step on Attention).
+
+        Parameters
+        ----------
+        x : ndarray
+            The data constraint (left argument to Residuate).
+        emb : ndarray
+            The schema matrix whose transpose is the right argument.
+        temp : float
+            Temperature passed to Residuate.
+
+        Returns
+        -------
+        ndarray
+            Residuate(x, emb.T, temp).
+        """
+        return self.Residuate(x, emb.T, temp)
+
     def Attend(self, q, emb, temp=0.0):
         """
         One step of Hopfield-style pattern retrieval in concept space.
@@ -265,10 +366,9 @@ class Embed(Tensor):
         Ramsauer, H. et al. (2020, revised 2021). Hopfield Networks is All You Need.
         *arXiv:2008.02217*.  cite{ramsauer2021}
         """
-        q2d     = q.reshape(1, -1)           # (1, d)
-        scores  = self.Join(q2d, emb.T, temp)  # (1, n_entities)
-        out     = self.Join(scores, emb, temp) # (1, d)
-        return out.squeeze()                 # back to (d,)
+        encode = lambda q, e, t: self.Join(q.reshape(1, -1), e.T, t)
+        decode = lambda s, e, t: self.Join(s, e, t).squeeze()
+        return self._fixpoint_step(q, emb, encode, decode, temp)
     
     def hop(self, q: np.ndarray, EmbR: np.ndarray, temp: float) -> np.ndarray:
         """
@@ -350,9 +450,9 @@ class Embed(Tensor):
         ndarray, shape (n,)
             Updated entity vector after one closure step.
         """
-        a2d = a.reshape(-1, 1)                              # (n, 1)  mirrors q.reshape(1, -1)
-        b   = self.Residuate(emb, a2d, temp).reshape(-1, 1) # (k, 1)
-        return self.Residuate(emb.T, b, temp).reshape(-1)   # (n,)
+        encode = lambda a, e, t: self._conjoint_hom(e, a.reshape(-1, 1), t)
+        decode = lambda b, e, t: self._conjoint_hom(e.T, b, t).reshape(-1)
+        return self._fixpoint_step(a, emb, encode, decode, temp)
 
 
 class Learner(Embed):
