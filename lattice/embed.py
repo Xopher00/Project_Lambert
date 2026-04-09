@@ -18,6 +18,7 @@ Recall are utilities for analogical reasoning and retrieval.
 import numpy as np
 from core.algebra import *
 from core.tensor import Tensor
+from lattice.coder import PathCoder
 from core.fixpoint import FixpointIterator
 
 class Embed(Tensor):
@@ -34,6 +35,15 @@ class Embed(Tensor):
     by coverage. The resulting embedding matrix has one column per representative
     concept and can be used directly as entity embeddings.
     """
+
+    def __init__(self):
+        legs=[
+            lambda x, rel, t: self.Join(x.reshape(1, -1), rel.T, t),
+            lambda x, rel, t: self.Join(x.reshape(1, -1), rel, t).squeeze(),
+            lambda x, rel, t: self.Residuate(rel, x.reshape(-1, 1), t).reshape(-1, 1),
+            lambda x, rel, t: self.Residuate(rel.T, x.reshape(-1, 1), t).reshape(-1),
+        ]
+        self.coder = PathCoder(legs)
 
     def _concept_fixpoint(self, R, seed, temp, max_iters=20, eps=1e-3, full=False):
         """
@@ -228,107 +238,6 @@ class Embed(Tensor):
         """
         return self.Join(M, M.T, temp)
 
-    def _fixpoint_step(self, x, emb, encode, decode, temp):
-        """
-        One encode→decode fixpoint step using a caller-supplied operation pair.
-
-        Captures the shared structure of Attend (Σ direction, Join/Join) and
-        Recall (Π direction, Residuate/Residuate):
-
-            intermediate = encode(x, emb, temp)
-            return decode(intermediate, emb, temp)
-
-        The encode and decode callables are responsible for all reshaping.
-        This method performs no reshaping.
-
-        In the CQL adjoint triple (Σ_F ⊣ Δ_F ⊣ Π_F):
-        - Σ direction: encode = Join(x, emb.T, temp), decode = Join(·, emb, temp)
-        - Π direction: encode = Residuate(emb, x, temp), decode = Residuate(emb.T, ·, temp)
-
-        Parameters
-        ----------
-        x : ndarray
-            Input vector. Shape depends on the direction: (k,) for Σ, (n,) for Π.
-        emb : ndarray, shape (n, k)
-            Embedding matrix.
-        encode : callable(x, emb, temp) -> intermediate
-            Encodes x into an intermediate representation through emb.
-        decode : callable(intermediate, emb, temp) -> output
-            Decodes the intermediate representation back through emb.
-        temp : float
-            Temperature passed to encode and decode.
-
-        Returns
-        -------
-        ndarray
-            Output vector. Shape and semantics determined by decode.
-
-        References
-        ----------
-        Schultz, P., Spivak, D. I., Vasilakopoulou, C. & Wisnesky, R. (2025).
-        Algebraic Databases. §7: Σ_F ⊣ Δ_F ⊣ Π_F triple.  cite{schultz2017}
-        Sanchez, E. (1976). Residuate adjoint structure.  cite{sanchez1976}
-        """
-        intermediate = encode(x, emb, temp)
-        return decode(intermediate, emb, temp)
-
-    def _conjoint_hom(self, emb, x, temp):
-        """
-        Right-hom through the conjoint bimodule F̃. Π direction. emb\\x.
-
-        Delegates to Residuate(emb, x, temp). The argument order encodes the
-        role: emb is first (schema constraint), x is second (data target).
-        Residuate solves for the greatest vector b such that Join(emb, b) ≤ x.
-
-        This is the Π_F universal / right Kan direction in the CQL adjoint
-        triple Σ_F ⊣ Δ_F ⊣ Π_F. Used in Recall's encode and decode callables.
-
-        Parameters
-        ----------
-        emb : ndarray
-            The schema constraint matrix (left argument to Residuate).
-        x : ndarray
-            The data target (right argument to Residuate).
-        temp : float
-            Temperature passed to Residuate.
-
-        Returns
-        -------
-        ndarray
-            Residuate(emb, x, temp).
-        """
-        return self.Residuate(emb, x, temp)
-
-    def _companion_hom(self, x, emb, temp):
-        """
-        Pullback through the companion bimodule F̂. Δ direction. x\\emb.T.
-
-        Delegates to Residuate(x, emb.T, temp). The argument order encodes the
-        role: x is first (data constraint), emb is second (schema limit).
-        Residuate solves for the greatest entity vector b such that
-        Join(x, b) ≤ emb.T.
-
-        This is the Δ_F pullback / restriction direction in the CQL adjoint
-        triple Σ_F ⊣ Δ_F ⊣ Π_F. The correction step in Attention._step uses
-        this direction (defined here to establish the vocabulary before Sprint 2
-        introduces _delta_step on Attention).
-
-        Parameters
-        ----------
-        x : ndarray
-            The data constraint (left argument to Residuate).
-        emb : ndarray
-            The schema matrix whose transpose is the right argument.
-        temp : float
-            Temperature passed to Residuate.
-
-        Returns
-        -------
-        ndarray
-            Residuate(x, emb.T, temp).
-        """
-        return self.Residuate(x, emb.T, temp)
-
     def Attend(self, q, emb, temp=0.0):
         """
         One step of Hopfield-style pattern retrieval in concept space.
@@ -366,9 +275,8 @@ class Embed(Tensor):
         Ramsauer, H. et al. (2020, revised 2021). Hopfield Networks is All You Need.
         *arXiv:2008.02217*.  cite{ramsauer2021}
         """
-        encode = lambda q, e, t: self.Join(q.reshape(1, -1), e.T, t)
-        decode = lambda s, e, t: self.Join(s, e, t).squeeze()
-        return self._fixpoint_step(q, emb, encode, decode, temp)
+        f = self.coder.op("sesd")
+        return f(q, emb, temp)
     
     def hop(self, q: np.ndarray, EmbR: np.ndarray, temp: float) -> np.ndarray:
         """
@@ -450,9 +358,8 @@ class Embed(Tensor):
         ndarray, shape (n,)
             Updated entity vector after one closure step.
         """
-        encode = lambda a, e, t: self._conjoint_hom(e, a.reshape(-1, 1), t)
-        decode = lambda b, e, t: self._conjoint_hom(e.T, b, t).reshape(-1)
-        return self._fixpoint_step(a, emb, encode, decode, temp)
+        f = self.coder("pepd")
+        return f(a, emb, temp)
 
 
 class Learner(Embed):
