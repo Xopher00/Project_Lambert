@@ -18,7 +18,7 @@ from core.fixpoint import FixpointIterator
 @dataclass(frozen=True)
 class Path:
     source: str
-    steps: tuple[tuple[str, str], ...]
+    steps: tuple[tuple[str, str, bool], ...]
 
 # ---------------------------------------------------------------------------
 # BiCoder
@@ -50,88 +50,83 @@ class PathCoder:
 
     ADJOINT_CODES = {"s", "p"}
     HALF_CODES = {"e", "d"}
+    MODE_CODES = {"x"}   # x = swap x/y
     LEG_INFO = {
-        ("s", "e"): ("Σ.encode", "Join(x, rel.T)"),
-        ("s", "d"): ("Σ.decode", "Join(x, rel)"),
-        ("p", "e"): ("Π.encode", "Residuate(rel, x)"),
-        ("p", "d"): ("Π.decode", "Residuate(rel.T, x)"),
+        ("s", "e"): ("Σ.encode", "Join(x, y.T)"),
+        ("s", "d"): ("Σ.decode", "Join(x, y)"),
+        ("p", "e"): ("Π.encode", "Residuate(y, x)"),
+        ("p", "d"): ("Π.decode", "Residuate(y.T, x)"),
     }
 
-    def __init__(self, legs, emb=None):
+    def __init__(self, legs):
         self.legs = { 
             "s": {"e": legs[0], "d": legs[1]},
             "p": {"e": legs[2], "d": legs[3]}
         }
-        self.emb = emb
-
-    def bind(self, emb):
-        return PathCoder(self.legs, emb=emb)
-       
-    def _rel(self, rel=None):
-        rel = self.emb if rel is None else rel
-        if rel is None:
-            raise TypeError("BiCoder needs a relation: bind one or pass rel explicitly.")
-        return rel
     
     def parse(self, spec: str) -> Path:
-        source = "".join(spec.split())
-
-        if len(source) % 2 != 0:
-            raise ValueError(
-                f"Invalid spec {spec!r}: expected pairs like se, pd, ..."
-            )
+        tokens = spec.replace(",", " ").split()
+        if not tokens:
+            raise ValueError("Empty path spec")
 
         steps = []
-        for i in range(0, len(source), 2):
-            a = source[i]
-            h = source[i + 1]
+        for tok in tokens:
+            if len(tok) not in (2, 3):
+                raise ValueError(
+                    f"Invalid token {tok!r}: expected se, pd, sex, pdx, ..."
+                )
+
+            a = tok[0]
+            h = tok[1]
+            m = tok[2] if len(tok) == 3 else None
 
             if a not in self.ADJOINT_CODES:
-                raise ValueError(f"Invalid adjoint code {a!r} at position {i}")
+                raise ValueError(f"Invalid adjoint code {a!r} in token {tok!r}")
             if h not in self.HALF_CODES:
-                raise ValueError(f"Invalid half code {h!r} at position {i+1}")
+                raise ValueError(f"Invalid half code {h!r} in token {tok!r}")
+            if m is not None and m not in self.MODE_CODES:
+                raise ValueError(f"Invalid mode code {m!r} in token {tok!r}")
 
-            steps.append((a, h))
+            steps.append((a, h, m == "x"))
 
-        return Path(source=source, steps=tuple(steps))
+        return Path(source=" ".join(tokens), steps=tuple(steps))
     
-    def leg(self, a, h, rel=None):
-        rel = self._rel(rel)
+    def _apply_leg(self, a, h, swap, x, y, temp):
         f = self.legs[a][h]
-        return lambda x, temp: f(x, rel, temp)
+        return f(y, x, temp) if swap else f(x, y, temp)
     
-    def run(self, path: Path | str, x, temp, rel=None):
+    def leg(self, a, h, swap=False):
+        return lambda x, y, temp: self._apply_leg(a, h, swap, x, y, temp)
+    
+    def run(self, path: Path | str, x, y, temp):
         if isinstance(path, str):
             path = self.parse(path)
 
-        rel = self._rel(rel)
         z = x
-        for a, h in path.steps:
-            z = self.legs[a][h](z, rel, temp)
+        for a, h, swap in path.steps:
+            z = self._apply_leg(a, h, swap, z, y, temp)
         return z
     
     def compile(self, spec: str) -> Path:
         return self.parse(spec)
     
-    def op(self, path: Path | str, rel=None):
+    def op(self, path: Path | str, y):
         """
         Return a callable (x, temp) -> y from a compiled path or spec string.
         """
         if isinstance(path, str):
             path = self.compile(path)
 
-        rel = self._rel(rel)
-
         def step(x, temp):
-            return self.run(path, x, temp, rel=rel)
+            return self.run(path, x, y, temp)
 
         return step
      
-    def flow(self, state0, path=None, step=None, rel=None, **kw):
+    def flow(self, state0, y, path=None, step=None, **kw):
         if step is None:
             if path is None:
                 raise TypeError("flow needs either `path` or `step`.")
-            step = self.op(path, rel=rel)
+            step = self.op(path, y=y)
         return FixpointIterator(f=step, state0=state0, **kw)
     
     def explain(self, spec):
@@ -140,22 +135,23 @@ class PathCoder:
             f"Path: {path.source}",
             "Factorization: Σ.encode → Σ.decode → Δ → Π.encode → Π.decode",
         ]
-        for i, (a, h) in enumerate(path.steps, 1):
+        for i, (a, h, swap) in enumerate(path.steps, 1):
             role, op = self.LEG_INFO[(a, h)]
-            lines.append(f"{i}. {a}{h}  = {role:9s}  [{op}]")
+            suffix = " (swapped x/y)" if swap else ""
+            lines.append(f"{i}. {a}{h}{'x' if swap else ''} = {role:9s} [{op}]{suffix}")
         return "\n".join(lines)
     
-    def trace(self, spec, x, temp=0.0, rel=None):
-        rel = self._rel(rel)
+    def trace(self, spec, x, y, temp=0.0):
         path = self.parse(spec)
-
         rows = []
         z = x
         rows.append(("input", None, getattr(z, "shape", None), z))
 
-        for a, h in path.steps:
+        for a, h, swap in path.steps:
             role, op = self.LEG_INFO[(a, h)]
-            z = self.legs[a][h](z, rel, temp)
-            rows.append((f"{a}{h}", f"{role} [{op}]", getattr(z, "shape", None), z))
+            label = f"{a}{h}{'x' if swap else ''}"
+            call = f"{role} [{'swap' if swap else 'normal'}: {op}]"
+            z = self._apply_leg(a, h, swap, z, y, temp)
+            rows.append((label, call, getattr(z, "shape", None), z))
 
         return rows
