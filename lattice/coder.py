@@ -12,13 +12,20 @@ corresponds to a universal construction:
 
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from core.fixpoint import FixpointIterator
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
+class Step:
+    adj: str
+    half: str
+    swap: bool = False
+
+@dataclass(frozen=True, slots=True)
 class Path:
     source: str
-    steps: tuple[tuple[str, str, bool], ...]
+    steps: tuple[Step, ...]
+    prog: callable | None = None
 
 # ---------------------------------------------------------------------------
 # BiCoder
@@ -63,6 +70,7 @@ class PathCoder:
             "s": {"e": legs[0], "d": legs[1]},
             "p": {"e": legs[2], "d": legs[3]}
         }
+        self._cache = {}
     
     def parse(self, spec: str) -> Path:
         tokens = spec.replace(",", " ").split()
@@ -72,56 +80,57 @@ class PathCoder:
         steps = []
         for tok in tokens:
             if len(tok) not in (2, 3):
-                raise ValueError(
-                    f"Invalid token {tok!r}: expected se, pd, sex, pdx, ..."
-                )
+                raise ValueError(f"Invalid token {tok!r}: expected se, pd, sex, pdx, ...")
+            if tok[0] not in self.ADJOINT_CODES:
+                raise ValueError(f"Invalid adjoint code {tok[0]!r} in token {tok!r}")
+            if tok[1] not in self.HALF_CODES:
+                raise ValueError(f"Invalid half code {tok[1]!r} in token {tok!r}")
+            if len(tok) == 3 and tok[2] not in self.MODE_CODES:
+                raise ValueError(f"Invalid mode code {tok[2]!r} in token {tok!r}")
+            steps.append(Step(tok[0], tok[1], len(tok) == 3))
 
-            a = tok[0]
-            h = tok[1]
-            m = tok[2] if len(tok) == 3 else None
-
-            if a not in self.ADJOINT_CODES:
-                raise ValueError(f"Invalid adjoint code {a!r} in token {tok!r}")
-            if h not in self.HALF_CODES:
-                raise ValueError(f"Invalid half code {h!r} in token {tok!r}")
-            if m is not None and m not in self.MODE_CODES:
-                raise ValueError(f"Invalid mode code {m!r} in token {tok!r}")
-
-            steps.append((a, h, m == "x"))
-
-        return Path(source=" ".join(tokens), steps=tuple(steps))
+        return Path(" ".join(tokens), tuple(steps))
     
-    def _apply_leg(self, a, h, swap, x, y, temp):
+    def leg(self, step, x, y, temp):
+        a, h, swap = step.adj, step.half, step.swap
         f = self.legs[a][h]
         return f(y, x, temp) if swap else f(x, y, temp)
     
-    def leg(self, a, h, swap=False):
-        return lambda x, y, temp: self._apply_leg(a, h, swap, x, y, temp)
-    
-    def run(self, path: Path | str, x, y, temp):
-        if isinstance(path, str):
-            path = self.parse(path)
-
-        z = x
-        for a, h, swap in path.steps:
-            z = self._apply_leg(a, h, swap, z, y, temp)
-        return z
-    
-    def compile(self, spec: str) -> Path:
-        return self.parse(spec)
+    def compile(self, spec: str | Path) -> Path:
+        path = self.parse(spec) if isinstance(spec, str) else spec
+        cached = self._cache.get(path.source)
+        if cached is not None:
+            return cached
+        def prog(x, y, temp):
+            z = x
+            for step in path.steps:
+                z = self.leg(step, z, y, temp)
+            return z
+        compiled = replace(path, prog=prog)
+        self._cache[path.source] = compiled
+        return compiled
     
     def op(self, path: Path | str, y):
         """
         Return a callable (x, temp) -> y from a compiled path or spec string.
         """
+        if isinstance(path, str) or path.prog is None:
+            path = self.compile(path)
+        prog = path.prog
+        def step(x, temp):
+            return prog(x, y, temp)
+        return step
+    
+    def run(self, path: Path | str, x, y, temp):
         if isinstance(path, str):
             path = self.compile(path)
-
-        def step(x, temp):
-            return self.run(path, x, y, temp)
-
-        return step
-     
+        if path.prog is not None:
+            return path.prog(x, y, temp)
+        z = x
+        for step in path.steps:
+            z = self.leg(step, z, y, temp)
+        return z
+    
     def flow(self, state0, y, path=None, step=None, **kw):
         if step is None:
             if path is None:
@@ -135,10 +144,10 @@ class PathCoder:
             f"Path: {path.source}",
             "Factorization: Σ.encode → Σ.decode → Δ → Π.encode → Π.decode",
         ]
-        for i, (a, h, swap) in enumerate(path.steps, 1):
-            role, op = self.LEG_INFO[(a, h)]
-            suffix = " (swapped x/y)" if swap else ""
-            lines.append(f"{i}. {a}{h}{'x' if swap else ''} = {role:9s} [{op}]{suffix}")
+        for i, step in enumerate(path.steps, 1):
+            role, op = self.LEG_INFO[(step.adj, step.half)]
+            suffix = " (swapped x/y)" if step.swap else ""
+            lines.append(f"{i}. {step.adj}{step.half}{'x' if step.swap else ''} = {role:9s} [{op}]{suffix}")
         return "\n".join(lines)
     
     def trace(self, spec, x, y, temp=0.0):
@@ -147,11 +156,11 @@ class PathCoder:
         z = x
         rows.append(("input", None, getattr(z, "shape", None), z))
 
-        for a, h, swap in path.steps:
-            role, op = self.LEG_INFO[(a, h)]
-            label = f"{a}{h}{'x' if swap else ''}"
-            call = f"{role} [{'swap' if swap else 'normal'}: {op}]"
-            z = self._apply_leg(a, h, swap, z, y, temp)
+        for step in path.steps:
+            role, op = self.LEG_INFO[(step.adj, step.half)]
+            label = f"{step.adj}{step.half}{'x' if step.swap else ''}"
+            call = f"{role} [{'swap' if step.swap else 'normal'}: {op}]"
+            z = self.leg(step, z, y, temp)
             rows.append((label, call, getattr(z, "shape", None), z))
 
         return rows
