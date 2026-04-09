@@ -20,7 +20,7 @@ class Step:
     half: str
     swap: bool = False
     same: bool = False
-    ty: bool = False
+    trans: bool = False
 
 @dataclass(frozen=True, slots=True)
 class Path:
@@ -66,6 +66,22 @@ class PathCoder:
         ("p", "e"): ("Π.encode", "Residuate(y, x)"),
         ("p", "d"): ("Π.decode", "Residuate(y.T, x)"),
     }
+    TOKEN_ALIASES = {
+        "sd": ("s", "d"),
+        "pd": ("p", "d"),
+        "pe": ("p", "e"),
+        "se": ("s", "e"),
+
+        "propagate": ("s", "d"),
+        "support": ("p", "d"),
+        "abstract": ("p", "e"),
+        "realize": ("s", "e"),
+    }
+    MODIFIER_ALIASES = {
+        "symmetry": "swap",
+        "diagonal": "same",
+        "converse": "trans",
+    }
 
     def __init__(self, legs):
         self.legs = { 
@@ -80,21 +96,29 @@ class PathCoder:
             raise ValueError("Empty path spec")
         steps = []
         for tok in tokens:
-            if len(tok) < 2 or len(tok) > 4:
-                raise ValueError(f"Invalid token {tok!r}")
-            a, h = tok[0], tok[1]
-            if a not in self.ADJOINT_CODES or h not in self.HALF_CODES:
-                raise ValueError(f"Invalid token {tok!r}")
-            mode = tok[2] if len(tok) >= 3 else ""
-            tr   = tok[3] if len(tok) == 4 else ""
-            if mode not in ("", "x", "m") or tr not in ("", "t"):
-                raise ValueError(f"Invalid token {tok!r}")
-            steps.append(Step(
-                a, h,
-                swap=(mode == "x"),
-                same=(mode == "m"),
-                ty=(tr == "t"),
-            ))
+            parts = tok.split(":")
+            head = parts[0].lower()
+            mods = {p.lower() for p in parts[1:] if p}
+            if head not in self.TOKEN_ALIASES:
+                valid = ", ".join(sorted(self.TOKEN_ALIASES))
+                raise ValueError(f"Invalid token {tok!r}. Valid step names: {valid}")
+            unknown_mods = mods - set(self.MODIFIER_ALIASES)
+            if unknown_mods:
+                valid_mods = ", ".join(sorted(self.MODIFIER_ALIASES))
+                bad = ", ".join(sorted(unknown_mods))
+                raise ValueError(
+                    f"Invalid modifier(s) in {tok!r}: {bad}. Valid modifiers: {valid_mods}"
+                )
+            a, h = self.TOKEN_ALIASES[head]
+            steps.append(
+                Step(
+                    adj=a,
+                    half=h,
+                    swap="swap" in mods,
+                    same="same" in mods,
+                    trans="trans" in mods,
+                )
+            )
         return Path(" ".join(tokens), tuple(steps))
     
     def leg(self, step, x, y, temp):
@@ -102,8 +126,7 @@ class PathCoder:
         f = self.legs[a][h]
         x0, y0 = (y, x) if step.swap else (x, y)
         if step.same: y0 = x0
-        if step.tx: x0 = x0.T
-        if step.ty: y0 = y0.T
+        if step.trans: y0 = y0.T
         return f(x0, y0, temp)
     
     def compile(self, spec: str | Path) -> Path:

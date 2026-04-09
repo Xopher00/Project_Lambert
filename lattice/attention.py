@@ -46,7 +46,7 @@ class Attention(Embed):
     def __init__(self, emb, temp=1.0, eps=1e-3, max_iters=100, operator=None):
         super().__init__()
         self.emb = emb
-        self.Correct = self.coder.op("pd sd")
+        self.Correct = self.coder.op("support propagate")
         """
         Project the converged query state back to entity scores.
 
@@ -59,7 +59,7 @@ class Attention(Embed):
         ndarray, shape (n,)
             A score for each entity. Higher values indicate stronger match.
         """
-        self.Scores = self.coder.op("se")
+        self.Scores = self.coder.op("realize")
         self.fp  = FixpointIterator(
             f         = self._step,
             state0    = emb[0].copy(),

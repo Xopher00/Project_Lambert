@@ -80,7 +80,7 @@ class Embed(Tensor):
         Ramsauer, H. et al. (2020, revised 2021). Hopfield Networks is All You Need.
         *arXiv:2008.02217*.  cite{ramsauer2021}
         """
-        self.Attend = self.coder.op("se sd")
+        self.Attend = self.coder.op("realize propagate")
 
         """
         One step of concept closure via alternating Residuate.
@@ -108,7 +108,7 @@ class Embed(Tensor):
         ndarray, shape (n,)
             Updated entity vector after one closure step.
         """
-        self.Recall = self.coder.op("pe pd")
+        self.Recall = self.coder.op("abstract support")
 
         """
         One left-Kan step in concept space: Join(q[np.newaxis,:], EmbR)[0].
@@ -148,7 +148,7 @@ class Embed(Tensor):
         Domingos, P. (2025). Tensor logic. — Multi-hop query chains as
         compositions of Tucker-core einsums.  cite{domingos2025}
         """
-        self.Hop = self.coder.op("sd")
+        self.Hop = self.coder.op("propagate")
 
         """
         Compress a relation matrix into the concept embedding space.
@@ -176,7 +176,7 @@ class Embed(Tensor):
         ndarray, shape (k, k)
             The relation matrix expressed in concept space.
         """
-        self.Project = self.coder.op("sdxt se")
+        self.Project = self.coder.op("propagate:symmetry:converse realize")
 
         """
         Reconstruct a relation matrix from its concept-space representation.
@@ -204,7 +204,7 @@ class Embed(Tensor):
         ndarray, shape (n, n)
             The reconstructed relation matrix in entity space.
         """
-        self.Expand = self.coder.op("sdx se")
+        self.Expand = self.coder.op("propagate:symmetry realize")
 
         """
         Compute entity-entity similarity via shared embedding dimensions.
@@ -232,7 +232,7 @@ class Embed(Tensor):
         ndarray, shape (n, n)
             The entity-entity similarity matrix.
         """
-        self.GramMatrix = self.coder.op("semt")
+        self.GramMatrix = self.coder.op("realize:diagonal:converse")
 
     def _concept_fixpoint(self, R, seed, temp, max_iters=20, eps=1e-3, full=False):
         """
