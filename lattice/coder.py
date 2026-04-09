@@ -10,194 +10,152 @@ corresponds to a universal construction:
 - Π_F (recall_coder): right Kan extension — given an entity vector, close it into
   the smallest formal concept whose extent contains it via alternating Residuate.
 
-A `Coder` instance wraps a pair of callables `(encode, decode)` and provides
-`apply(x, emb, temp)` = `decode(encode(x, emb, temp), emb, temp)`. Two canonical
-instances are defined at module level:
-- `attend_coder`: Σ direction (Join/Join)
-- `recall_coder`: Π direction (Residuate/Residuate)
-
-`BiCoder` holds a forward and inverse `Coder` and delegates by name.
-
-Layering: core/tensor.py → lattice/coder.py → lattice/embed.py
-This module does NOT import from lattice.embed (would create a circular import).
 """
 
-from operator import attrgetter
-from core.algebra import *
-from core.tensor import Tensor
+from dataclasses import dataclass
 from core.fixpoint import FixpointIterator
 
-
-class Coder(Tensor):
-    """
-    Named abstraction for the encode→decode step in the CQL adjoint triple.
-
-    Wraps a pair of callables `(encode, decode)` and provides an `apply`
-    method that runs the full encode→decode step.
-
-    In the CQL adjoint triple (Σ_F ⊣ Δ_F ⊣ Π_F):
-    - Σ direction: encode = Join(x, emb.T, temp), decode = Join(·, emb, temp)
-    - Π direction: encode = Residuate(emb, x, temp), decode = Residuate(emb.T, ·, temp)
-
-    The encode and decode callables are responsible for all reshaping.
-
-    Parameters
-    ----------
-    encode : callable(x, emb, temp) -> intermediate, optional
-        Encodes x into an intermediate representation through emb.
-        If None, `apply` will raise TypeError.
-    decode : callable(intermediate, emb, temp) -> output, optional
-        Decodes the intermediate representation back through emb.
-        If None, `apply` will raise TypeError.
-
-    Examples
-    --------
-    >>> coder = Coder(
-    ...     encode=lambda x, e, t: coder.Join(x.reshape(1, -1), e.T, t),
-    ...     decode=lambda s, e, t: coder.Join(s, e, t).squeeze(),
-    ... )
-    >>> result = coder.apply(q, emb, temp=0.0)
-
-    References
-    ----------
-    Schultz, P., Spivak, D. I., Vasilakopoulou, C. & Wisnesky, R. (2025).
-    Algebraic Databases. §7: Σ_F ⊣ Δ_F ⊣ Π_F triple.  cite{schultz2017}
-    Sanchez, E. (1976). Residuate adjoint structure.  cite{sanchez1976}
-    """
-
-    def __init__(self, encode=None, decode=None):
-        super().__init__()
-        self.encode = encode
-        self.decode = decode
-
-    def apply(self, x, emb, temp):
-        """
-        Run one encode→decode step through the embedding matrix.
-
-            intermediate = self.encode(x, emb, temp)
-            return self.decode(intermediate, emb, temp)
-
-        Parameters
-        ----------
-        x : ndarray
-            Input vector. Shape depends on the direction: (k,) for Σ, (n,) for Π.
-        emb : ndarray, shape (n, k)
-            Embedding matrix.
-        temp : float
-            Temperature passed to encode and decode.
-
-        Returns
-        -------
-        ndarray
-            Output vector. Shape determined by decode.
-
-        Raises
-        ------
-        TypeError
-            If self.encode or self.decode is None.
-        """
-        if self.encode is None or self.decode is None:
-            raise TypeError(
-                "Coder.apply requires both encode and decode to be set. "
-                f"encode={self.encode!r}, decode={self.decode!r}"
-            )
-        intermediate = self.encode(x, emb, temp)
-        return self.decode(intermediate, emb, temp)
+@dataclass(frozen=True)
+class Path:
+    source: str
+    steps: tuple[tuple[str, str], ...]
 
 # ---------------------------------------------------------------------------
 # BiCoder
 # ---------------------------------------------------------------------------
-
     
-class BiCoder:
+class PathCoder:
     """
-    Bidirectional coder holding a forward and inverse Coder.
+    Compiler and executor for factorized adjoint paths in the Lambert core stack.
 
-    Delegates `apply_forward` to `self.forward.apply` and `apply_inverse`
-    to `self.inverse.apply`, providing a single object for both directions
-    of the CQL adjoint triple.
+    PathCoder exposes the factorized form of the adjoint pipeline
 
-    Parameters
+        Σ.encode → Σ.decode → Δ → Π.encode → Π.decode
+
+    as a small path language over four atomic legs:
+
+        se, sd, pe, pd
+
+    Each leg is implemented by tensor-level relational operators such as `Join`
+    and `Residuate`, supplied through a leg table. Path strings are parsed into
+    reusable path objects and can then be executed directly or wrapped as
+    callables for fixpoint iteration.
+    
+    References
     ----------
-    forward : Coder
-        The forward direction coder (e.g., attend_coder for Σ).
-    inverse : Coder
-        The inverse direction coder (e.g., recall_coder for Π).
-    """
-    """
-    A bicoder bound to a specicing embedding matrix
-    can run apply, encode, decode, and fixpoint iterations on either adjoint Pi or Sigma
+    Schultz, P., Spivak, D. I., Vasilakopoulou, C. & Wisnesky, R. (2025). cite{schultz2025}
+    Algebraic Databases. §7: Σ_F ⊣ Δ_F ⊣ Π_F triple.  cite{schultz2017}
+    Sanchez, E. (1976). Residuate adjoint structure.  cite{sanchez1976}
     """
 
-    def __init__(self, sigma: Coder, pi: Coder, emb=None):
-        self.sigma = sigma
-        self.pi = pi
+    ADJOINT_CODES = {"s", "p"}
+    HALF_CODES = {"e", "d"}
+    LEG_INFO = {
+        ("s", "e"): ("Σ.encode", "Join(x, rel.T)"),
+        ("s", "d"): ("Σ.decode", "Join(x, rel)"),
+        ("p", "e"): ("Π.encode", "Residuate(rel, x)"),
+        ("p", "d"): ("Π.decode", "Residuate(rel.T, x)"),
+    }
+
+    def __init__(self, legs, emb=None):
+        self.legs = { 
+            "s": {"e": legs[0], "d": legs[1]},
+            "p": {"e": legs[2], "d": legs[3]}
+        }
         self.emb = emb
 
-    def _get(self, adjoint):
-        if adjoint in ("sigma", "Σ", "attend", self.sigma):
-            return self.sigma
-        if adjoint in ("pi", "Π", "recall", self.pi):
-            return self.pi
-        raise ValueError(f"Unknown adjoint: {adjoint!r}")
-    
-    def _require_emb(self):
-        if self.emb is None:
-            raise TypeError("BiCoder is unbound; call .bind(emb) or pass emb to __init__.")
-
     def bind(self, emb):
-        return BiCoder(self.sigma, self.pi, emb)
-
-    def apply(self, x, adjoint, temp):
-        self._require_emb()
-        return self._get(adjoint).apply(x, self.emb, temp)
+        return PathCoder(self.legs, emb=emb)
+       
+    def _rel(self, rel=None):
+        rel = self.emb if rel is None else rel
+        if rel is None:
+            raise TypeError("BiCoder needs a relation: bind one or pass rel explicitly.")
+        return rel
     
-    def encode(self, x, adjoint, temp):
-        self._require_emb()
-        return self._get(adjoint).encode(x, self.emb, temp)
+    def parse(self, spec: str) -> Path:
+        source = "".join(spec.split())
+
+        if len(source) % 2 != 0:
+            raise ValueError(
+                f"Invalid spec {spec!r}: expected pairs like se, pd, ..."
+            )
+
+        steps = []
+        for i in range(0, len(source), 2):
+            a = source[i]
+            h = source[i + 1]
+
+            if a not in self.ADJOINT_CODES:
+                raise ValueError(f"Invalid adjoint code {a!r} at position {i}")
+            if h not in self.HALF_CODES:
+                raise ValueError(f"Invalid half code {h!r} at position {i+1}")
+
+            steps.append((a, h))
+
+        return Path(source=source, steps=tuple(steps))
     
-    def decode(self, x, adjoint, temp):
-        self._require_emb()
-        return self._get(adjoint).decode(x, self.emb, temp)
+    def leg(self, a, h, rel=None):
+        rel = self._rel(rel)
+        f = self.legs[a][h]
+        return lambda x, temp: f(x, rel, temp)
     
-    def roundtrip(self, space, encode):
-        start = ("concept", "entity").index(space)
-        coders = ("sigma", "pi")
-        f1, f2 = map(
-            attrgetter("encode" if encode else "decode"),
-            self._get(coders[start:]) + self._get(coders[:start])
-        )
-        return lambda x, temp: f2(f1(x, self.emb, temp), self.emb, temp)
+    def run(self, path: Path | str, x, temp, rel=None):
+        if isinstance(path, str):
+            path = self.parse(path)
 
-    def flow(self, state0, adjoint, step=None, **kw):
-        self._require_emb()
-        f = step if adjoint is None else (lambda x, t: self.apply(x, adjoint, t))
-        return FixpointIterator(f=f, state0=state0, **kw)
+        rel = self._rel(rel)
+        z = x
+        for a, h in path.steps:
+            z = self.legs[a][h](z, rel, temp)
+        return z
     
-class Adapter:
-    def __init__(self, emb, adjoints=None, lossy=False):
-        self.tensor = Tensor()
-        self.bicoder = BiCoder(adjoints or self.define_adjoints())
-
-        self.attend_step = lambda x, t: self.bicoder.apply(x, "sigma", t)
-        self.recall_step = lambda x, t: self.bicoder.apply(x, "pi", t)
-
-    def define_adjoints(self):
-        Attend = Coder(
-            encode=lambda x, e, t: self.Join(x.reshape(1,-1), e.T, t),   # (1,k) → (1,n)
-            decode=lambda s, e, t: self.Join(s, e, t).squeeze(),          # (1,n) → (k,)
-        )
-        Recall = Coder(
-            encode=lambda x, e, t: self.Residuate(e, x.reshape(-1,1), t).reshape(-1,1),  # (n,) → (k,1)
-            decode=lambda s, e, t: self.Residuate(e.T, s, t).reshape(-1),                # (k,1) → (n,)
-        )
-        return Attend, Recall
+    def compile(self, spec: str) -> Path:
+        return self.parse(spec)
     
-    def attend_flow(self, state0, **kw):
-        return self.bicoder.flow(state0=state0, adjoint="sigma", **kw)
+    def op(self, path: Path | str, rel=None):
+        """
+        Return a callable (x, temp) -> y from a compiled path or spec string.
+        """
+        if isinstance(path, str):
+            path = self.compile(path)
 
-    def recall_flow(self, state0, **kw):
-        return self.bicoder.flow(state0=state0, adjoint="pi", **kw)
+        rel = self._rel(rel)
 
-    def bind(self, emb):
-        return self.bicoder.bind(emb)
+        def step(x, temp):
+            return self.run(path, x, temp, rel=rel)
+
+        return step
+     
+    def flow(self, state0, path=None, step=None, rel=None, **kw):
+        if step is None:
+            if path is None:
+                raise TypeError("flow needs either `path` or `step`.")
+            step = self.op(path, rel=rel)
+        return FixpointIterator(f=step, state0=state0, **kw)
+    
+    def explain(self, spec):
+        path = self.parse(spec)
+        lines = [
+            f"Path: {path.source}",
+            "Factorization: Σ.encode → Σ.decode → Δ → Π.encode → Π.decode",
+        ]
+        for i, (a, h) in enumerate(path.steps, 1):
+            role, op = self.LEG_INFO[(a, h)]
+            lines.append(f"{i}. {a}{h}  = {role:9s}  [{op}]")
+        return "\n".join(lines)
+    
+    def trace(self, spec, x, temp=0.0, rel=None):
+        rel = self._rel(rel)
+        path = self.parse(spec)
+
+        rows = []
+        z = x
+        rows.append(("input", None, getattr(z, "shape", None), z))
+
+        for a, h in path.steps:
+            role, op = self.LEG_INFO[(a, h)]
+            z = self.legs[a][h](z, rel, temp)
+            rows.append((f"{a}{h}", f"{role} [{op}]", getattr(z, "shape", None), z))
+
+        return rows
