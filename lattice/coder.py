@@ -13,13 +13,14 @@ corresponds to a universal construction:
 """
 
 from dataclasses import dataclass, replace
-from core.fixpoint import FixpointIterator
 
 @dataclass(frozen=True, slots=True)
 class Step:
     adj: str
     half: str
     swap: bool = False
+    same: bool = False
+    ty: bool = False
 
 @dataclass(frozen=True, slots=True)
 class Path:
@@ -28,7 +29,7 @@ class Path:
     prog: callable | None = None
 
 # ---------------------------------------------------------------------------
-# BiCoder
+# PathCoder
 # ---------------------------------------------------------------------------
     
 class PathCoder:
@@ -57,7 +58,8 @@ class PathCoder:
 
     ADJOINT_CODES = {"s", "p"}
     HALF_CODES = {"e", "d"}
-    MODE_CODES = {"x"}   # x = swap x/y
+    MODE_CODES = {"x", "m"}
+    TRANSPOSE_CODES = {"t"}
     LEG_INFO = {
         ("s", "e"): ("Σ.encode", "Join(x, y.T)"),
         ("s", "d"): ("Σ.decode", "Join(x, y)"),
@@ -76,25 +78,33 @@ class PathCoder:
         tokens = spec.replace(",", " ").split()
         if not tokens:
             raise ValueError("Empty path spec")
-
         steps = []
         for tok in tokens:
-            if len(tok) not in (2, 3):
-                raise ValueError(f"Invalid token {tok!r}: expected se, pd, sex, pdx, ...")
-            if tok[0] not in self.ADJOINT_CODES:
-                raise ValueError(f"Invalid adjoint code {tok[0]!r} in token {tok!r}")
-            if tok[1] not in self.HALF_CODES:
-                raise ValueError(f"Invalid half code {tok[1]!r} in token {tok!r}")
-            if len(tok) == 3 and tok[2] not in self.MODE_CODES:
-                raise ValueError(f"Invalid mode code {tok[2]!r} in token {tok!r}")
-            steps.append(Step(tok[0], tok[1], len(tok) == 3))
-
+            if len(tok) < 2 or len(tok) > 4:
+                raise ValueError(f"Invalid token {tok!r}")
+            a, h = tok[0], tok[1]
+            if a not in self.ADJOINT_CODES or h not in self.HALF_CODES:
+                raise ValueError(f"Invalid token {tok!r}")
+            mode = tok[2] if len(tok) >= 3 else ""
+            tr   = tok[3] if len(tok) == 4 else ""
+            if mode not in ("", "x", "m") or tr not in ("", "t"):
+                raise ValueError(f"Invalid token {tok!r}")
+            steps.append(Step(
+                a, h,
+                swap=(mode == "x"),
+                same=(mode == "m"),
+                ty=(tr == "t"),
+            ))
         return Path(" ".join(tokens), tuple(steps))
     
     def leg(self, step, x, y, temp):
-        a, h, swap = step.adj, step.half, step.swap
+        a, h = step.adj, step.half
         f = self.legs[a][h]
-        return f(y, x, temp) if swap else f(x, y, temp)
+        x0, y0 = (y, x) if step.swap else (x, y)
+        if step.same: y0 = x0
+        if step.tx: x0 = x0.T
+        if step.ty: y0 = y0.T
+        return f(x0, y0, temp)
     
     def compile(self, spec: str | Path) -> Path:
         path = self.parse(spec) if isinstance(spec, str) else spec
@@ -110,14 +120,14 @@ class PathCoder:
         self._cache[path.source] = compiled
         return compiled
     
-    def op(self, path: Path | str, y):
+    def op(self, path: Path):
         """
-        Return a callable (x, temp) -> y from a compiled path or spec string.
+        Return a callable (x, y, temp) from a compiled path or spec string.
         """
         if isinstance(path, str) or path.prog is None:
             path = self.compile(path)
         prog = path.prog
-        def step(x, temp):
+        def step(x, y, temp):
             return prog(x, y, temp)
         return step
     
@@ -130,14 +140,7 @@ class PathCoder:
         for step in path.steps:
             z = self.leg(step, z, y, temp)
         return z
-    
-    def flow(self, state0, y, path=None, step=None, **kw):
-        if step is None:
-            if path is None:
-                raise TypeError("flow needs either `path` or `step`.")
-            step = self.op(path, y=y)
-        return FixpointIterator(f=step, state0=state0, **kw)
-    
+       
     def explain(self, spec):
         path = self.parse(spec)
         lines = [

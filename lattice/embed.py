@@ -37,13 +37,202 @@ class Embed(Tensor):
     """
 
     def __init__(self):
-        legs=[
-            lambda x, rel, t: self.Join(x.reshape(1, -1), rel.T, t),
-            lambda x, rel, t: self.Join(x.reshape(1, -1), rel, t).squeeze(),
-            lambda x, rel, t: self.Residuate(rel, x.reshape(-1, 1), t).reshape(-1, 1),
-            lambda x, rel, t: self.Residuate(rel.T, x.reshape(-1, 1), t).reshape(-1),
-        ]
-        self.coder = PathCoder(legs)
+        self.coder = PathCoder([
+            lambda x, y, temp: self.Join(x.reshape(1, -1), y.T, temp),
+            lambda x, y, temp: self.Join(x.reshape(1, -1), y, temp).squeeze(),
+            lambda x, y, temp: self.Residuate(y, x.reshape(-1, 1), temp).reshape(-1, 1),
+            lambda x, y, temp: self.Residuate(y.T, x.reshape(-1, 1), temp).reshape(-1),
+        ])
+
+        """
+        One step of Hopfield-style pattern retrieval in concept space.
+
+        Scores the query against all entities, then pulls the result back into
+        concept space:
+
+            q ∘ emb.T ∘ emb
+
+        This is structurally identical to one update step of a modern Hopfield
+        network: the first Join scores similarity between the query and each
+        stored pattern; the second Join reconstructs the concept-space output
+        as a weighted combination of those patterns.
+
+        Used internally as the core operation inside the attention fixpoint loop.
+        Not intended to be called directly — use the retrieval method in the
+        layer above.
+
+        Parameters
+        ----------
+        q : ndarray, shape (k,)
+            Query vector in concept space.
+        emb : ndarray, shape (n, k)
+            The embedding matrix storing entity patterns.
+        temp : float, optional
+            Temperature passed to each Join. Default is 0.0.
+
+        Returns
+        -------
+        ndarray, shape (k,)
+            Updated query vector after one retrieval step.
+
+        References
+        ----------
+        Ramsauer, H. et al. (2020, revised 2021). Hopfield Networks is All You Need.
+        *arXiv:2008.02217*.  cite{ramsauer2021}
+        """
+        self.Attend = self.coder.op("se sd")
+
+        """
+        One step of concept closure via alternating Residuate.
+
+        Applies two adjoint Residuate operations in sequence:
+
+            b = Residuate(emb,   a)   # entity vector → attribute vector (intent)
+            a = Residuate(emb.T, b)   # attribute vector → entity vector (extent)
+
+        Each step tightens the (extent, intent) pair toward a formal concept.
+        Iterating to fixpoint recovers the unique concept whose extent contains
+        the seed entities (Bělohlávek, 2000).
+
+        Parameters
+        ----------
+        a : ndarray, shape (n,)
+            Current entity vector.
+        emb : ndarray, shape (n, k)
+            The relation or embedding matrix.
+        temp : float, optional
+            Temperature passed to Residuate. Default is 0.0.
+
+        Returns
+        -------
+        ndarray, shape (n,)
+            Updated entity vector after one closure step.
+        """
+        self.Recall = self.coder.op("pe pd")
+
+        """
+        One left-Kan step in concept space: Join(q[np.newaxis,:], EmbR)[0].
+
+        Advances a concept-space query vector one relational hop forward
+        using a concept-to-concept relation matrix EmbR. This is the
+        existential (Σ_R) direction of the Kan adjunction:
+
+            Σ_R(q) = Join(q, EmbR)
+
+        The result is a new concept-space vector representing all concepts
+        reachable from q via EmbR.
+
+        Parameters
+        ----------
+        q : ndarray, shape (k,)
+            Concept-space query vector. Must satisfy q.shape[0] == EmbR.shape[0].
+        EmbR : ndarray, shape (k, k)
+            Concept-to-concept relation matrix (Tucker core). Must be square:
+            EmbR.shape[0] == EmbR.shape[1].
+        temp : float
+            Temperature passed to Join.
+
+        Returns
+        -------
+        ndarray, shape (k,)
+            Updated concept-space vector after one relational hop.
+
+        Raises
+        ------
+        ValueError
+            If q.shape[0] != EmbR.shape[0] (dimension mismatch) or
+            EmbR.shape[0] != EmbR.shape[1] (EmbR is not square).
+
+        References
+        ----------
+        Domingos, P. (2025). Tensor logic. — Multi-hop query chains as
+        compositions of Tucker-core einsums.  cite{domingos2025}
+        """
+        self.Hop = self.coder.op("sd")
+
+        """
+        Compress a relation matrix into the concept embedding space.
+
+        Computes the Tucker-style projection under max-min composition:
+
+            emb.T ∘ M ∘ emb
+
+        The result is a (k, k) matrix in concept space, where k is the number
+        of embedding dimensions.
+
+        # Under review — the projected matrix is currently discarded by callers.
+
+        Parameters
+        ----------
+        M : ndarray, shape (n, n)
+            The relation matrix to project.
+        emb : ndarray, shape (n, k)
+            The embedding matrix defining the concept basis.
+        temp : float, optional
+            Temperature passed to each Join. Default is 0.0.
+
+        Returns
+        -------
+        ndarray, shape (k, k)
+            The relation matrix expressed in concept space.
+        """
+        self.Project = self.coder.op("sdxt se")
+
+        """
+        Reconstruct a relation matrix from its concept-space representation.
+
+        Computes the inverse of Project under max-min composition:
+
+            emb ∘ M ∘ emb.T
+
+        The result is an (n, n) matrix in entity space. This is the approximate
+        reconstruction of the original relation from its compressed form.
+
+        # Under review — not called anywhere in the active codebase.
+
+        Parameters
+        ----------
+        M : ndarray, shape (k, k)
+            The relation matrix in concept space.
+        emb : ndarray, shape (n, k)
+            The embedding matrix defining the concept basis.
+        temp : float
+            Temperature passed to each Join.
+
+        Returns
+        -------
+        ndarray, shape (n, n)
+            The reconstructed relation matrix in entity space.
+        """
+        self.Expand = self.coder.op("sdx se")
+
+        """
+        Compute entity-entity similarity via shared embedding dimensions.
+
+        Composes M with its transpose under max-min:
+
+            M ∘ M.T
+
+        Entry (x, x') in the result measures how strongly entities x and x'
+        are connected through shared intermediate dimensions — the more
+        embedding dimensions they both participate in, the higher the score.
+
+        Useful for analogical reasoning: entities with high Gram scores share
+        relational structure and can borrow inferences from one another.
+
+        Parameters
+        ----------
+        M : ndarray, shape (n, k)
+            The embedding matrix.
+        temp : float
+            Temperature passed to Join.
+
+        Returns
+        -------
+        ndarray, shape (n, n)
+            The entity-entity similarity matrix.
+        """
+        self.GramMatrix = self.coder.op("semt")
 
     def _concept_fixpoint(self, R, seed, temp, max_iters=20, eps=1e-3, full=False):
         """
@@ -150,217 +339,6 @@ class Embed(Tensor):
         emb  = R[:, rep_cols]
         EmbR = self.Project(R, emb, temp)
         return emb, EmbR, rep_cols
-
-    def Project(self, M, emb, temp=0.0):
-        """
-        Compress a relation matrix into the concept embedding space.
-
-        Computes the Tucker-style projection under max-min composition:
-
-            emb.T ∘ M ∘ emb
-
-        The result is a (k, k) matrix in concept space, where k is the number
-        of embedding dimensions.
-
-        # Under review — the projected matrix is currently discarded by callers.
-
-        Parameters
-        ----------
-        M : ndarray, shape (n, n)
-            The relation matrix to project.
-        emb : ndarray, shape (n, k)
-            The embedding matrix defining the concept basis.
-        temp : float, optional
-            Temperature passed to each Join. Default is 0.0.
-
-        Returns
-        -------
-        ndarray, shape (k, k)
-            The relation matrix expressed in concept space.
-        """
-        return self.Join(self.Join(emb.T, M, temp), emb, temp)
-
-    def Expand(self, M, emb, temp):
-        """
-        Reconstruct a relation matrix from its concept-space representation.
-
-        Computes the inverse of Project under max-min composition:
-
-            emb ∘ M ∘ emb.T
-
-        The result is an (n, n) matrix in entity space. This is the approximate
-        reconstruction of the original relation from its compressed form.
-
-        # Under review — not called anywhere in the active codebase.
-
-        Parameters
-        ----------
-        M : ndarray, shape (k, k)
-            The relation matrix in concept space.
-        emb : ndarray, shape (n, k)
-            The embedding matrix defining the concept basis.
-        temp : float
-            Temperature passed to each Join.
-
-        Returns
-        -------
-        ndarray, shape (n, n)
-            The reconstructed relation matrix in entity space.
-        """
-        return self.Join(self.Join(emb, M, temp), emb.T, temp)
-
-    def GramMatrix(self, M, temp):
-        """
-        Compute entity-entity similarity via shared embedding dimensions.
-
-        Composes M with its transpose under max-min:
-
-            M ∘ M.T
-
-        Entry (x, x') in the result measures how strongly entities x and x'
-        are connected through shared intermediate dimensions — the more
-        embedding dimensions they both participate in, the higher the score.
-
-        Useful for analogical reasoning: entities with high Gram scores share
-        relational structure and can borrow inferences from one another.
-
-        Parameters
-        ----------
-        M : ndarray, shape (n, k)
-            The embedding matrix.
-        temp : float
-            Temperature passed to Join.
-
-        Returns
-        -------
-        ndarray, shape (n, n)
-            The entity-entity similarity matrix.
-        """
-        return self.Join(M, M.T, temp)
-
-    def Attend(self, q, emb, temp=0.0):
-        """
-        One step of Hopfield-style pattern retrieval in concept space.
-
-        Scores the query against all entities, then pulls the result back into
-        concept space:
-
-            q ∘ emb.T ∘ emb
-
-        This is structurally identical to one update step of a modern Hopfield
-        network: the first Join scores similarity between the query and each
-        stored pattern; the second Join reconstructs the concept-space output
-        as a weighted combination of those patterns.
-
-        Used internally as the core operation inside the attention fixpoint loop.
-        Not intended to be called directly — use the retrieval method in the
-        layer above.
-
-        Parameters
-        ----------
-        q : ndarray, shape (k,)
-            Query vector in concept space.
-        emb : ndarray, shape (n, k)
-            The embedding matrix storing entity patterns.
-        temp : float, optional
-            Temperature passed to each Join. Default is 0.0.
-
-        Returns
-        -------
-        ndarray, shape (k,)
-            Updated query vector after one retrieval step.
-
-        References
-        ----------
-        Ramsauer, H. et al. (2020, revised 2021). Hopfield Networks is All You Need.
-        *arXiv:2008.02217*.  cite{ramsauer2021}
-        """
-        f = self.coder.op("sesd")
-        return f(q, emb, temp)
-    
-    def hop(self, q: np.ndarray, EmbR: np.ndarray, temp: float) -> np.ndarray:
-        """
-        One left-Kan step in concept space: Join(q[np.newaxis,:], EmbR)[0].
-
-        Advances a concept-space query vector one relational hop forward
-        using a concept-to-concept relation matrix EmbR. This is the
-        existential (Σ_R) direction of the Kan adjunction:
-
-            Σ_R(q) = Join(q, EmbR)
-
-        The result is a new concept-space vector representing all concepts
-        reachable from q via EmbR.
-
-        Parameters
-        ----------
-        q : ndarray, shape (k,)
-            Concept-space query vector. Must satisfy q.shape[0] == EmbR.shape[0].
-        EmbR : ndarray, shape (k, k)
-            Concept-to-concept relation matrix (Tucker core). Must be square:
-            EmbR.shape[0] == EmbR.shape[1].
-        temp : float
-            Temperature passed to Join.
-
-        Returns
-        -------
-        ndarray, shape (k,)
-            Updated concept-space vector after one relational hop.
-
-        Raises
-        ------
-        ValueError
-            If q.shape[0] != EmbR.shape[0] (dimension mismatch) or
-            EmbR.shape[0] != EmbR.shape[1] (EmbR is not square).
-
-        References
-        ----------
-        Domingos, P. (2025). Tensor logic. — Multi-hop query chains as
-        compositions of Tucker-core einsums.  cite{domingos2025}
-        """
-        if EmbR.ndim != 2 or EmbR.shape[0] != EmbR.shape[1]:
-            raise ValueError(
-                f"EmbR must be square (shape (k, k)). "
-                f"Got EmbR.shape={EmbR.shape}."
-            )
-        k = EmbR.shape[0]
-        if q.shape != (k,):
-            raise ValueError(
-                f"q.shape must equal (EmbR.shape[0],) = ({k},). "
-                f"Got q.shape={q.shape}."
-            )
-        result = self.Join(q[np.newaxis, :], EmbR, temp=temp)  # (1, k)
-        return result[0]                                        # (k,)
-
-    def Recall(self, a, emb, temp=0.0):
-        """
-        One step of concept closure via alternating Residuate.
-
-        Applies two adjoint Residuate operations in sequence:
-
-            b = Residuate(emb,   a)   # entity vector → attribute vector (intent)
-            a = Residuate(emb.T, b)   # attribute vector → entity vector (extent)
-
-        Each step tightens the (extent, intent) pair toward a formal concept.
-        Iterating to fixpoint recovers the unique concept whose extent contains
-        the seed entities (Bělohlávek, 2000).
-
-        Parameters
-        ----------
-        a : ndarray, shape (n,)
-            Current entity vector.
-        emb : ndarray, shape (n, k)
-            The relation or embedding matrix.
-        temp : float, optional
-            Temperature passed to Residuate. Default is 0.0.
-
-        Returns
-        -------
-        ndarray, shape (n,)
-            Updated entity vector after one closure step.
-        """
-        f = self.coder("pepd")
-        return f(a, emb, temp)
-
 
 class Learner(Embed):
     """

@@ -46,7 +46,20 @@ class Attention(Embed):
     def __init__(self, emb, temp=1.0, eps=1e-3, max_iters=100, operator=None):
         super().__init__()
         self.emb = emb
-        self.operator = operator or self.Attend
+        self.Correct = self.coder.op("pd sd")
+        """
+        Project the converged query state back to entity scores.
+
+        Computes Join(state, emb.T) to measure how well the current fixpoint
+        state matches each entity in the embedding. The result is the head's
+        confidence in each entity as a retrieval candidate.
+
+        Returns
+        -------
+        ndarray, shape (n,)
+            A score for each entity. Higher values indicate stronger match.
+        """
+        self.Scores = self.coder.op("se")
         self.fp  = FixpointIterator(
             f         = self._step,
             state0    = emb[0].copy(),
@@ -84,26 +97,9 @@ class Attention(Embed):
         raw : ndarray, shape (k,)
             The uncorrected SoftMax output, returned as aux for energy computation.
         """
-        J   = self.operator(q, self.emb, temp)
-        raw = self.SoftMax(J, temp, axis=0)
-        allowed   = self.Residuate(raw[:, None], self.emb.T, temp).squeeze()
-        corrected = self.SmoothMin((raw, self.Join(allowed[None,:], self.emb, temp).squeeze()), temp, axis=0)
+        raw = self.SoftMax(self.Attend(q, self.emb, temp), temp, axis=0)
+        corrected = self.SmoothMin((raw, self.Correct(raw, self.emb, temp)), temp, axis=0)
         return corrected, raw
-
-    def scores(self):
-        """
-        Project the converged query state back to entity scores.
-
-        Computes Join(state, emb.T) to measure how well the current fixpoint
-        state matches each entity in the embedding. The result is the head's
-        confidence in each entity as a retrieval candidate.
-
-        Returns
-        -------
-        ndarray, shape (n,)
-            A score for each entity. Higher values indicate stronger match.
-        """
-        return self.Join(self.fp.state[None,:], self.emb.T, self.fp.temp).squeeze()
 
     def _query(self, idx):
         """
@@ -164,7 +160,7 @@ class Attention(Embed):
         if np.all(q == 0):
             return np.array([]), None
         self.fp.perturb(q)
-        scores = self.scores()
+        scores = self.Scores()
         mask   = scores >= scores.max() - self.fp.eps
         weights = self.fp.state
         return np.where(mask)[0], weights
