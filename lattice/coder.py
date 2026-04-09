@@ -12,26 +12,65 @@ corresponds to a universal construction:
 
 """
 
+from __future__ import annotations
 from dataclasses import dataclass, replace
+from typing import Callable
 
 @dataclass(frozen=True, slots=True)
 class Step:
-    adj: str
-    half: str
-    swap: bool = False
-    same: bool = False
-    trans: bool = False
+    name: str            # canonical semantic name: realize, propagate, abstract, support
+    swap: bool = False   # swap x and y arguments
+    same: bool = False   # use x for both arguments (diagonal mode)
+    trans: bool = False  # transpose y before passing
 
 @dataclass(frozen=True, slots=True)
 class Path:
     source: str
     steps: tuple[Step, ...]
-    prog: callable | None = None
+    prog: Callable | None = None
+
+# ---------------------------------------------------------------------------
+# Algebraic type table
+# ---------------------------------------------------------------------------
+
+# Input and output space of each leg.  Used by _check_types() to enforce the
+# E↔C alternation law and by _normalize() to identify same-pair roundtrips.
+#
+#   realize   (se) : C → E    (Σ.encode  — extent of a concept)
+#   propagate (sd) : E → C    (Σ.decode  — image under Join)
+#   abstract  (pe) : E → C    (Π.encode  — intent of an entity)
+#   support   (pd) : C → E    (Π.decode  — preimage under Residuate)
+#
+# Same-adjoint-pair roundtrips are algebraically guaranteed idempotent:
+#   (pd sd)² = pd sd,  (sd pd)² = sd pd   — join/propagate pair
+#   (se pe)² = se pe,  (pe se)² = pe se   — residuate/abstract pair
+LEG_TYPE = {
+    "realize":   ("C", "E"),
+    "propagate": ("E", "C"),
+    "abstract":  ("E", "C"),
+    "support":   ("C", "E"),
+}
+
+# Same-pair roundtrips eligible for algebraically sound idempotence folding.
+# Key = (first_name, second_name); value = True means the pair is guaranteed.
+_SAME_PAIR = {
+    ("support",   "propagate"),  # pd sd  — join pair, closure on E
+    ("propagate", "support"),    # sd pd  — join pair, projection on C
+    ("realize",   "abstract"),   # se pe  — residuate pair, closure on C
+    ("abstract",  "realize"),    # pe se  — residuate pair, projection on E
+}
+
+# Mixed-pair roundtrips that are empirically (but not algebraically) idempotent.
+# Only folded when fold_empirical=True is passed to compile().
+_MIXED_PAIR = {
+    ("realize",   "propagate"),  # se sd  — Attend
+    ("abstract",  "support"),    # pe pd  — Recall
+}
 
 # ---------------------------------------------------------------------------
 # PathCoder
 # ---------------------------------------------------------------------------
-    
+
 class PathCoder:
     """
     Compiler and executor for factorized adjoint paths in the Lambert core stack.
@@ -42,13 +81,14 @@ class PathCoder:
 
     as a small path language over four atomic legs:
 
-        se, sd, pe, pd
+        realize, propagate, abstract, support
+        (also accepted as short codes: se, sd, pe, pd)
 
     Each leg is implemented by tensor-level relational operators such as `Join`
     and `Residuate`, supplied through a leg table. Path strings are parsed into
-    reusable path objects and can then be executed directly or wrapped as
-    callables for fixpoint iteration.
-    
+    reusable path objects and compiled to direct callables — all leg lookup and
+    modifier logic is resolved once at compile time.
+
     References
     ----------
     Schultz, P., Spivak, D. I., Vasilakopoulou, C. & Wisnesky, R. (2025). cite{schultz2025}
@@ -56,40 +96,89 @@ class PathCoder:
     Sanchez, E. (1976). Residuate adjoint structure.  cite{sanchez1976}
     """
 
-    ADJOINT_CODES = {"s", "p"}
-    HALF_CODES = {"e", "d"}
-    MODE_CODES = {"x", "m"}
-    TRANSPOSE_CODES = {"t"}
     LEG_INFO = {
-        ("s", "e"): ("Σ.encode", "Join(x, y.T)"),
-        ("s", "d"): ("Σ.decode", "Join(x, y)"),
-        ("p", "e"): ("Π.encode", "Residuate(y, x)"),
-        ("p", "d"): ("Π.decode", "Residuate(y.T, x)"),
+        "realize":   ("Σ.encode", "Join(x, y.T)"),
+        "propagate": ("Σ.decode", "Join(x, y)"),
+        "abstract":  ("Π.encode", "Residuate(y, x)"),
+        "support":   ("Π.decode", "Residuate(y.T, x)"),
     }
     TOKEN_ALIASES = {
-        "sd": ("s", "d"),
-        "pd": ("p", "d"),
-        "pe": ("p", "e"),
-        "se": ("s", "e"),
-
-        "propagate": ("s", "d"),
-        "support": ("p", "d"),
-        "abstract": ("p", "e"),
-        "realize": ("s", "e"),
+        # short codes → canonical name
+        "se": "realize",
+        "sd": "propagate",
+        "pe": "abstract",
+        "pd": "support",
+        # semantic names (identity — so parse() is uniform)
+        "realize":   "realize",
+        "propagate": "propagate",
+        "abstract":  "abstract",
+        "support":   "support",
     }
-    MODIFIER_ALIASES = {
-        "symmetry": "swap",
-        "diagonal": "same",
-        "converse": "trans",
-    }
+    # accepted modifier tokens
+    MODIFIERS = {"symmetry", "diagonal", "converse"}
 
-    def __init__(self, legs):
-        self.legs = { 
-            "s": {"e": legs[0], "d": legs[1]},
-            "p": {"e": legs[2], "d": legs[3]}
+    def __init__(self, legs, fold_empirical=False):
+        self.legs = {
+            "realize":   legs[0],   # se  (Σ.encode)
+            "propagate": legs[1],   # sd  (Σ.decode)
+            "abstract":  legs[2],   # pe  (Π.encode)
+            "support":   legs[3],   # pd  (Π.decode)
         }
+        self.fold_empirical = fold_empirical
         self._cache = {}
-    
+
+    @staticmethod
+    def _check_types(steps):
+        """
+        Verify that consecutive steps alternate E↔C.
+
+        Raises TypeError at the first boundary where the output space of one
+        step does not match the input space of the next.  A single step is
+        always valid.
+        """
+        for i in range(1, len(steps)):
+            prev_out = LEG_TYPE[steps[i - 1].name][1]
+            curr_in  = LEG_TYPE[steps[i].name][0]
+            if prev_out != curr_in:
+                raise TypeError(
+                    f"Type mismatch at step {i}: "
+                    f"{steps[i-1].name!r} outputs {prev_out!r} but "
+                    f"{steps[i].name!r} expects {curr_in!r}"
+                )
+
+    @staticmethod
+    def _fold(steps, pair):
+        """
+        Fold empirically idempotent mixed-pair repeats (opt-in only).
+
+        Applies the same left-to-right scan as _normalize() but for
+        (se sd)² → se sd  (Attend)  and  (pe pd)² → pe pd  (Recall).
+        These are empirically closure-like but have no algebraic guarantee;
+        folding may lose precision in unusual configurations.
+        """
+        """
+        Fold algebraically guaranteed same-pair idempotent repeats.
+
+        Scans left-to-right and drops any consecutive pair (a, b) that
+        immediately repeats the pair already at the tail of the output list,
+        provided (a.name, b.name) ∈ _SAME_PAIR and the modifiers match
+        exactly.  This is a sound rewrite: (pd sd)² = pd sd, etc.
+
+        Mixed-pair repeats (Attend, Recall) are left untouched here; use
+        _fold_empirical() if the caller opts in.
+        """
+        out = list(steps)
+        i = 2
+        while i < len(out):
+            a, b = out[i - 2], out[i - 1]
+            if (i + 1 < len(out)
+                    and (a.name, b.name) in pair
+                    and out[i] == a and out[i + 1] == b):
+                del out[i:i + 2]
+            else:
+                i += 1
+        return tuple(out)
+
     def parse(self, spec: str) -> Path:
         tokens = spec.replace(",", " ").split()
         if not tokens:
@@ -101,69 +190,69 @@ class PathCoder:
             mods = {p.lower() for p in parts[1:] if p}
             if head not in self.TOKEN_ALIASES:
                 valid = ", ".join(sorted(self.TOKEN_ALIASES))
-                raise ValueError(f"Invalid token {tok!r}. Valid step names: {valid}")
-            unknown_mods = mods - set(self.MODIFIER_ALIASES)
-            if unknown_mods:
-                valid_mods = ", ".join(sorted(self.MODIFIER_ALIASES))
-                bad = ", ".join(sorted(unknown_mods))
+                raise ValueError(f"Unknown token {tok!r}. Valid: {valid}")
+            unknown = mods - self.MODIFIERS
+            if unknown:
                 raise ValueError(
-                    f"Invalid modifier(s) in {tok!r}: {bad}. Valid modifiers: {valid_mods}"
+                    f"Unknown modifier(s) in {tok!r}: {', '.join(sorted(unknown))}. "
+                    f"Valid: {', '.join(sorted(self.MODIFIERS))}"
                 )
-            a, h = self.TOKEN_ALIASES[head]
-            steps.append(
-                Step(
-                    adj=a,
-                    half=h,
-                    swap="swap" in mods,
-                    same="same" in mods,
-                    trans="trans" in mods,
-                )
-            )
-        return Path(" ".join(tokens), tuple(steps))
-    
-    def leg(self, step, x, y, temp):
-        a, h = step.adj, step.half
-        f = self.legs[a][h]
-        x0, y0 = (y, x) if step.swap else (x, y)
-        if step.same: y0 = x0
-        if step.trans: y0 = y0.T
-        return f(x0, y0, temp)
-    
-    def compile(self, spec: str | Path) -> Path:
+            steps.append(Step(
+                name=self.TOKEN_ALIASES[head],
+                swap="symmetry" in mods,
+                same="diagonal" in mods,
+                trans="converse" in mods,
+            ))
+        steps = tuple(steps)
+        self._check_types(steps)
+        steps = self._fold(steps, _SAME_PAIR)
+        return Path(" ".join(tok.split(":")[0].lower() for tok in tokens), steps)
+
+    def _compile_step(self, step: Step) -> callable:
+        """
+        Resolve one Step into a callable (x, y, temp) with modifiers baked in.
+
+        Leg lookup and all modifier logic are resolved once here so that the
+        returned callable has no branching or dict dispatch at runtime.
+        """
+        f = self.legs[step.name]
+        if step.swap:
+            f0 = f; f = lambda x, y, t, f=f0: f(y, x, t)
+        if step.same:
+            f0 = f; f = lambda x, y, t, f=f0: f(x, x, t)
+        if step.trans:
+            f0 = f; f = lambda x, y, t, f=f0: f(x, y.T, t)
+        return f
+
+    def compile(self, spec: str | Path, fold_empirical=False) -> Path:
         path = self.parse(spec) if isinstance(spec, str) else spec
-        cached = self._cache.get(path.source)
-        if cached is not None:
-            return cached
-        def prog(x, y, temp):
-            z = x
-            for step in path.steps:
-                z = self.leg(step, z, y, temp)
-            return z
+        do_path = fold_empirical if fold_empirical is not None else self.fold_empirical
+        if do_path:
+            path = replace(path, steps=self._fold(path.steps, _MIXED_PAIR))
+        if path.source in self._cache:
+            return self._cache[path.source]
+        fns = [self._compile_step(s) for s in path.steps]
+        if len(fns) == 1:
+            prog = fns[0]
+        else:
+            def prog(x, y, temp, fns=fns):
+                z = x
+                for f in fns:
+                    z = f(z, y, temp)
+                return z
         compiled = replace(path, prog=prog)
         self._cache[path.source] = compiled
         return compiled
-    
-    def op(self, path: Path):
-        """
-        Return a callable (x, y, temp) from a compiled path or spec string.
-        """
-        if isinstance(path, str) or path.prog is None:
-            path = self.compile(path)
-        prog = path.prog
-        def step(x, y, temp):
-            return prog(x, y, temp)
-        return step
-    
+
+    def op(self, spec: str | Path) -> callable:
+        """Return a compiled callable (x, y, temp) for a path spec."""
+        return self.compile(spec).prog
+
     def run(self, path: Path | str, x, y, temp):
         if isinstance(path, str):
             path = self.compile(path)
-        if path.prog is not None:
-            return path.prog(x, y, temp)
-        z = x
-        for step in path.steps:
-            z = self.leg(step, z, y, temp)
-        return z
-       
+        return path.prog(x, y, temp)
+
     def explain(self, spec):
         path = self.parse(spec)
         lines = [
@@ -171,22 +260,18 @@ class PathCoder:
             "Factorization: Σ.encode → Σ.decode → Δ → Π.encode → Π.decode",
         ]
         for i, step in enumerate(path.steps, 1):
-            role, op = self.LEG_INFO[(step.adj, step.half)]
+            role, op_str = self.LEG_INFO[step.name]
             suffix = " (swapped x/y)" if step.swap else ""
-            lines.append(f"{i}. {step.adj}{step.half}{'x' if step.swap else ''} = {role:9s} [{op}]{suffix}")
+            lines.append(f"{i}. {step.name} = {role:9s} [{op_str}]{suffix}")
         return "\n".join(lines)
-    
+
     def trace(self, spec, x, y, temp=0.0):
         path = self.parse(spec)
-        rows = []
+        rows = [("input", None, getattr(x, "shape", None), x)]
         z = x
-        rows.append(("input", None, getattr(z, "shape", None), z))
-
         for step in path.steps:
-            role, op = self.LEG_INFO[(step.adj, step.half)]
-            label = f"{step.adj}{step.half}{'x' if step.swap else ''}"
-            call = f"{role} [{'swap' if step.swap else 'normal'}: {op}]"
-            z = self.leg(step, z, y, temp)
-            rows.append((label, call, getattr(z, "shape", None), z))
-
+            role, op_str = self.LEG_INFO[step.name]
+            f = self._compile_step(step)
+            z = f(z, y, temp)
+            rows.append((step.name, f"{role} [{op_str}]", getattr(z, "shape", None), z))
         return rows
