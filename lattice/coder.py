@@ -149,23 +149,15 @@ class PathCoder:
     @staticmethod
     def _fold(steps, pair):
         """
-        Fold empirically idempotent mixed-pair repeats (opt-in only).
+        Fold consecutive repeated step-pairs that appear in `pair`.
 
-        Applies the same left-to-right scan as _normalize() but for
-        (se sd)² → se sd  (Attend)  and  (pe pd)² → pe pd  (Recall).
-        These are empirically closure-like but have no algebraic guarantee;
-        folding may lose precision in unusual configurations.
-        """
-        """
-        Fold algebraically guaranteed same-pair idempotent repeats.
+        Scans left-to-right; whenever the two steps at the tail of the
+        emitted list exactly match the next two incoming steps (same name
+        and same modifiers), the duplicate pair is dropped.
 
-        Scans left-to-right and drops any consecutive pair (a, b) that
-        immediately repeats the pair already at the tail of the output list,
-        provided (a.name, b.name) ∈ _SAME_PAIR and the modifiers match
-        exactly.  This is a sound rewrite: (pd sd)² = pd sd, etc.
-
-        Mixed-pair repeats (Attend, Recall) are left untouched here; use
-        _fold_empirical() if the caller opts in.
+        Called with _SAME_PAIR for algebraically guaranteed idempotence
+        (pd sd, sd pd, se pe, pe se) or with _MIXED_PAIR for empirical
+        folding (se sd, pe pd) when the caller opts in.
         """
         out = list(steps)
         i = 2
@@ -208,7 +200,7 @@ class PathCoder:
         steps = self._fold(steps, _SAME_PAIR)
         return Path(" ".join(tok.split(":")[0].lower() for tok in tokens), steps)
 
-    def _compile_step(self, step: Step) -> callable:
+    def _compile_step(self, step: Step) -> Callable:
         """
         Resolve one Step into a callable (x, y, temp) with modifiers baked in.
 
@@ -224,10 +216,10 @@ class PathCoder:
             f0 = f; f = lambda x, y, t, f=f0: f(x, y.T, t)
         return f
 
-    def compile(self, spec: str | Path, fold_empirical=False) -> Path:
+    def compile(self, spec: str | Path, fold_empirical=None) -> Path:
         path = self.parse(spec) if isinstance(spec, str) else spec
-        do_path = fold_empirical if fold_empirical is not None else self.fold_empirical
-        if do_path:
+        do_fold = fold_empirical if fold_empirical is not None else self.fold_empirical
+        if do_fold:
             path = replace(path, steps=self._fold(path.steps, _MIXED_PAIR))
         if path.source in self._cache:
             return self._cache[path.source]
