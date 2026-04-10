@@ -219,10 +219,11 @@ class PathCoder:
     def compile(self, spec: str | Path, fold_empirical=None) -> Path:
         path = self.parse(spec) if isinstance(spec, str) else spec
         do_fold = fold_empirical if fold_empirical is not None else self.fold_empirical
+        cache_key = (path.source, do_fold)
+        if cache_key in self._cache:
+            return self._cache[cache_key]
         if do_fold:
             path = replace(path, steps=self._fold(path.steps, _MIXED_PAIR))
-        if path.source in self._cache:
-            return self._cache[path.source]
         fns = [self._compile_step(s) for s in path.steps]
         if len(fns) == 1:
             prog = fns[0]
@@ -233,7 +234,7 @@ class PathCoder:
                     z = f(z, y, temp)
                 return z
         compiled = replace(path, prog=prog)
-        self._cache[path.source] = compiled
+        self._cache[cache_key] = compiled
         return compiled
 
     def op(self, spec: str | Path) -> callable:
