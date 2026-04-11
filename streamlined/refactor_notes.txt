@@ -1,0 +1,351 @@
+Below is a **clear design note** you can keep with the codebase. It avoids implementation debates and focuses on **what exists, why it exists, and what the intended direction is**.
+
+---
+
+# Path Engine Design Note
+
+## 1. Purpose
+
+The `PathEngine` provides a **small compiler for relational tensor programs**.
+
+Instead of writing tensor compositions directly (e.g. nested `Join` and `Residuate` calls), we describe **programs as paths of named operators** derived from einsum equations.
+
+Example:
+
+```python
+Attend = realize >> propagate
+```
+
+This corresponds to the tensor program:
+
+```
+q ∘ embᵀ ∘ emb
+```
+
+The engine:
+
+1. **derives types from einsum equations**
+2. **validates operator composition**
+3. **normalizes redundant paths**
+4. **compiles paths into callable tensor programs**
+
+The goal is **clarity, correctness, and composability** when building relational tensor systems.
+
+---
+
+# 2. Layers of the System
+
+The system is intentionally split into three layers.
+
+## 2.1 Tensor Algebra Layer
+
+This layer contains the **actual mathematical operators** implemented as semiring einsum kernels.
+
+Examples:
+
+* `join_einsum_forward`
+* `residuate_einsum_forward`
+
+Semantics:
+
+```
+Join(A,B)[i,k]      = max_j min(A[i,j], B[j,k])
+Residuate(A,C)[j,k] = min_i implies(A[i,j], C[i,k])
+```
+
+These functions:
+
+* operate directly on tensors
+* know nothing about paths or programs.
+
+---
+
+## 2.2 Path Compilation Layer
+
+This is implemented by **`PathEngine`**.
+
+The engine converts **named operators + einsum equations** into a **typed transition system**.
+
+Example operator definitions:
+
+```
+realize   : j → i
+propagate : i → j
+abstract  : i → j
+support   : j → i
+```
+
+These types are inferred automatically from the einsum signatures.
+
+Example:
+
+```
+"j,ji->i"
+```
+
+means:
+
+```
+vector(j) → vector(i)
+```
+
+---
+
+## 2.3 Operator Layer
+
+The user-facing layer defines **named relational programs**.
+
+Example (`Compose` class):
+
+```python
+Scores     = realize
+Hop        = propagate
+Attend     = realize >> propagate
+Recall     = abstract >> support
+Correct    = support >> propagate
+```
+
+This layer expresses the **actual relational algorithms** used by the system.
+
+For example:
+
+```
+Attend = realize propagate
+```
+
+implements a Hopfield-style retrieval step.
+
+---
+
+# 3. Path Programs
+
+A **path** represents a sequence of relational operators.
+
+Example:
+
+```
+realize propagate realize
+```
+
+Paths can be written either as:
+
+```
+"realize propagate realize"
+```
+
+or as composable objects:
+
+```
+realize >> propagate >> realize
+```
+
+Internally, a path is represented as:
+
+```
+("realize", "propagate", "realize")
+```
+
+Paths are **program descriptions**, not tensor computations.
+
+They are compiled by the engine.
+
+---
+
+# 4. Path Compilation
+
+Compilation consists of four steps.
+
+### 1. Tokenization
+
+Convert input spec into operator names.
+
+Example:
+
+```
+"realize propagate"
+```
+
+→
+
+```
+("realize","propagate")
+```
+
+---
+
+### 2. Type validation
+
+Adjacent operators must match.
+
+Example:
+
+```
+x : a → b
+y : c → d
+```
+
+Composition is valid only if:
+
+```
+b == c
+```
+
+Invalid compositions collapse to a special `bottom` expression.
+
+---
+
+### 3. Path normalization
+
+The engine uses **e-graph equality saturation** to simplify paths.
+
+Example rewrite:
+
+```
+(x ; y) ; z → z
+```
+
+when:
+
+```
+x : a → b
+y : b → a
+```
+
+These rules remove redundant round-trips.
+
+Important:
+
+These rewrites are **compiler simplifications**, not mathematical proofs of tensor equality.
+
+---
+
+### 4. Program generation
+
+The normalized path is compiled into a Python callable:
+
+```
+(x, y, temp) → tensor
+```
+
+Each operator in the path executes its corresponding tensor kernel.
+
+---
+
+# 5. Why This System Exists
+
+Without the engine, tensor programs look like this:
+
+```
+Join(Join(q, R.T), R)
+```
+
+With the engine:
+
+```
+realize propagate
+```
+
+Benefits:
+
+* clearer relational structure
+* automatic validation
+* reusable operator compositions
+* canonicalized program definitions
+
+---
+
+# 6. What This System Is Not
+
+The engine is **not**:
+
+* a tensor optimizer
+* a kernel compiler
+* a graph execution engine
+* a symbolic algebra prover
+
+It does **not** attempt to prove tensor identities.
+
+It only simplifies **path descriptions**.
+
+---
+
+# 7. Current Status
+
+The system currently supports:
+
+* operator definition via einsum equations
+* type inference from equations
+* path validation
+* rewrite-based normalization
+* compilation to tensor programs
+* composable path syntax (`>>`)
+
+---
+
+# 8. Design Principles
+
+The system intentionally remains:
+
+### small
+
+~200 lines of compiler logic
+
+### explicit
+
+operators defined directly by einsum
+
+### compositional
+
+programs built as operator paths
+
+### extensible
+
+new operators added via a single equation
+
+---
+
+# 9. Future Directions (Optional)
+
+Possible improvements:
+
+### cost-based extraction
+
+choose shortest normalized path automatically
+
+### richer path objects
+
+store path metadata (types, normal form)
+
+### debugging tools
+
+visualize rewrite reductions
+
+### algebraic verification
+
+optional proofs of valid rewrite identities
+
+These are optional enhancements and not required for the core system.
+
+---
+
+# 10. Summary
+
+The `PathEngine` is a **small compiler for relational tensor programs**.
+
+It allows relational operators defined by einsum equations to be composed as **typed paths**, automatically validated, simplified, and compiled into executable tensor functions.
+
+The system sits between:
+
+```
+tensor kernels
+      ↓
+relational operator paths
+      ↓
+application algorithms
+```
+
+This provides a clean and extensible way to build relational tensor systems.
+
+---
+
+If you'd like, I can also add a **very small diagram** that makes the architecture immediately clear to someone opening the repository for the first time.

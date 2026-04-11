@@ -1,0 +1,214 @@
+The next step is **not** “invent more paths.”
+It is to make the **fixpoint program itself** the primary object of study.
+
+Right now you already have the pieces:
+
+* a compositional operator language via `PathEngine`
+* a retrieval/update operator (`Attend`, `Correct`, `Recall`, etc.)
+* a concept-selection embedding procedure (`ConceptEmbed`)
+* a generic fixpoint iterator whose whole purpose is to drive an operator to convergence while updating temperature from energy
+
+So the next question is no longer “can we compose programs?”
+It is:
+
+> **Which composed program should be iterated under the Y/fixpoint scheme, with what energy, and with what annealing schedule?**
+
+That is the real algorithm-design problem now.
+
+## What you have, abstractly
+
+Your current attention step is already one candidate recurrent program:
+
+1. `Attend(q, emb, temp)`
+2. normalize with `SoftMax`
+3. constrain with `Correct = support >> propagate`
+4. iterate to fixpoint 
+
+So in abstract form you already have:
+
+```text
+q_{t+1} = F(q_t, emb, temp_t)
+```
+
+and `FixpointIterator` supplies:
+
+```text
+temp_{t+1} = g(energy_t, state_t)
+```
+
+That is the right architecture. 
+
+## The next step in plain terms
+
+You need to turn this from “a collection of composable operators” into **a small family of explicit recurrent algorithms** and compare them.
+
+In practice, that means defining maybe 3 candidate update maps and testing them:
+
+### 1. Retrieval-style fixpoint
+
+Current shape, roughly:
+
+```text
+F(q) = Correct( SoftMax( Attend(q) ) )
+```
+
+This is your current attention-like mechanism. It is the most natural first-class candidate because it already exists in `Attention._step`. 
+
+### 2. Closure-style fixpoint
+
+Use the same path DSL to define a stricter closure operator, something more like:
+
+```text
+F(q) = abstract >> support
+```
+
+or a hybrid alternating closure/retrieval operator. This would test whether the right algorithm is really “attention” at all, or whether the more stable object is closure in concept space. 
+
+### 3. Alternating retrieval/closure
+
+A two-phase map:
+
+```text
+F(q) = Recall( Attend(q) )
+```
+
+or
+
+```text
+F(q) = Correct( Recall( Attend(q) ) )
+```
+
+This is the most interesting one conceptually, because it lets retrieval propose a pattern and closure justify or tighten it.
+
+That is where your path compiler really starts to matter: you can now define these candidates as programs rather than hard-coded bespoke methods.
+
+## The real research move
+
+You should stop asking:
+
+> “What can these operators compose into?”
+
+and start asking:
+
+> “Which composed map has the right fixed points?”
+
+That is the key shift.
+
+Because once you introduce the Y/fixpoint viewpoint, the important objects are:
+
+* **fixed points**
+* **basins of attraction**
+* **stability under annealing**
+* **whether the fixed points correspond to meaningful concepts / retrievals**
+
+Not just whether a path type-checks.
+
+## What to optimize for
+
+The right algorithm is the one whose fixpoints satisfy the properties you actually want:
+
+### If you want retrieval
+
+You want:
+
+* convergence from noisy seeds
+* stable attractors
+* scores that map cleanly back to entities
+
+### If you want concept discovery
+
+You want:
+
+* closure to formal concepts
+* low drift
+* temperature to help smooth approach early, then sharpen late
+
+### If you want learned reasoning
+
+You want:
+
+* an operator family that can be iterated and trained
+* temperature schedule that avoids early collapse
+* energy that tracks “becoming more justified” rather than only numerical closeness
+
+## The biggest practical issue right now
+
+Your current code suggests the architecture is ahead of the implementation consistency.
+
+Two examples jump out immediately:
+
+* `FixpointIterator` in `fixpoint.py` requires `energy_fn` in `__init__`, but the instances in `Attention` and `_concept_fixpoint` are constructed without one in the uploaded code, which means the current snapshots do not line up cleanly.
+* In `Attention.retrieve`, `self.Scores` is assigned as `self.coder.op("realize")`, which expects the usual path-execution arguments, but later it is called as `self.Scores()` with no arguments. That suggests the current attention layer is mid-refactor and not yet a stable basis for algorithm comparison. 
+
+So before deeper research, I would stabilize that interface boundary first.
+
+## The concrete next step
+
+I would do this in order:
+
+### Step 1: define one canonical fixpoint API
+
+Make every recurrent program look like:
+
+```text
+(new_state, aux) = f(state, temp)
+energy = energy_fn(new_state, old_state, aux)
+```
+
+That is already the shape `FixpointIterator` wants. Everything else should conform to it. 
+
+### Step 2: represent candidate algorithms explicitly
+
+Define 3–4 named recurrent programs, for example:
+
+* `Retrieve = Correct ∘ SoftMax ∘ Attend`
+* `Close = Recall`
+* `RetrieveThenClose = Recall ∘ Correct ∘ Attend`
+* `HopThenCorrect = Correct ∘ Hop`
+
+Not as prose, but as actual first-class program definitions in one place.
+
+### Step 3: decide what energy means
+
+This is probably the most important unresolved design choice.
+
+Right now `FixpointIterator` is generic, which is good. But the whole project now depends on choosing an energy that matches the semantics you care about.
+
+Possible energies:
+
+* state change norm: `||q_{t+1} - q_t||`
+* violation of support/closure constraint
+* reconstruction inconsistency
+* residual under adjunction / closure condition
+
+The wrong energy will make annealing look clever while optimizing the wrong thing.
+
+### Step 4: benchmark fixed-point behavior, not just outputs
+
+For each candidate program, measure:
+
+* convergence speed
+* oscillation / collapse
+* sensitivity to initial temperature
+* whether annealing improves or worsens stability
+* whether final states correspond to useful retrievals / concepts
+
+## The strategic summary
+
+You now have enough infrastructure.
+
+The next step is **algorithm selection under fixpoint dynamics**.
+
+In one line:
+
+> Move from building the path language to experimentally identifying the right recurrent operator (F) and energy functional for annealed fixed-point inference.
+
+That is the real next phase.
+
+A good first candidate is still your current attention update, because it already has the right shape:
+
+> `Attend -> normalize -> Correct -> iterate`
+
+But now it should be treated as **candidate #1**, not as the final mechanism. 
+
+If you want, I can write up a short research plan with 3 candidate recurrent programs, 3 candidate energy functions, and what each experiment would tell you.
