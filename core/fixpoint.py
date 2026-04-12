@@ -14,6 +14,7 @@ it by updating the state in the direction that minimises the error.
 """
 
 import numpy as np
+import torch
 from core.algebra import Abs, Sum, Log, Bottom
 
 
@@ -46,7 +47,7 @@ class FixpointIterator:
     def __init__(self, f, state0, eps=1e-3, max_iters=100, temp=1.0):
         self.f         = f          # (state, temp) -> new_state  OR  (new_state, aux)
         self.energy_fn = self.default_energy  # (new_state, old_state, aux) -> float
-        self.state     = state0.copy()
+        self.state     = state0.clone() if isinstance(state0, torch.Tensor) else state0.copy()
         self.energy    = Bottom
         self.temp      = temp
         self._init_temp = temp
@@ -88,10 +89,16 @@ class FixpointIterator:
         float
             Total energy. Zero means the state has not changed.
         """
-        dynamic_error = Sum(Abs(new - old) ** 2)
-        if aux is None:
-            return dynamic_error
-        sensory_error = Sum(Abs(aux - new) ** 2)
+        if isinstance(new, torch.Tensor):
+            dynamic_error = float(((new - old).abs() ** 2).sum())
+            if aux is None:
+                return dynamic_error
+            sensory_error = float(((aux - new).abs() ** 2).sum())
+        else:
+            dynamic_error = Sum(Abs(new - old) ** 2)
+            if aux is None:
+                return dynamic_error
+            sensory_error = Sum(Abs(aux - new) ** 2)
         return dynamic_error + sensory_error
 
     def _update_temp(self, old_state):
@@ -110,9 +117,16 @@ class FixpointIterator:
             The state before this iteration. Used to compute the log-mean
             magnitude, which acts as a normalising factor.
         """
-        log_mean = np.mean(Log(np.clip(old_state, self.eps, 1.0)))
+        if isinstance(old_state, torch.Tensor):
+            clipped = old_state.clamp(self.eps, 1.0)
+            log_mean = float(torch.log(clipped).mean())
+            n = old_state.numel()
+        else:
+            clipped = np.clip(old_state, self.eps, 1.0)
+            log_mean = float(np.mean(np.log(clipped)))
+            n = old_state.size
         if log_mean != 0:
-            self.temp = Abs(-self.energy / (old_state.size * log_mean))
+            self.temp = Abs(-self.energy / (n * log_mean))
 
     def step(self):
         """
@@ -186,7 +200,7 @@ class FixpointIterator:
         ndarray
             The final state after convergence.
         """
-        self.state = new_state.copy()
+        self.state = new_state.clone() if isinstance(new_state, torch.Tensor) else new_state.copy()
         self.energy = Bottom
         self._iter  = 0
         self.temp   = self._init_temp

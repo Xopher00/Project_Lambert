@@ -152,6 +152,7 @@ def join_einsum_forward(
     :param block_size: Block size for memory control.
     :return: Output tensor.
     """
+    args = tuple(torch.where(a != 0, a, a.new_full((), _BOTTOM)) for a in args)
     if temp == 0.0:
         def _callback(compute_sum):
             return compute_sum(_max_in_place, _max_block, _min_in_place)
@@ -191,6 +192,10 @@ def residuate_einsum_forward(
     :param block_size: Block size for memory control.
     :return: Output tensor, with Top as the identity for uncontributed cells.
     """
+    A, C = args[0], args[1]
+    A = torch.where(A != 0, A, A.new_full((), _BOTTOM))
+    C = torch.where(C != 0, C, C.new_full((), _TOP))
+    args = (A, C) + args[2:]
     if temp == 0.0:
         def _callback(compute_sum):
             return compute_sum(_min_in_place, _min_block, _implies_in_place)
