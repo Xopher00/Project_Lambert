@@ -1,5 +1,14 @@
-from streamlined.path_engine import PathEngine
+from torch_semiring_einsum import compile_equation
+
+from engine.path_engine import PathEngine, LegSpec
 from streamlined.relational_einsum import join_einsum_forward, residuate_einsum_forward
+
+_LEGS = [
+    LegSpec("realize",   join_einsum_forward,      "j,ji->i", "j", "i", compile_equation, lambda x, y: (x, y.T)),
+    LegSpec("propagate", join_einsum_forward,      "i,ij->j", "i", "j", compile_equation, lambda x, y: (x, y)),
+    LegSpec("abstract",  residuate_einsum_forward, "ij,i->j", "i", "j", compile_equation, lambda x, y: (y, x)),
+    LegSpec("support",   residuate_einsum_forward, "ji,j->i", "j", "i", compile_equation, lambda x, y: (y.T, x)),
+]
 
 class Compose:
     """
@@ -7,12 +16,7 @@ class Compose:
     """
 
     def __init__(self):
-        self.coder = PathEngine({
-            "realize":   (join_einsum_forward,      "j,ji->i", lambda x, y: (x, y.T)),
-            "propagate": (join_einsum_forward,      "i,ij->j", lambda x, y: (x, y)),
-            "abstract":  (residuate_einsum_forward, "ij,i->j", lambda x, y: (y, x)),
-            "support":   (residuate_einsum_forward, "ji,j->i", lambda x, y: (y.T, x)),
-        })
+        self.coder = PathEngine(_LEGS)
 
         self.Scores = self.coder.op("realize")
         self.Hop = self.coder.op("propagate")
