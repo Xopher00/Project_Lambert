@@ -10,6 +10,7 @@ _LEGS = [
     LegSpec("support",   residuate_einsum_forward, "ji,j->i", "j", "i", compile_equation, lambda x, y: (y.T, x)),
 ]
 
+
 class Compose:
     """
     Relational compositions built on top of the path engine and user defined einsum methods.
