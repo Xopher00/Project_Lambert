@@ -35,8 +35,7 @@ Category theory is a branch of mathematics that studies structure and relationsh
 - Kan, D. M. (1958). Adjoint functors. *Transactions of the American Mathematical Society*, 87(2), 294–329. DOI: 10.2307/1993102. <!-- [kan1958] --> 
 - Schultz, P., Wisnesky, R., Vasilakopoulou, C., & Spivak, D. I. (2017). Algebraic databases. *Theory and Applications of Categories*, 32(16), 547–619. Free PDF: http://www.tac.mta.ca/tac/volumes/32/16/32-16abs.html <!-- [schultz2017] --> 
 - Schultz, P., & Wisnesky, R. (2025). Algebraic data integration. *Journal of Functional Programming*, 27. DOI: 10.1017/S0956796817000168.  arXiv:1503.03571v8. <!-- [schultz2025] --> 
-- Fong, B., & Spivak, D. I. (2019). *An Invitation to Applied Category Theory: Seven Sketches in Compositionality*. Cambridge University Press. Free PDF: https://arxiv.org/abs/1803.05316. <!-- [fong2019] --> 
-- Jacobs, B., & Rutten, J. (1997). A tutorial on (co)algebras and (co)induction. *EATCS Bulletin*, 62, 222–259. <!-- [jacobs1997] -->
+- Fong, B., & Spivak, D. I. (2019). *An Invitation to Applied Category Theory: Seven Sketches in Compositionality*. Cambridge University Press. Free PDF: https://arxiv.org/abs/1803.05316. <!-- [fong2019] -->
 
 ### Historical and philosophical context 
 Burch's 1964 paper examines a seven-valued logic system from Jain philosophy, which has some interesting parallels with modern category theory. Grzejdziak-Zdziarski and Loog's 2026 report documents how the mathematical traditions represented in this bibliography developed in isolation from each other — which is itself part of the argument for why this project matters.
