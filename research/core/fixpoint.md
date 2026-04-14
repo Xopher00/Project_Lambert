@@ -96,3 +96,65 @@ well-supported inputs converge quickly at low temperature.
 **Reference:** Domingos, P. (2025). *Tensor Logic: The Language of AI.*
 arXiv:2510.12269v3.
 
+## Fixpoints as algebraic closure
+
+There is a deeper algebraic reading of the fixpoint iteration. The pattern —
+a system that can formulate questions it cannot answer, and must be extended
+until it can — is the same structure that appears in algebraic closure of fields.
+
+In ℝ, the polynomial x² + 1 = 0 is *expressible* within ℝ but has *no solution*
+in ℝ. The algebraic closure ℂ is the minimal extension where every expressible
+polynomial has a root. In Lambert, a relational query composed from the available
+morphisms (Join, Residuate, etc.) is *expressible* but may point to a concept
+that doesn't exist in the current lattice. The nonzero fixpoint residual is the
+witness — exactly analogous to evaluating x² + 1 over all of ℝ and finding it
+never vanishes.
+
+The general structure is:
+
+1. **A domain** — ℝ, a concept lattice, a set under operations
+2. **A language of expressions** — polynomials, relational path compositions, operation sequences
+3. **Closure** = every expression in the language that should have a solution, does have one in the domain
+
+A system is closed when every question expressible in its language has an answer
+in its domain. Algebraic closure for fields, operational closure for sets,
+fixpoint closure for Lambert — all instances of the same condition.
+
+### Idempotency is the key
+
+The connection to semiring choice is precise. In the smooth max-min semiring
+(temp > 0), the operations are *not* idempotent: applying softmax or softmin
+twice gives a different result than applying it once. But at temp = 0, the
+operations collapse to exact max and min, which *are* idempotent: max(x, x) = x,
+min(x, x) = x. Idempotency means that applying the operation to its own output
+is a no-op — the output is already a fixpoint.
+
+This is the mechanism by which temperature controls closure:
+
+- **temp = 0**: idempotent operations, fixpoints exist trivially (every output
+  is already a fixpoint of the operation that produced it), reasoning is exact
+  but discrete — the lattice either contains the answer or it doesn't
+- **temp > 0**: non-idempotent operations, fixpoints must be *found* by
+  iteration, the residual is a continuous signal pointing toward the missing
+  concept — gradient-based learning is possible
+
+The smoothing doesn't change *what* closure means; it changes *how* the system
+searches for it. At zero temperature, closure is a yes/no structural property.
+At positive temperature, the degree of non-closure becomes a differentiable loss,
+and learning is the process of extending the lattice until closure is achieved.
+
+### Learning as algebraic closure
+
+This reframes Lambert's learning algorithm: **learning is computing the algebraic
+closure of the concept lattice with respect to the observed data.** Each training
+step measures the residual (the degree of non-closure under the current queries),
+and grows or reshapes the lattice in the direction the residual points, until
+every query the data can express has a concept that satisfies it.
+
+The observer block in the engine DSL implements exactly this: the convergence
+path tests whether the lattice is closed (residual < threshold), and the loss
+path provides the training signal (degree of non-closure) for gradient descent.
+Incremental concept lattice construction — growing the lattice one concept at a
+time in the direction of maximal residual reduction — is the concrete algorithm
+that performs this closure.
+

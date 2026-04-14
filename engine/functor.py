@@ -8,6 +8,11 @@ and the generic Interpreter that drives algebra folds and coalgebra unfolds.
 from dataclasses import dataclass
 from typing import Callable
 
+try:
+    import numpy as _np
+except ImportError:
+    _np = None
+
 _NO_OUTPUT = object()
 _EXHAUSTED = object()
 
@@ -92,14 +97,16 @@ class Interpreter:
         child_results = [self.run_algebra(c, decompose) for c in children]
         return self.cell(case_name, payload, child_results, self.params, self.temp)
 
-    def run_coalgebra(self, state, token_iter=None, stop: Callable = None):
+    def run_coalgebra(self, state, token_iter=None, stop: Callable = None,
+                      accumulate_legs: dict | None = None):
         """
         Generic coalgebra runner for the linear single-successor subset:
         functors where each active case has recursive=1.
 
-        token_iter : iterable of input tokens, or None
-        stop       : callable(step, state, outputs) -> bool, or None
-                     returns True to halt
+        token_iter      : iterable of input tokens, or None
+        stop            : callable(step, state, outputs) -> bool, or None
+                          returns True to halt
+        accumulate_legs : dict mapping leg_name -> mode ('cat'), or None
 
         If token_iter is exhausted the run halts.
         If stop is None and token_iter is None the caller must ensure
@@ -108,6 +115,7 @@ class Interpreter:
         outputs = []
         tokens  = iter(token_iter) if token_iter is not None else None
         step    = 0
+        accumulated = {}
 
         while True:
             token = None
@@ -115,6 +123,9 @@ class Interpreter:
                 token = next(tokens, _EXHAUSTED)
                 if token is _EXHAUSTED:
                     break
+
+            if accumulate_legs:
+                self.params['accumulated'] = accumulated
 
             result = self.cell(state, token, self.params, self.temp)
             case   = self.functor[result.case_name]
@@ -145,6 +156,18 @@ class Interpreter:
             state = result.next_states[0]
             if has_output:
                 outputs.append(result.output)
+
+            # Accumulate leg outputs from payload
+            if accumulate_legs and result.payload:
+                if _np is None:
+                    raise ImportError("numpy is required for accumulate_legs")
+                for i, (leg_name, mode) in enumerate(accumulate_legs.items()):
+                    if i < len(result.payload) and mode == 'cat':
+                        old = accumulated.get(leg_name)
+                        new = result.payload[i]
+                        accumulated[leg_name] = (
+                            _np.concatenate([old, new]) if old is not None else new
+                        )
 
             step += 1
             if stop is not None and stop(step, state, outputs):
