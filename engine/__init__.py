@@ -12,7 +12,7 @@ of V-functors over arbitrary semirings.
 """
 
 from engine.functor import Case, Functor, CoalgResult, Interpreter
-from engine.path_engine import MorphismSpec, LegSpec, compile_morphism, chain, fan, check_sorts
+from engine.runtime import MorphismSpec, compile_morphism, chain, fan, check_sorts
 from engine.decl import (
     SemiringDecl, MorphismDecl, PathDecl, FanDecl, CaseDecl,
     ArchDecl, DSLSource, SortDecl,
@@ -20,3 +20,19 @@ from engine.decl import (
 from engine.parser import parse
 from engine.arch import ArchDef, ArchInterpreter
 from engine.compiler import compile
+
+from pathlib import Path as _Path
+
+def load(path, namespace: dict) -> ArchDef:
+    """Load and compile a .ua file."""
+    return compile(_Path(path).read_text(), namespace)
+
+from engine.sorts import (
+    sort_to_type, sort_types_from_defs,
+    morphism_to_term, path_to_term, fan_to_term,
+    functor_to_union_type, arch_to_term,
+    ndarray_coder, bundle_coder, temp_coder, equation_coder,
+)
+from engine.primitives import (
+    register_tensor_primitives, build_engine_graph, qname,
+)

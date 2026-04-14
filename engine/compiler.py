@@ -12,35 +12,26 @@ Key phases:
   4. Compile paths — chain/augment/residual composition with sort validation
   5. Compile archs — functor + cell binding for algebra and coalgebra sides
 
-Depends on: parser.py (AST), path_engine.py (morphism compilation, chain, fan),
+Depends on: parser.py (AST), runtime.py (morphism compilation, chain, fan),
             functor.py (Case, Functor), arch.py (ArchDef, ArchInterpreter, _ArchData)
 """
 
 from __future__ import annotations
 
 import re as _re
+from pathlib import Path
 from typing import Callable
 from functools import reduce
 
-from .path_engine import MorphismSpec, compile_morphism, chain, chain_with_augments, fan, check_sorts, explain, trace
+from .runtime import MorphismSpec, compile_morphism, chain, chain_with_augments, fan, check_sorts
 from .functor import Case, Functor
-from .decl import DSLSource, MorphismDecl
+from .decl import DSLSource
 from .arch import ArchDef, _ArchData
 from .parser import parse
+from .sorts import morphism_to_term, path_to_term, fan_to_term, functor_to_union_type, arch_to_term, sort_to_type
 
 
-# ---------------------------------------------------------------------------
-# Name resolver
-# ---------------------------------------------------------------------------
-
-def _resolve(dotted: str, namespace: dict) -> object:
-    parts = dotted.split('.')
-    obj = namespace.get(parts[0])
-    if obj is None:
-        raise NameError(f"Name {parts[0]!r} not found in provided namespace")
-    for attr in parts[1:]:
-        obj = getattr(obj, attr)
-    return obj
+from .sorts import resolve as _resolve
 
 
 # ---------------------------------------------------------------------------
@@ -53,8 +44,8 @@ def _make_morphism_derived_cell(case_name: str, path_fn: Callable) -> Callable:
     The derived cell applies path_fn(child_results[0], payload[0], temp).
     Signature matches per-case cell: (payload, child_results, params, temp) -> result
     """
-    def derived(payload, child_results, params, temp,
-                _fn=path_fn, _name=case_name):
+    def derived(payload, child_results, _params, temp,
+                _fn=path_fn):
         x = child_results[0] if child_results else None
         y = payload[0] if payload else None
         return _fn(x, y, temp)
@@ -81,6 +72,37 @@ def _make_dispatch_cell(case_cells: dict[str, Callable]) -> Callable:
 # ---------------------------------------------------------------------------
 # Compiler phases
 # ---------------------------------------------------------------------------
+
+def _build_step_cell(enter_fn, emit_fn, case_morphism_fn, case_name):
+    """Generate a coalgebra cell from step declarations.
+
+    The generated cell reuses the algebra's morphism composition for the
+    main computation, wrapping it with enter (input binding) and emit (output).
+    """
+    from .functor import CoalgResult
+
+    def cell(state, token, params, temp,
+             _enter=enter_fn, _emit=emit_fn, _compute=case_morphism_fn,
+             _case=case_name):
+        # 1. Enter: bind input token using state as context
+        x = _enter(token, state, temp) if _enter is not None else token
+
+        # 2. Main computation: same morphisms as algebra
+        if _compute is not None:
+            x = _compute(x, state, temp)
+
+        # 3. Build next state (copy + accumulate updates)
+        next_state = dict(state) if isinstance(state, dict) else state
+
+        # 4. Emit or silent
+        if _emit is not None:
+            output = _emit(x, state, temp)
+            return CoalgResult(_case, [x], [next_state], output=output)
+        else:
+            return CoalgResult(_case, [x], [next_state])
+
+    return cell
+
 
 def _compile_morphisms(
     ast: DSLSource,
@@ -130,7 +152,8 @@ def _compile_morphisms(
         equations[morph_decl.name] = morph_decl.equation
         compiled[morph_decl.name]  = compile_morphism(spec)
 
-    return compiled, morphism_specs, equations
+    morphism_terms = {name: morphism_to_term(spec) for name, spec in morphism_specs.items()}
+    return compiled, morphism_specs, equations, morphism_terms
 
 
 def _build_residual_wrapper(base_fn, norm_fn, has_residual):
@@ -158,8 +181,8 @@ def _resolve_template_instance(
     morphism_specs: dict,
     morphism_to_semiring: dict,
     equations: dict,
-    namespace: dict,
-    semiring_arity: dict,
+    _namespace: dict,
+    _semiring_arity: dict,
 ):
     """Resolve a template instantiation like 'ln[ln1]'.
 
@@ -220,6 +243,7 @@ def _compile_paths(
     equations: dict,
     namespace: dict,
     semiring_arity: dict,
+    sort_types: dict | None = None,
 ) -> dict[str, list[str]]:
     """Phase 4: Validate and compile paths.
 
@@ -237,13 +261,14 @@ def _compile_paths(
                 )
         # Strip bracketed augment tokens for sort/semiring validation
         sort_morphisms = [m for m in path.morphisms
-                         if not (m.startswith('[') and m.endswith(']'))]
+                         if not (m.startswith('[') and m.endswith(']'))
+                         and m in morphism_specs]
         # Sort validation
-        err = check_sorts(morphism_specs, sort_morphisms)
+        err = check_sorts(morphism_specs, sort_morphisms, sort_types)
         if err:
             raise TypeError(f"Path '{path.name}': {err}")
         # Semiring validation
-        used = {morphism_to_semiring[m] for m in sort_morphisms}
+        used = {morphism_to_semiring[m] for m in sort_morphisms if m in morphism_to_semiring}
         if len(used) > 1 and '_bridge' not in used:
             raise ValueError(
                 f"Path '{path.name}' spans multiple semirings: {used}. "
@@ -325,7 +350,7 @@ def _resolve_case_cells(
     case_cells = {}
     for case_decl in case_list:
         if case_decl.cell == 'identity':
-            case_cells[case_decl.name] = lambda payload, child_results, params, temp: \
+            case_cells[case_decl.name] = lambda payload, child_results, _params, _temp: \
                 payload[0] if payload else (child_results[0] if child_results else None)
         elif case_decl.cell is not None:
             case_cells[case_decl.name] = _resolve(case_decl.cell, namespace)
@@ -356,35 +381,32 @@ def _compile_archs(
     compiled_archs: dict[str, _ArchData] = {}
     for arch_decl in ast.archs:
         data = _ArchData()
-        for mode, case_list, functor_cell in [
-            ('algebra',   arch_decl.algebra_cases,   arch_decl.algebra_cell),
-            ('coalgebra', arch_decl.coalgebra_cases,  arch_decl.coalgebra_cell),
-        ]:
-            if case_list is None:
-                continue
-            cases = [Case(case_decl.name, case_decl.recursive, case_decl.data, case_decl.output) for case_decl in case_list]
+
+        # Resolve the unified endofunctor F from cases (or legacy algebra_cases)
+        case_list = arch_decl.cases or arch_decl.algebra_cases
+        if case_list is not None:
+            cases = [Case(cd.name, cd.recursive, cd.data, cd.output) for cd in case_list]
             functor = Functor(cases)
-            cell = None
-            if functor_cell is not None:
-                cell = _resolve(functor_cell, namespace)
+            data.functor = functor
+
+            # Build algebra cell from case morphism bindings
+            alg_cell = None
+            if arch_decl.algebra_cell is not None:
+                alg_cell = _resolve(arch_decl.algebra_cell, namespace)
             else:
                 case_cells = _resolve_case_cells(
-                    case_list, f"Arch '{arch_decl.name}' {mode}", compiled, namespace
+                    case_list, f"Arch '{arch_decl.name}' algebra", compiled, namespace
                 )
                 if case_cells:
-                    missing = [case_decl.name for case_decl in case_list if case_decl.name not in case_cells]
+                    missing = [cd.name for cd in case_list if cd.name not in case_cells]
                     if missing:
                         raise ValueError(
-                            f"Arch '{arch_decl.name}' {mode}: per-case cell binding is "
+                            f"Arch '{arch_decl.name}' algebra: per-case cell binding is "
                             f"incomplete. Missing cells for: {', '.join(missing)}"
                         )
-                    cell = _make_dispatch_cell(case_cells)
-            if mode == 'algebra':
-                data.algebra_functor = functor
-                data.algebra_cell = cell
-            else:
-                data.coalgebra_functor = functor
-                data.coalgebra_cell = cell
+                    alg_cell = _make_dispatch_cell(case_cells)
+            data.algebra_cell = alg_cell
+
         # 7b. Build accumulate_morphisms mapping
         acc_morphisms = {
             name: (spec.accumulate, spec.accumulate_fields)
@@ -394,13 +416,14 @@ def _compile_archs(
         if acc_morphisms:
             data.accumulate_legs = acc_morphisms
 
-        # 7d. Detect algebra iterate groups
-        if arch_decl.algebra_cases:
+        # 7d. Detect iterate groups from unified cases
+        iter_cases = arch_decl.cases or arch_decl.algebra_cases
+        if iter_cases:
             iterate_groups = {}
             base_case = None
             epilogue_cases = []
             in_iterate = False
-            for case_decl in arch_decl.algebra_cases:
+            for case_decl in iter_cases:
                 if case_decl.iterate is not None:
                     in_iterate = True
                     group_name = case_decl.iterate
@@ -434,6 +457,57 @@ def _compile_archs(
                     f"'{arch_decl.observer_loss}' not found"
                 )
             data.observer_loss = compiled[arch_decl.observer_loss]
+
+        # Compile state_fields into a Hydra TypeRecord
+        if arch_decl.state_fields is not None:
+            from .decl import SortDecl as _SortDecl
+            state_sort = _SortDecl(
+                name=f"_state_{arch_decl.name}",
+                fields=arch_decl.state_fields,
+            )
+            state_sort_defs = {state_sort.name: state_sort}
+            data.state_type = sort_to_type(state_sort.name, state_sort_defs)
+
+        # Step protocol: generate coalgebra cell from step declarations
+        if arch_decl.step_enter is not None or arch_decl.step_emit is not None:
+            if arch_decl.step_enter and arch_decl.step_enter not in compiled:
+                raise ValueError(
+                    f"Arch '{arch_decl.name}': step enter morphism "
+                    f"'{arch_decl.step_enter}' not found"
+                )
+            if arch_decl.step_emit and arch_decl.step_emit not in compiled:
+                raise ValueError(
+                    f"Arch '{arch_decl.name}': step emit morphism "
+                    f"'{arch_decl.step_emit}' not found"
+                )
+            enter_fn = compiled.get(arch_decl.step_enter) if arch_decl.step_enter else None
+            emit_fn = compiled.get(arch_decl.step_emit) if arch_decl.step_emit else None
+
+            # Find the main computation path from case morphisms
+            case_morphism_fn = None
+            case_list = arch_decl.cases or arch_decl.algebra_cases
+            if case_list:
+                for cd in case_list:
+                    if cd.morphisms:
+                        case_morphism_fn = chain([compiled[m] for m in cd.morphisms]) \
+                            if len(cd.morphisms) > 1 else compiled[cd.morphisms[0]]
+                        break
+
+            # Find the first recursive case name for the coalgebra step
+            step_case_name = None
+            if case_list:
+                for cd in case_list:
+                    if cd.recursive > 0:
+                        step_case_name = cd.name
+                        break
+            if step_case_name is None:
+                step_case_name = case_list[0].name if case_list else 'step'
+
+            data.coalgebra_cell = _build_step_cell(enter_fn, emit_fn, case_morphism_fn,
+                                                    step_case_name)
+            data.step_enter_fn = enter_fn
+            data.step_emit_fn = emit_fn
+
         compiled_archs[arch_decl.name] = data
     return compiled_archs
 
@@ -442,16 +516,18 @@ def _compile_archs(
 # Top-level compiler
 # ---------------------------------------------------------------------------
 
-def compile(source: str | DSLSource, namespace: dict) -> ArchDef:
+def compile(source: str | Path | DSLSource, namespace: dict) -> ArchDef:
     """
     Compile DSL source into an ArchDef.
 
     Parameters
     ----------
-    source    : str or DSLSource
+    source    : str, Path, or DSLSource — DSL text, .ua file path, or pre-parsed AST
     namespace : dict  — Python namespace for resolving dotted names
                         e.g. {'numpy': numpy, 'ops': ops_module}
     """
+    if isinstance(source, Path) or (isinstance(source, str) and source.endswith('.ua')):
+        source = Path(source).read_text()
     ast = parse(source) if isinstance(source, str) else source
 
     sort_defs = {s.name: s for s in ast.sorts}
@@ -492,7 +568,7 @@ def compile(source: str | DSLSource, namespace: dict) -> ArchDef:
             )
         else:
             morphism_to_semiring[morph_decl.name] = morph_decl.semiring
-    compiled, morphism_specs, equations = _compile_morphisms(
+    compiled, morphism_specs, equations, morphism_terms = _compile_morphisms(
         ast, morphism_to_semiring, semiring_contract, semiring_compiler, semiring_arity, namespace
     )
 
@@ -503,12 +579,51 @@ def compile(source: str | DSLSource, namespace: dict) -> ArchDef:
         if morph_decl.template_param is not None
     }
 
+    # Build Hydra sort types for type-checked sort validation
+    from .sorts import sort_types_from_defs
+    morph_sorts = {s for m in ast.morphisms for s in (m.src_sort, m.tgt_sort)}
+    sort_types = sort_types_from_defs(sort_defs, morph_sorts)
+
+    # Build Hydra primitives for tensor ops
+    from .primitives import register_tensor_primitives
+    morph_decls = {m.name: m for m in ast.morphisms}
+    sr_decls = {s.name: s for s in ast.semirings}
+    hydra_primitives = register_tensor_primitives(sr_decls, morph_decls, namespace)
+
+    # Pre-resolve template instances referenced in fan branches before _compile_fans
+    for f in ast.fans:
+        for b in f.branches:
+            _resolve_template_instance(
+                b, templates, compiled, morphism_specs,
+                morphism_to_semiring, equations, namespace, semiring_arity,
+            )
+
     _compile_fans(ast, compiled, namespace)
+    fan_terms = {f.name: fan_to_term(f.name, f.branches, f.merge) for f in ast.fans}
     path_morphisms = _compile_paths(
         ast, compiled, morphism_specs, morphism_to_semiring,
         templates, equations, namespace, semiring_arity,
+        sort_types,
     )
+    path_terms = {
+        p.name: path_to_term(p.name, path_morphisms.get(p.name, p.morphisms), p.residual, p.normed)
+        for p in ast.paths
+    }
     compiled_archs = _compile_archs(ast, compiled, morphism_specs, namespace)
+
+    # Build Hydra arch terms and union types
+    arch_terms = {}
+    arch_types = {}
+    for arch_decl in ast.archs:
+        unified = arch_decl.cases or arch_decl.algebra_cases
+        arch_terms[arch_decl.name] = arch_to_term(
+            arch_decl.name,
+            algebra_cases=unified,
+            observer_convergence=arch_decl.observer_convergence,
+            observer_loss=arch_decl.observer_loss,
+        )
+        if unified:
+            arch_types[f"{arch_decl.name}.cases"] = functor_to_union_type(unified)
 
     return ArchDef(
         paths              = compiled,
@@ -518,4 +633,10 @@ def compile(source: str | DSLSource, namespace: dict) -> ArchDef:
         _path_morphisms    = path_morphisms,
         _archs             = compiled_archs,
         sort_defs          = sort_defs,
+        _morphism_terms    = morphism_terms,
+        _path_terms        = path_terms,
+        _fan_terms         = fan_terms,
+        _hydra_primitives  = hydra_primitives,
+        _arch_terms        = arch_terms,
+        _arch_types        = arch_types,
     )

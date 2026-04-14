@@ -1,22 +1,19 @@
 """
-path_engine.py — Equation-driven path compiler for relational tensor operations.
+Runtime closure factories for tensor operations.
 
 Core functions:
     compile_morphism — turn a MorphismSpec into a cached callable
     chain            — compose callables sequentially
     fan              — fan-out with merge
-    check_sorts      — validate sort adjacency
+    check_sorts      — validate sort adjacency via Hydra types
     explain          — human-readable path description
     trace            — step-by-step execution with shapes
-
-PathEngine class is retained for backward compatibility with code that
-constructs engines directly (e.g. streamlined/composer.py).
 
 Example
 -------
 ::
 
-    from engine.path_engine import MorphismSpec, compile_morphism, chain
+    from engine.runtime import MorphismSpec, compile_morphism, chain
 
     specs = [
         MorphismSpec("realize",   join_fn, "j,ji->i", "j", "i"),
@@ -62,9 +59,6 @@ class MorphismSpec:
     arity:             str      = 'binary'  # 'binary' | 'unary' | 'pointwise' | 'ternary'
     accumulate:        str | None = None    # 'cat' | None — accumulation mode
     accumulate_fields: list[str] | None = None  # field names for field-level accumulate
-
-
-LegSpec = MorphismSpec  # backward compat — used by streamlined/composer.py tests
 
 
 # ---------------------------------------------------------------------------
@@ -118,12 +112,26 @@ def fan(branches: dict[str, Callable], merge: Callable) -> Callable:
     return prog
 
 
-def check_sorts(morphisms: dict[str, MorphismSpec], names: list[str]) -> str | None:
-    """Return an error message if sorts don't compose, or None if valid."""
+def check_sorts(
+    morphism_specs: dict[str, MorphismSpec],
+    names: list[str],
+    sort_types: dict[str, object],
+) -> str | None:
+    """Return an error message if sorts don't compose, or None if valid.
+
+    Uses Hydra Type equality (frozen dataclass ``==``) for comparison.
+    Falls back to string equality for sorts missing from sort_types.
+    """
     for i in range(1, len(names)):
-        prev_tgt = morphisms[names[i - 1]].tgt_sort
-        curr_src = morphisms[names[i]].src_sort
-        if prev_tgt != curr_src:
+        prev_tgt = morphism_specs[names[i - 1]].tgt_sort
+        curr_src = morphism_specs[names[i]].src_sort
+        prev_type = sort_types.get(prev_tgt)
+        curr_type = sort_types.get(curr_src)
+        if prev_type is not None and curr_type is not None:
+            mismatch = (prev_type != curr_type)
+        else:
+            mismatch = (prev_tgt != curr_src)
+        if mismatch:
             return (
                 f"Type mismatch at step {i}: "
                 f"{names[i - 1]!r} outputs {prev_tgt!r} but "

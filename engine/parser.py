@@ -50,13 +50,15 @@ Syntax
     fan <n> = <morphism> & <morphism> & ...  [merge dict|meet|join|<dotted.name>]
 
     arch <n>:
-        algebra:
+        cases:                                                      (or 'algebra:' — alias)
             <n>: leaf  data=<int>  [cell=<dotted.name>]            (compact)
             <n>: node  data=<int>  [morphisms = <m1> <m2> ...]     (compact)
             case <n>: recursive=<int>  data=<int>  ...             (explicit)
-        coalgebra:
-            [cell = <dotted.name>]
-            <n>: node  data=<int>  [output=<0|1>]
+        state:
+            <field>: <type>
+        step:
+            enter = <morphism_name>
+            emit  = <morphism_name>
         observer:
             convergence = <path_name>
             loss = <path_name>
@@ -371,12 +373,14 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
     """Parse an 'arch <n>:' block starting at line index i."""
     match_header = re.match(r'^arch\s+(\w+)\s*:', lines[i].strip())
     arch_name = match_header.group(1)
+    unified_cases: list[CaseDecl] | None = None
     alg_cases:  list[CaseDecl] | None = None
-    coalg_cases: list[CaseDecl] | None = None
     alg_cell:   str | None = None
-    coalg_cell: str | None = None
     obs_convergence: str | None = None
     obs_loss:        str | None = None
+    state_fields: dict[str, str] | None = None
+    step_enter: str | None = None
+    step_emit:  str | None = None
     i += 1
     while i < len(lines):
         inner = lines[i].strip()
@@ -395,7 +399,7 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
                     continue
                 if _BLOCK_BOUNDARY.match(sub):
                     break
-                if re.match(r'^(algebra|coalgebra|observer)\s*:', sub):
+                if re.match(r'^(cases|algebra|coalgebra|state|step|observer)\s*:', sub):
                     break
                 match_convergence = re.match(r'^convergence\s*=\s*(\w+)$', sub)
                 if match_convergence:
@@ -409,7 +413,54 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
                     continue
                 i += 1
             continue
-        match_mode = re.match(r'^(algebra|coalgebra)\s*:', inner)
+        match_state = re.match(r'^state\s*:', inner)
+        if match_state:
+            state_fields = {}
+            i += 1
+            while i < len(lines):
+                sub = lines[i].strip()
+                if not sub:
+                    i += 1
+                    continue
+                if _BLOCK_BOUNDARY.match(sub):
+                    break
+                if re.match(r'^(cases|algebra|coalgebra|state|step|observer)\s*:', sub):
+                    break
+                match_field = re.match(r'^(\w+)\s*:\s*(\w+(?:\[[\w,\s]+\])?)$', sub)
+                if match_field:
+                    state_fields[match_field.group(1)] = match_field.group(2)
+                i += 1
+            continue
+        match_step = re.match(r'^step\s*:', inner)
+        if match_step:
+            i += 1
+            while i < len(lines):
+                sub = lines[i].strip()
+                if not sub:
+                    i += 1
+                    continue
+                if _BLOCK_BOUNDARY.match(sub):
+                    break
+                if re.match(r'^(cases|algebra|coalgebra|state|step|observer)\s*:', sub):
+                    break
+                match_enter = re.match(r'^enter\s*=\s*(\w+)$', sub)
+                if match_enter:
+                    step_enter = match_enter.group(1)
+                    i += 1
+                    continue
+                match_emit = re.match(r'^emit\s*=\s*(\w+)$', sub)
+                if match_emit:
+                    step_emit = match_emit.group(1)
+                    i += 1
+                    continue
+                i += 1
+            continue
+        if re.match(r'^coalgebra\s*:', inner):
+            raise SyntaxError(
+                f"'coalgebra:' sub-block has been removed. "
+                f"Use 'cases:' for the endofunctor and 'step:' for coalgebra configuration."
+            )
+        match_mode = re.match(r'^(cases|algebra)\s*:', inner)
         if match_mode:
             mode = match_mode.group(1)
             cases: list[CaseDecl] = []
@@ -422,7 +473,7 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
                     continue
                 if _BLOCK_BOUNDARY.match(sub):
                     break
-                if re.match(r'^(algebra|coalgebra|observer)\s*:', sub):
+                if re.match(r'^(cases|algebra|coalgebra|state|step|observer)\s*:', sub):
                     break
                 match_cell = re.match(r'^cell\s*=\s*(.+)$', sub)
                 if match_cell:
@@ -439,21 +490,25 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
                 raise SyntaxError(
                     f"arch '{arch_name}' {mode}: must declare at least one case"
                 )
-            if mode == 'algebra':
-                alg_cases = cases
-                alg_cell = cell_name
-            else:
-                coalg_cases = cases
-                coalg_cell = cell_name
+            # Both cases: and algebra: are aliases for the unified endofunctor
+            unified_cases = cases
+            alg_cell = cell_name
             continue
         i += 1
-    if alg_cases is None and coalg_cases is None:
+    if unified_cases is None and alg_cases is None:
         raise SyntaxError(
-            f"arch '{arch_name}' must declare algebra and/or coalgebra"
+            f"arch '{arch_name}' must declare cases or algebra"
         )
     return ArchDecl(
-        arch_name, alg_cases, coalg_cases, alg_cell, coalg_cell,
-        obs_convergence, obs_loss,
+        name=arch_name,
+        cases=unified_cases,
+        algebra_cases=alg_cases,
+        algebra_cell=alg_cell,
+        observer_convergence=obs_convergence,
+        observer_loss=obs_loss,
+        state_fields=state_fields,
+        step_enter=step_enter,
+        step_emit=step_emit,
     ), i
 
 

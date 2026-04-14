@@ -12,7 +12,7 @@ Declarations:
   PathDecl      — sequential composition of morphisms with combinators
   FanDecl       — parallel fan-out with merge strategy
   CaseDecl      — one case of a recursive endofunctor (for arch blocks)
-  ArchDecl      — algebra + coalgebra declaration with observer
+  ArchDecl      — endofunctor F declaration with algebra and coalgebra config
   DSLSource     — top-level container holding all declarations from one source block
 
 Depends on: nothing (leaf module in the engine stack)
@@ -76,18 +76,21 @@ class CaseDecl:
 
 @dataclass
 class ArchDecl:
-    """An architecture declaration containing algebra and/or coalgebra sub-blocks.
+    """An architecture declaration: one endofunctor F with dual evaluation.
 
-    Each sub-block declares functor cases and cell bindings. One arch block,
-    one name, two functors.
+    The `cases` list declares F — shared by both algebra (catamorphism) and
+    coalgebra (anamorphism). Morphism bindings on cases serve both evaluations.
+    `state:` and `step:` provide coalgebra-specific configuration (enter/emit).
     """
     name:              str
-    algebra_cases:     list[CaseDecl] | None = None
-    coalgebra_cases:   list[CaseDecl] | None = None
-    algebra_cell:      str | None = None   # functor-level cell for algebra
-    coalgebra_cell:    str | None = None   # functor-level cell for coalgebra
+    cases:             list[CaseDecl] | None = None    # unified endofunctor F
+    algebra_cases:     list[CaseDecl] | None = None    # legacy alias for cases (algebra: block)
+    algebra_cell:      str | None = None   # functor-level cell override for algebra
     observer_convergence: str | None = None  # path name for convergence check
     observer_loss:        str | None = None  # path name for loss computation
+    state_fields:         dict[str, str] | None = None  # coalgebra state shape: field_name -> type_name
+    step_enter:           str | None = None  # morphism/path for coalgebra input binding
+    step_emit:            str | None = None  # morphism/path for coalgebra output
 
 
 @dataclass

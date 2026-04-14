@@ -11,7 +11,7 @@ Key abstractions:
   ArchInterpreter  — runtime wrapper with run_algebra and run_coalgebra methods
   ArchDef          — top-level compiled artifact with explain/trace/loss/interpreter API
 
-Depends on: path_engine.py (MorphismSpec, explain, trace),
+Depends on: runtime.py (MorphismSpec, explain, trace),
             functor.py (Functor, Interpreter)
 """
 
@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .path_engine import MorphismSpec, explain as _explain, trace as _trace
+from .runtime import MorphismSpec, explain as _explain, trace as _trace
 from .functor import Functor, Interpreter
 
 
@@ -30,10 +30,9 @@ from .functor import Functor, Interpreter
 
 @dataclass
 class _ArchData:
-    """Internal: compiled algebra + coalgebra for a single arch declaration."""
-    algebra_functor:      Functor  | None = None
+    """Internal: compiled endofunctor + algebra/coalgebra cells."""
+    functor:              Functor  | None = None   # unified endofunctor F
     algebra_cell:         Callable | None = None
-    coalgebra_functor:    Functor  | None = None
     coalgebra_cell:       Callable | None = None
     observer_convergence: Callable | None = None
     observer_loss:        Callable | None = None
@@ -41,6 +40,9 @@ class _ArchData:
     iterate_groups:       dict | None = None  # group_name -> [case_names] (data flow order)
     iterate_base:         str | None = None   # base case name (leaf)
     iterate_epilogue:     list | None = None  # cases after iterate block
+    state_type:           object | None = None  # Hydra TypeRecord for coalgebra state
+    step_enter_fn:        Callable | None = None  # compiled enter morphism
+    step_emit_fn:         Callable | None = None  # compiled emit morphism
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +55,6 @@ class ArchInterpreter:
     def __init__(self, name: str, algebra: Interpreter | None = None,
                  coalgebra: Interpreter | None = None,
                  convergence_fn: Callable | None = None,
-                 loss_fn: Callable | None = None,
                  accumulate_legs: dict | None = None,
                  iterate_groups: dict | None = None,
                  iterate_base: str | None = None,
@@ -62,7 +63,6 @@ class ArchInterpreter:
         self._algebra = algebra
         self._coalgebra = coalgebra
         self._convergence_fn = convergence_fn
-        self._loss_fn = loss_fn
         self._accumulate_legs = accumulate_legs
         self._iterate_groups = iterate_groups
         self._iterate_base = iterate_base
@@ -167,6 +167,12 @@ class ArchDef:
     _path_morphisms:   dict[str, list[str]]            = field(default_factory=dict, repr=False)
     _archs:            dict[str, _ArchData]            = field(default_factory=dict, repr=False)
     sort_defs:         dict                            = field(default_factory=dict, repr=False)
+    _morphism_terms:   dict                            = field(default_factory=dict, repr=False)
+    _path_terms:       dict                            = field(default_factory=dict, repr=False)
+    _fan_terms:        dict                            = field(default_factory=dict, repr=False)
+    _hydra_primitives: dict                            = field(default_factory=dict, repr=False)
+    _arch_terms:       dict                            = field(default_factory=dict, repr=False)
+    _arch_types:       dict                            = field(default_factory=dict, repr=False)
 
     def explain(self, name: str) -> str:
         if name in self._path_morphisms:
@@ -203,15 +209,15 @@ class ArchDef:
         if name in self._archs:
             ad = self._archs[name]
             alg = None
-            if ad.algebra_functor is not None and ad.algebra_cell is not None:
-                alg = Interpreter(ad.algebra_functor, ad.algebra_cell, merged, temp)
+            if ad.functor is not None and ad.algebra_cell is not None:
+                alg = Interpreter(ad.functor, ad.algebra_cell, merged, temp)
             coalg = None
-            if ad.coalgebra_functor is not None and ad.coalgebra_cell is not None:
-                coalg = Interpreter(ad.coalgebra_functor, ad.coalgebra_cell, merged, temp)
+            # Coalgebra uses the unified functor F
+            if ad.functor is not None and ad.coalgebra_cell is not None:
+                coalg = Interpreter(ad.functor, ad.coalgebra_cell, merged, temp)
             return ArchInterpreter(
                 name, alg, coalg,
                 convergence_fn=ad.observer_convergence,
-                loss_fn=ad.observer_loss,
                 accumulate_legs=ad.accumulate_legs,
                 iterate_groups=ad.iterate_groups,
                 iterate_base=ad.iterate_base,
@@ -219,3 +225,49 @@ class ArchDef:
             )
 
         raise KeyError(f"Unknown arch: {name!r}")
+
+    @property
+    def _all_terms(self) -> dict:
+        """All Hydra term dicts merged."""
+        merged = {}
+        for d in (self._morphism_terms, self._path_terms, self._fan_terms, self._arch_terms):
+            merged.update(d)
+        return merged
+
+    @property
+    def module(self):
+        """Assemble a Hydra Module from compiled architecture terms."""
+        from engine.sorts import setup_hydra_path
+        setup_hydra_path()
+        from hydra.core import Name
+        from hydra.packaging import Module, Namespace, DefinitionTerm, TermDefinition
+        from hydra.dsl.python import Just, Nothing
+
+        ns = Namespace("ua.engine.compiled")
+        defs = tuple(
+            DefinitionTerm(TermDefinition(
+                name=Name(f"ua.engine.compiled.{name}"),
+                term=term,
+                type=Nothing(),
+            ))
+            for name, term in self._all_terms.items()
+        )
+        return Module(
+            namespace=ns,
+            definitions=defs,
+            term_dependencies=(),
+            type_dependencies=(Namespace("ua.engine"),),
+            description=Just("Compiled architecture module"),
+        )
+
+    @property
+    def graph(self):
+        """Build a Hydra Graph with engine primitives and bound terms."""
+        from engine.primitives import build_engine_graph
+        from hydra.core import Name
+
+        bound = {
+            Name(f"ua.engine.compiled.{name}"): term
+            for name, term in self._all_terms.items()
+        }
+        return build_engine_graph(self._hydra_primitives, bound_terms=bound)
