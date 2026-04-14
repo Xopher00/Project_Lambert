@@ -60,7 +60,8 @@ class MorphismSpec:
     equation_compiler: Callable = field(default=lambda eq: eq, repr=False)
     transform:         Callable = field(default=lambda x, y: (x, y), repr=False)
     arity:             str      = 'binary'  # 'binary' | 'unary' | 'pointwise' | 'ternary'
-    accumulate:        str | None = None    # 'cat' | None
+    accumulate:        str | None = None    # 'cat' | None — accumulation mode
+    accumulate_fields: list[str] | None = None  # field names for field-level accumulate
 
 
 LegSpec = MorphismSpec  # backward compat — used by streamlined/composer.py tests
@@ -72,15 +73,15 @@ LegSpec = MorphismSpec  # backward compat — used by streamlined/composer.py te
 
 def compile_morphism(spec: MorphismSpec) -> Callable:
     """Compile a MorphismSpec into a ``(x, y, temp) -> result`` callable."""
-    ceq = spec.equation_compiler(spec.equation)
-    op, tf = spec.op, spec.transform
+    compiled_eq = spec.equation_compiler(spec.equation)
+    op, transform_fn = spec.op, spec.transform
     if spec.arity == 'unary':
-        return lambda x, _, temp: op(ceq, x, temp=temp)
+        return lambda x, _, temp: op(compiled_eq, x, temp=temp)
     if spec.arity == 'pointwise':
-        return lambda x, y, temp: op(ceq, x, y, temp=temp)
+        return lambda x, y, temp: op(compiled_eq, x, y, temp=temp)
     if spec.arity == 'ternary':
-        return lambda x, y, temp: op(ceq, x, y[0], y[1], temp=temp)
-    return lambda x, y, temp: op(ceq, *tf(x, y), temp=temp)
+        return lambda x, y, temp: op(compiled_eq, x, y[0], y[1], temp=temp)
+    return lambda x, y, temp: op(compiled_eq, *transform_fn(x, y), temp=temp)
 
 
 def chain(callables: list[Callable]) -> Callable:

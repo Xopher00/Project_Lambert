@@ -1,8 +1,17 @@
 """
-functor.py — Functor, Interpreter, and CoalgResult.
+Recursive data types and their interpreters.
 
-Provides Case, Functor, and CoalgResult for declaring recursive data types,
-and the generic Interpreter that drives algebra folds and coalgebra unfolds.
+Declares the structure of recursive algebraic data (Case, Functor) and
+provides the generic Interpreter that drives algebra folds (catamorphisms)
+and coalgebra unfolds (anamorphisms) over those structures.
+
+Key abstractions:
+  Case       — one variant of a recursive sum type (recursive children + data payload)
+  Functor    — a collection of named Cases defining an endofunctor F
+  CoalgResult — the output of a coalgebra step: case name, payload, next states, and optional output
+  Interpreter — drives run_algebra (tree fold) and run_coalgebra (stream unfold)
+
+Depends on: nothing (leaf module in the engine stack)
 """
 
 from dataclasses import dataclass
@@ -13,6 +22,9 @@ try:
 except ImportError:
     _np = None
 
+# Sentinel objects for coalgebra signaling.
+# _NO_OUTPUT marks cases that transition state without emitting output.
+# _EXHAUSTED signals that the token iterator has been fully consumed.
 _NO_OUTPUT = object()
 _EXHAUSTED = object()
 
@@ -161,13 +173,26 @@ class Interpreter:
             if accumulate_legs and result.payload:
                 if _np is None:
                     raise ImportError("numpy is required for accumulate_legs")
-                for i, (leg_name, mode) in enumerate(accumulate_legs.items()):
+                for i, (leg_name, (mode, fields)) in enumerate(accumulate_legs.items()):
                     if i < len(result.payload) and mode == 'cat':
-                        old = accumulated.get(leg_name)
-                        new = result.payload[i]
-                        accumulated[leg_name] = (
-                            _np.concatenate([old, new]) if old is not None else new
-                        )
+                        if fields is not None:
+                            # Field-level accumulate: payload item is a dict, concat specific fields
+                            new = result.payload[i]
+                            if leg_name not in accumulated:
+                                accumulated[leg_name] = {}
+                            for field in fields:
+                                old_field = accumulated[leg_name].get(field)
+                                new_field = new[field] if isinstance(new, dict) else new
+                                accumulated[leg_name][field] = (
+                                    _np.concatenate([old_field, new_field]) if old_field is not None else new_field
+                                )
+                        else:
+                            # Whole-sort accumulate (existing behavior)
+                            old = accumulated.get(leg_name)
+                            new = result.payload[i]
+                            accumulated[leg_name] = (
+                                _np.concatenate([old, new]) if old is not None else new
+                            )
 
             step += 1
             if stop is not None and stop(step, state, outputs):

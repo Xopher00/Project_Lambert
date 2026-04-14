@@ -1,8 +1,18 @@
 """
-arch.py — Compiled architecture runtime classes.
+Compiled architecture definitions and their runtime interpreters.
 
-ArchDef is the compiled result of a DSL source block. ArchInterpreter wraps
-the algebra and coalgebra sides of an arch declaration.
+ArchDef is the compiled result of a full DSL source block — it holds every
+compiled path, morphism, fan, and arch declaration, plus introspection methods
+(explain, trace, loss). ArchInterpreter wraps a single arch declaration's
+algebra and coalgebra interpreters for convenient evaluation.
+
+Key abstractions:
+  _ArchData        — internal: compiled algebra + coalgebra for one arch declaration
+  ArchInterpreter  — runtime wrapper with run_algebra and run_coalgebra methods
+  ArchDef          — top-level compiled artifact with explain/trace/loss/interpreter API
+
+Depends on: path_engine.py (MorphismSpec, explain, trace),
+            functor.py (Functor, Interpreter)
 """
 
 from __future__ import annotations
@@ -28,6 +38,9 @@ class _ArchData:
     observer_convergence: Callable | None = None
     observer_loss:        Callable | None = None
     accumulate_legs:      dict | None = None  # morphism_name -> mode ('cat')
+    iterate_groups:       dict | None = None  # group_name -> [case_names] (data flow order)
+    iterate_base:         str | None = None   # base case name (leaf)
+    iterate_epilogue:     list | None = None  # cases after iterate block
 
 
 # ---------------------------------------------------------------------------
@@ -41,18 +54,72 @@ class ArchInterpreter:
                  coalgebra: Interpreter | None = None,
                  convergence_fn: Callable | None = None,
                  loss_fn: Callable | None = None,
-                 accumulate_legs: dict | None = None):
+                 accumulate_legs: dict | None = None,
+                 iterate_groups: dict | None = None,
+                 iterate_base: str | None = None,
+                 iterate_epilogue: list | None = None):
         self.name = name
         self._algebra = algebra
         self._coalgebra = coalgebra
         self._convergence_fn = convergence_fn
         self._loss_fn = loss_fn
         self._accumulate_legs = accumulate_legs
+        self._iterate_groups = iterate_groups
+        self._iterate_base = iterate_base
+        self._iterate_epilogue = iterate_epilogue or []
 
-    def run_algebra(self, data, decompose: Callable):
+    def run_algebra(self, data, decompose=None, layers=None, extras=None):
+        """Run the algebra fold.
+
+        Two calling conventions:
+          run_algebra(tree, decompose)     — fold a pre-built tree (original)
+          run_algebra(x0, layers=[...])    — build tree from iterate groups, then fold
+
+        Parameters
+        ----------
+        data       : tree node (old) or initial value x0 (new)
+        decompose  : callable(node) -> (case_name, payload, children), or None
+        layers     : list of payloads for iterate cases, or None
+        extras     : dict merged into each layer payload, or None
+        """
         if self._algebra is None:
             raise ValueError(f"Arch '{self.name}' has no algebra declaration")
+        if layers is not None:
+            if self._iterate_groups is None:
+                raise ValueError(
+                    f"Arch '{self.name}': layers= provided but no cases "
+                    f"have iterate= declared"
+                )
+            tree = self._build_tree(data, layers, extras)
+            return self._algebra.run_algebra(tree, lambda n: n)
+        if decompose is None:
+            raise ValueError(
+                f"Arch '{self.name}': must provide either decompose= or layers="
+            )
         return self._algebra.run_algebra(data, decompose)
+
+    def _build_tree(self, x0, layers, extras):
+        """Construct an algebra tree from iterate groups.
+
+        Cases are declared in data flow order (attn before ffn). Tree nesting
+        reverses this: the last declared iterate case is the outermost wrapper.
+        """
+        if self._iterate_base is None:
+            raise ValueError(
+                f"Arch '{self.name}': iterate requires a leaf case (recursive=0)"
+            )
+        node = (self._iterate_base, [x0], [])
+        for payload in layers:
+            merged = {**payload, **(extras or {})} if extras else payload
+            # Reverse declaration order for tree nesting:
+            # declared attn, ffn -> tree nests as ffn(attn(prev))
+            for group_name, case_names in self._iterate_groups.items():
+                for case_name in reversed(case_names):
+                    node = (case_name, [merged], [node])
+        # Epilogue cases (non-iterate cases after the iterate block)
+        for case_name in self._iterate_epilogue:
+            node = (case_name, [None], [node])
+        return node
 
     def run_coalgebra(self, state, token_iter=None, stop: Callable = None,
                       convergence_threshold: float = 1e-6):
@@ -146,6 +213,9 @@ class ArchDef:
                 convergence_fn=ad.observer_convergence,
                 loss_fn=ad.observer_loss,
                 accumulate_legs=ad.accumulate_legs,
+                iterate_groups=ad.iterate_groups,
+                iterate_base=ad.iterate_base,
+                iterate_epilogue=ad.iterate_epilogue,
             )
 
         raise KeyError(f"Unknown arch: {name!r}")
