@@ -9,11 +9,31 @@ Mathematical foundations of Project Lambert, organised by layer.
 - [tensor](core/tensor.md) — max-min semiring, Join, Residuate, Closure, witness tracking
 - [fixpoint](core/fixpoint.md) — fixpoint iteration, energy function, temperature annealing
 
-## Lattice layer
+## Lattice layer (legacy — see legacy/)
+
+These documents describe the original implementation, now preserved in `legacy/`. The patterns they describe are expressed through the engine DSL in `engine/`.
 
 - [embed](lattice/embed.md) — formal concepts, ConceptEmbed, coverage-based concept selection
 - [attention](lattice/attention.md) — attention as dense associative memory, correction principle, conjunctive queries, multi-head retrieval
 - [explorer](lattice/explorer.md) — multi-relational formal concepts, second-order FCA, lattice closure
+
+---
+
+## Engine DSL (active development)
+
+`engine/` implements a domain-specific language for expressing ML architectures over arbitrary semirings. Rather than hand-coding forward passes, a user declares morphisms, paths, and cases; the compiler assembles them into a runnable architecture.
+
+**Key files:**
+- `parser.py` — DSL grammar → AST
+- `compiler.py` — AST → `ArchDef`
+- `decl.py` — declaration types (`SemiringDecl`, `MorphismDecl`, `PathDecl`, `FanDecl`, `CaseDecl`, `ArchDecl`)
+- `functor.py` — `Functor`, `Case`, `Interpreter`; algebra/coalgebra execution
+- `arch.py` — compiled architecture runtime
+- `path_engine.py` — morphism composition: `chain`, `fan`, `augment`
+
+**Key abstractions.** A `SemiringDecl` fixes the operation algebra (e.g. max-min, log-sum-exp, standard). A `MorphismDecl` is a typed operation between sorts. A `PathDecl` chains morphisms sequentially; a `FanDecl` runs branches in parallel and gathers their outputs. A `CaseDecl` maps a functor case (base or recursive) to a path composition. An `ArchDecl` pairs an algebra side (forward pass, initial algebra) with a coalgebra side (streaming/KV-cache, final coalgebra) over a shared base functor — the category-theoretic framing that makes the algebra/coalgebra duality precise.
+
+The DSL supersedes the hand-coded `lattice/` layer by expressing the same structural patterns as compositions of typed morphisms with no Python escape hatches. The **augment combinator** `[fan_name]` is the concrete mechanism: it runs a fan and merges its dict output into the current payload, which eliminated the last algebra-side Python cell needed for bundle assembly in the attention case.
 
 ---
 
