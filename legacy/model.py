@@ -14,10 +14,10 @@ accessed via concept_space and heads.
 """
 
 import numpy as np
-from query import Query
+from legacy.query import Query
 from typing import Optional
 from dataclasses import dataclass, field
-from lattice import Embed, Attention, MultiHeadAttention, CategoryExplorer
+from legacy.lattice import Embed, Attention, MultiHeadAttention, CategoryExplorer
 
 
 @dataclass

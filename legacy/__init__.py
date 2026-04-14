@@ -1,1 +1,2 @@
-# Legacy modules: language labelling (not currently in use)
+"""Legacy implementations — reference code superseded by engine/ DSL.
+See legacy/README.md for details."""

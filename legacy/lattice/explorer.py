@@ -19,7 +19,7 @@ new categories can be defined by composing existing ones.
 
 import numpy as np
 from core.algebra import *
-from lattice.embed import Embed
+from legacy.lattice.embed import Embed
 
 
 class CategoryExplorer(Embed):

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from functools import reduce
 import numpy as np
-from lattice.embed import Embed
+from legacy.lattice.embed import Embed
 
 @dataclass
 class QueryResult:

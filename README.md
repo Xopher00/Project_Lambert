@@ -64,16 +64,27 @@ core/
   fixpoint.py     — FixpointIterator: iterates any operator to convergence with energy-derived temperature annealing
   tensor.py       — relational operations (Join, Residuate, Closure) built on top of Activations
 
-lattice/
-  embed.py        — concept embedding: selects representative formal concepts from a relation matrix
-  attention.py    — single-head and multi-head retrieval over concept embeddings via fixpoint iteration
-  explorer.py     — CategoryExplorer: systematic discovery and closure of the full concept lattice
+engine/                      — active development: architecture DSL and compiler
+  __init__.py     — public surface (Arch, Decl, compile, run)
+  arch.py         — Arch declaration: named cases, fan-outs, and augment combinators
+  compiler.py     — compiles Arch + Decl into an executable functor tree
+  decl.py         — sort and morphism declarations (SortDecl, MorphDecl)
+  functor.py      — algebra / coalgebra functor types; interpreter loop
+  parser.py       — S-expression parser for DSL source strings
 
-model.py          — Lambert: top-level pipeline (chunking, embedding, exploration, feature mapping)
-query.py          — Query: high-level interface for entity and feature retrieval with provenance
+streamlined/
+  __init__.py
+  composer.py     — high-level composition helpers
+  relational_einsum.py — einsum-style relational ops
 
 legacy/
-  lattice.py      — earlier Concept/Lattice utilities, superseded by the attention and explorer layers
+  lattice/
+    embed.py      — concept embedding: selects representative formal concepts from a relation matrix
+    attention.py  — single-head and multi-head retrieval over concept embeddings via fixpoint iteration
+    explorer.py   — CategoryExplorer: systematic discovery and closure of the full concept lattice
+  model.py        — Lambert: top-level pipeline (chunking, embedding, exploration, feature mapping)
+  query.py        — Query: high-level interface for entity and feature retrieval with provenance
+  lattice.py      — earlier Concept/Lattice utilities, superseded by lattice/
   language.py     — LLM-based category labeller (not currently wired into the pipeline)
   provenance/     — retired witness-based proof tree implementation
 ```
@@ -82,16 +93,19 @@ The `tests/` directory contains Jupyter notebooks covering join operations, atte
 
 ## Status
 
-The full pipeline — relational algebra, concept embedding, multi-head attention, lattice exploration, and the `Lambert`/`Query` interface — is implemented and functional. The system discovers multi-relational concepts invisible to standard similarity measures. Provenance is structural: the concept lattice identifies which features caused each entity grouping, with no separate mechanism required.
+Active development is focused on the **engine DSL** (`engine/`): a domain-specific language for expressing arbitrary AI architectures over semirings, compiled to a functor/coalgebra tree and interpreted by a fixpoint loop. The DSL can express relational composition, concept embedding, multi-head attention, and KV-cache streaming as declarative algebra and coalgebra cases, eliminating hand-written Python cells for most architecture patterns.
 
-**Known gaps:**
+The original lattice pipeline — relational algebra, concept embedding, multi-head attention, lattice exploration, and the `Lambert`/`Query` interface — is preserved in `legacy/` as a reference implementation. It is functional and documents the design that the engine DSL is intended to generalise.
 
-- The Tucker core `EmbR` is computed but not wired into any query path. Chaining `Join(q, EmbR)` across relation types would support multi-hop inference and generation; currently all queries go through direct embedding retrieval.
-- The learning rule (`W = Residuate(Y, X)`) is algebraically present but has no calling layer. The model reads relation matrices but cannot accumulate new knowledge incrementally.
+**Known gaps (engine DSL):**
+
+- Final layer norm: the algebra path uses identity gamma/beta; the coalgebra `stream_cell` uses learned parameters. They agree only when parameters are initialised to identity. Fix requires a `ln_final` binary morphism passing final LN params as the case payload.
+- `stream_cell` is the last remaining hand-written Python cell (coalgebra). It handles token embedding, per-layer KV cache iteration, final LN, and unembed. The per-layer loop is the blocking case for full DSL elimination.
+- Structured sorts (`SortDecl` with named fields) are parsed and compiled but no compilation phase consumes the field info yet.
 
 **Active research directions:**
 
-- Characterising the fixpoint set of multi-head attention formally — whether it constitutes a complete lattice and under what conditions
-- Relation matrix updates from new relational evidence — incorporating genuinely novel facts and propagating their consequences through the lattice
-- Connecting Lambert's architecture back to standard transformer-based frameworks — characterising what transformers approximate in max-min algebraic terms, and what is lost in that approximation
+- Eliminating `stream_cell` via a DSL construct for stateful iteration over layers with persistent KV cache
+- Scaling the engine DSL to express multi-hop inference chains across relation types (`EmbR` Tucker core)
+- Connecting Lambert's max-min algebra to standard transformer arithmetic — characterising what transformers approximate in max-min terms and what is lost
 - Scaling to large medical and scientific knowledge graphs

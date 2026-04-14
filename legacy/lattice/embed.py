@@ -18,7 +18,7 @@ Recall are utilities for analogical reasoning and retrieval.
 import numpy as np
 from core.algebra import *
 from core.tensor import Tensor
-from lattice.coder import PathCoder
+from legacy.lattice.coder import PathCoder
 from core.fixpoint import FixpointIterator
 
 class Embed(Tensor):

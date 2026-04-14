@@ -17,7 +17,7 @@ of matching entities across all heads.
 import numpy as np
 from functools import reduce
 from core.algebra import *
-from lattice.embed import Embed
+from legacy.lattice.embed import Embed
 from core.fixpoint import FixpointIterator
 from concurrent.futures import ThreadPoolExecutor
 
