@@ -10,6 +10,14 @@ Public API
 qname(ns, local)                     -> Name
 register_tensor_primitives(...)      -> dict[Name, Primitive]
 build_engine_graph(primitives)       -> Graph
+
+References
+----------
+Green, T. J., Karvounarakis, G., & Tannen, V. (2007). Provenance semirings.
+PODS 2007, pp. 31–40.  cite{green2007}
+
+Domingos, P. (2025). Tensor logic: The language of AI.
+arXiv:2510.12269.  cite{domingos2025}
 """
 
 from __future__ import annotations
@@ -59,6 +67,11 @@ def register_tensor_primitives(
     Returns
     -------
     dict[Name, Primitive]  ready to pass to build_engine_graph
+
+    References
+    ----------
+    Green, T. J., Karvounarakis, G., & Tannen, V. (2007). Provenance semirings.
+    PODS 2007, pp. 31–40.  cite{green2007}
     """
     from engine.sorts import ndarray_coder
     from hydra.dsl import prims

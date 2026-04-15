@@ -173,3 +173,18 @@ The provenance package has been retired to `legacy/provenance/`. Lattice
 traversal paths through the concept hierarchy are the forward path for
 interpretability — the concept lattice provides a richer and more structured
 account of inference than explicit witness-based proof trees.
+
+## Engine DSL representation
+
+The max-min semiring is declared as a `SemiringDecl` in `engine/decl.py`. Join and
+Residuate are declared as `MorphismDecl` entries with explicit `src_sort` and
+`tgt_sort` annotations. The compiler validates sort adjacency via `check_sorts()`
+in `engine/runtime.py` — enforcing the V-functor composition axiom.
+
+A `PathDecl` chains morphisms sequentially (e.g. `path Attend = realize propagate`),
+and the compiler translates the chain into `chain()` in `engine/runtime.py`. In the
+Σ⊣Δ⊣Π framework of Schultz et al. (2017), Join-based paths are Σ (left Kan,
+existential) and Residuate-based paths are Π (right Kan, universal).
+
+See [engine/decl](../engine/decl.md) and [engine/runtime](../engine/runtime.md)
+for full DSL documentation.

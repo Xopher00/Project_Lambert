@@ -158,3 +158,20 @@ Incremental concept lattice construction — growing the lattice one concept at 
 time in the direction of maximal residual reduction — is the concrete algorithm
 that performs this closure.
 
+## Engine DSL representation
+
+Convergence is managed through `observer_convergence` on `ArchDecl` in
+`engine/decl.py`. The compiler resolves this to a path callable, and
+`_make_convergence_stop()` in `engine/arch.py` wraps it into a halt predicate for
+the coalgebra runner. The `ArchInterpreter.run_coalgebra()` method in
+`engine/arch.py` uses energy-driven convergence to decide when streaming inference
+has stabilized.
+
+The iterate combinator (`iterate = layers` on `CaseDecl`) provides the catamorphism
+side. Dannert et al. (2021) prove that provenance is preserved through fixpoint
+iterations over absorptive semirings — the engine's `SemiringDecl` abstraction
+ensures this guarantee holds.
+
+See [engine/arch](../engine/arch.md) and [engine/compiler](../engine/compiler.md)
+for full DSL documentation.
+

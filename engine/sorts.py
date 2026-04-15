@@ -3,6 +3,11 @@
 Maps engine sorts to Hydra Types, provides TermCoders for numpy arrays,
 bundles, and scalars, and builds Hydra function types for morphisms.
 Also provides the shared dotted-name resolver used by the compiler and primitives.
+
+References
+----------
+Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
+*Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
 """
 
 import sys
@@ -76,6 +81,13 @@ def _field_type(type_name: str) -> Type:
 def sort_to_type(
     name: str, sort_defs: dict[str, SortDecl] | None = None
 ) -> Type:
+    """Map an engine sort to a Hydra Type, encoding the hom-tensor adjunction.
+
+    References
+    ----------
+    Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
+    *Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
+    """
     if sort_defs and name in sort_defs:
         decl = sort_defs[name]
         if decl.fields:

@@ -1,4 +1,4 @@
-> **Legacy documentation.** This document describes `lattice/explorer.py`, which has been moved to `legacy/lattice/explorer.py`. The patterns described here are now expressed through the engine DSL in `engine/`. See `research/theory.md` for the current architecture overview.
+> **Legacy documentation.** This document describes `lattice/explorer.py`, which has been moved to `legacy/lattice/explorer.py`. The patterns described here are now expressed through the engine DSL in `engine/`. See `research/theory.md` for the current architecture overview, and `research/engine/` for DSL documentation.
 
 # CategoryExplorer
 

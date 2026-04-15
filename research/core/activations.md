@@ -111,3 +111,13 @@ of max(x, 0):
 
 The gap is largest at x = 0, the location of the sharp corner, and vanishes as
 T → 0. Relu is the T = 0 special case — the exact max(x, 0) with no smoothing.
+
+## Engine DSL representation
+
+The smooth activation functions are the computational substrate for every semiring
+in the engine DSL. When a `SemiringDecl` in `engine/decl.py` declares a contract
+pointing to a max-min operation, that contract internally uses `LogSumExp`. This
+means Nesterov's bounded-gap approximation propagates through the engine compiler
+to every morphism compiled under that semiring.
+
+See [engine/decl](../engine/decl.md) for semiring declaration documentation.

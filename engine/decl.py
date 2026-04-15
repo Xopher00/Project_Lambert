@@ -16,6 +16,17 @@ Declarations:
   DSLSource     — top-level container holding all declarations from one source block
 
 Depends on: nothing (leaf module in the engine stack)
+
+References
+----------
+Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
+*Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
+
+Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+theory of all architectures. ICML 2024.  cite{gavranovic2024b}
+
+Green, T. J., Karvounarakis, G., & Tannen, V. (2007). Provenance semirings.
+PODS 2007, pp. 31–40.  cite{green2007}
 """
 
 from __future__ import annotations
@@ -25,6 +36,16 @@ from dataclasses import dataclass, field
 
 @dataclass
 class SemiringDecl:
+    """Quantale V = (V, ⊗, k): the algebraic structure over which morphisms compose.
+
+    References
+    ----------
+    Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
+    *Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
+
+    Green, T. J., Karvounarakis, G., & Tannen, V. (2007). Provenance semirings.
+    PODS 2007, pp. 31–40.  cite{green2007}
+    """
     name:     str
     contract: str               # dotted name: (compiled_eq, x, y, temp) -> tensor
     compiler: str | None = None # dotted name: equation string -> compiled form
@@ -33,6 +54,19 @@ class SemiringDecl:
 
 @dataclass
 class MorphismDecl:
+    """A V-functor f: src_sort → tgt_sort, computed via an einsum equation.
+
+    References
+    ----------
+    Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
+    *Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
+
+    Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+    theory of all architectures. ICML 2024.  cite{gavranovic2024b}
+
+    Domingos, P. (2025). Tensor logic: The language of AI.
+    arXiv:2510.12269.  cite{domingos2025}
+    """
     name:      str
     src_sort:  str
     tgt_sort:  str
@@ -49,6 +83,16 @@ class MorphismDecl:
 
 @dataclass
 class PathDecl:
+    """Sequential V-functor composition: a named chain of morphisms.
+
+    References
+    ----------
+    Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
+    *Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
+
+    Schultz, P. et al. (2017). Algebraic databases.
+    *Theory and Applications of Categories*, 32(16), 547–619.  cite{schultz2017}
+    """
     name:      str
     # Each token is one of: plain name ("q_proj"), augment bracket ("[kv]"),
     # or template instantiation ("ln[ln1]"). The compiler re-parses these with regex.
@@ -59,6 +103,13 @@ class PathDecl:
 
 @dataclass
 class FanDecl:
+    """Parallel fan-out (V-category product) with merge strategy.
+
+    References
+    ----------
+    Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
+    *Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
+    """
     name:     str
     branches: list[str]   # morphism/path names
     merge:    str = 'dict' # 'dict', 'meet', 'join', or dotted.name
@@ -66,6 +117,13 @@ class FanDecl:
 
 @dataclass
 class CaseDecl:
+    """One variant of a recursive endofunctor F (sum type).
+
+    References
+    ----------
+    Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+    theory of all architectures. ICML 2024.  cite{gavranovic2024b}
+    """
     name:      str
     recursive: int
     data:      int
@@ -83,6 +141,14 @@ class ArchDecl:
     The `cases` list declares F — shared by both algebra (catamorphism) and
     coalgebra (anamorphism). Morphism bindings on cases serve both evaluations.
     `state:` and `step:` provide coalgebra-specific configuration (enter/emit).
+
+    References
+    ----------
+    Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+    theory of all architectures. ICML 2024.  cite{gavranovic2024b}
+
+    Schultz, P., & Wisnesky, R. (2025). Algebraic data integration.
+    *Journal of Functional Programming*, 27.  cite{schultz2025}
     """
     name:              str
     cases:             list[CaseDecl] | None = None    # unified endofunctor F

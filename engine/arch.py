@@ -13,6 +13,17 @@ Key abstractions:
 
 Depends on: runtime.py (MorphismSpec, explain, trace),
             functor.py (Functor, Interpreter)
+
+References
+----------
+Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+theory of all architectures. ICML 2024.  cite{gavranovic2024b}
+
+Schultz, P., & Wisnesky, R. (2025). Algebraic data integration.
+*Journal of Functional Programming*, 27.  cite{schultz2025}
+
+Ramsauer, H. et al. (2021). Hopfield networks is all you need.
+ICLR 2021.  cite{ramsauer2021}
 """
 
 from __future__ import annotations
@@ -54,6 +65,11 @@ def _make_convergence_stop(conv_fn: Callable, user_stop: Callable | None,
     Convergence is measured by the max-abs residual of *conv_fn* between
     consecutive states.  The mutable cell ``prev`` is captured in the closure
     so callers need not manage it.
+
+    References
+    ----------
+    Ramsauer, H. et al. (2021). Hopfield networks is all you need.
+    ICLR 2021.  cite{ramsauer2021}
     """
     prev = [None]
 
@@ -75,7 +91,13 @@ def _make_convergence_stop(conv_fn: Callable, user_stop: Callable | None,
 # ---------------------------------------------------------------------------
 
 class ArchInterpreter:
-    """Interpreter for an arch declaration — wraps algebra and coalgebra sides."""
+    """Interpreter for an arch declaration — wraps algebra and coalgebra sides.
+
+    References
+    ----------
+    Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+    theory of all architectures. ICML 2024.  cite{gavranovic2024b}
+    """
 
     def __init__(self, name: str, algebra: Interpreter | None = None,
                  coalgebra: Interpreter | None = None,
@@ -113,6 +135,11 @@ class ArchInterpreter:
         x0      : initial value (leaf payload)
         layers  : list of payloads for iterate cases
         extras  : dict merged into each layer payload, or None
+
+        References
+        ----------
+        Gavranović, B. et al. (2024). Position: Categorical deep learning is an
+        algebraic theory of all architectures. ICML 2024.  cite{gavranovic2024b}
         """
         if self._algebra is None:
             raise ValueError(f"Arch '{self.name}' has no algebra declaration")
@@ -129,6 +156,11 @@ class ArchInterpreter:
 
         Cases are declared in data flow order (attn before ffn). Tree nesting
         reverses this: the last declared iterate case is the outermost wrapper.
+
+        References
+        ----------
+        Gavranović, B. et al. (2024). Position: Categorical deep learning is an
+        algebraic theory of all architectures. ICML 2024.  cite{gavranovic2024b}
         """
         if self._iterate_base is None:
             raise ValueError(
@@ -173,6 +205,14 @@ class ArchDef:
 
     paths             : dict[str, Callable]  all named paths + individual morphisms + fans
     morphism_semiring : dict[str, str]       morphism name -> semiring group name
+
+    References
+    ----------
+    Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+    theory of all architectures. ICML 2024.  cite{gavranovic2024b}
+
+    Green, T. J., Karvounarakis, G., & Tannen, V. (2007). Provenance semirings.
+    PODS 2007, pp. 31–40.  cite{green2007}
     """
     paths:             dict[str, Callable]
     morphism_semiring: dict[str, str]

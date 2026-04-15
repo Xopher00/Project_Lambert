@@ -22,6 +22,14 @@ Example
     morphisms = {s.name: compile_morphism(s) for s in specs}
     attend = chain([morphisms["realize"], morphisms["propagate"]])
     result = attend(x, y, temp=0.0)
+
+References
+----------
+Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
+*Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
+
+Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+theory of all architectures. ICML 2024.  cite{gavranovic2024b}
 """
 
 from __future__ import annotations
@@ -48,6 +56,14 @@ class MorphismSpec:
     equation_compiler : turns the equation string into whatever ``op``
                         expects as its first argument
     transform         : reorders ``(x, y)`` before passing to ``op``
+
+    References
+    ----------
+    Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
+    *Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
+
+    Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+    theory of all architectures. ICML 2024.  cite{gavranovic2024b}
     """
     name:              str
     op:                Callable
@@ -79,7 +95,16 @@ def compile_morphism(spec: MorphismSpec) -> Callable:
 
 
 def chain(callables: list[Callable]) -> Callable:
-    """Chain callables sequentially: each output feeds the next as ``x``."""
+    """Chain callables sequentially: each output feeds the next as ``x``.
+
+    Implements V-functor composition gf: X → Z where each callable is a
+    V-functor and the chain is their sequential composition.
+
+    References
+    ----------
+    Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
+    *Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
+    """
     if len(callables) == 1:
         return callables[0]
     def prog(x, y, temp, fns=callables):
@@ -91,7 +116,17 @@ def chain(callables: list[Callable]) -> Callable:
 
 
 def chain_with_augments(steps: list[tuple[str, Callable]]) -> Callable:
-    """Chain steps where 'augment' steps merge into y instead of transforming x."""
+    """Chain steps where 'augment' steps merge into y instead of transforming x.
+
+    Augment steps act as right Kan extensions: they enrich the relational context
+    without modifying the primary signal.
+
+    References
+    ----------
+    Shen, L., & Tang, X. (2021). Isbell adjunctions and Kan adjunctions via
+    quantale-enriched two-variable adjunctions. *Applied Categorical Structures*,
+    29, 823–858.  cite{shen2021}
+    """
     def prog(x, y, temp, _steps=steps):
         z = x
         y_cur = y
@@ -106,7 +141,15 @@ def chain_with_augments(steps: list[tuple[str, Callable]]) -> Callable:
 
 
 def fan(branches: dict[str, Callable], merge: Callable) -> Callable:
-    """Fan-out: run all branches on the same ``(x, y, temp)``, merge results."""
+    """Fan-out: run all branches on the same ``(x, y, temp)``, merge results.
+
+    Implements the V-category product X × Y.
+
+    References
+    ----------
+    Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
+    *Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
+    """
     def prog(x, y, temp, branches=branches, merge=merge):
         return merge({name: fn(x, y, temp) for name, fn in branches.items()})
     return prog
@@ -121,6 +164,11 @@ def check_sorts(
 
     Uses Hydra Type equality (frozen dataclass ``==``) for comparison.
     Falls back to string equality for sorts missing from sort_types.
+
+    References
+    ----------
+    Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
+    *Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
     """
     for i in range(1, len(names)):
         prev_tgt = morphism_specs[names[i - 1]].tgt_sort

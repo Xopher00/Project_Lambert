@@ -12,6 +12,14 @@ Key abstractions:
   Interpreter — drives run_algebra (tree fold) and run_coalgebra (stream unfold)
 
 Depends on: nothing (leaf module in the engine stack)
+
+References
+----------
+Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+theory of all architectures. ICML 2024.  cite{gavranovic2024b}
+
+Tarski, A. (1955). A lattice-theoretical fixpoint theorem and its applications.
+*Pacific Journal of Mathematics*, 5(2), 285–309.  cite{tarski1955}
 """
 
 from dataclasses import dataclass
@@ -35,6 +43,14 @@ _EXHAUSTED = object()
 
 @dataclass
 class Case:
+    """One variant of a recursive sum type (endofunctor case).
+
+    References
+    ----------
+    Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+    theory of all architectures. ICML 2024.  cite{gavranovic2024b}
+    """
+
     name:      str
     recursive: int
     data:      int
@@ -51,6 +67,14 @@ class Case:
 
 @dataclass
 class Functor:
+    """Collection of named Cases defining an endofunctor F.
+
+    References
+    ----------
+    Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+    theory of all architectures. ICML 2024.  cite{gavranovic2024b}
+    """
+
     cases: list
 
     def __post_init__(self):
@@ -67,6 +91,14 @@ class Functor:
 
 @dataclass
 class UnfoldStep:
+    """Output of a coalgebra step: case name, payload, next states, optional output.
+
+    References
+    ----------
+    Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+    theory of all architectures. ICML 2024.  cite{gavranovic2024b}
+    """
+
     case_name:   str
     payload:     list
     next_states: list
@@ -88,6 +120,11 @@ class Interpreter:
     Drives declared Functors through algebra folds (run_algebra) and
     coalgebra unfolds (run_coalgebra). The coalgebra runner supports the
     linear single-successor subset: cases with recursive=1.
+
+    References
+    ----------
+    Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+    theory of all architectures. ICML 2024.  cite{gavranovic2024b}
     """
 
     def __init__(self, functor: Functor, cell: Callable, params, temp=0.0):
@@ -97,6 +134,13 @@ class Interpreter:
         self.temp    = temp
 
     def run_algebra(self, data, decompose: Callable):
+        """Fold a tree via catamorphism (initial algebra evaluation).
+
+        References
+        ----------
+        Gavranović, B. et al. (2024). Position: Categorical deep learning is an
+        algebraic theory of all architectures. ICML 2024.  cite{gavranovic2024b}
+        """
         case_name, payload, children = decompose(data)
         case = self.functor[case_name]
 
@@ -128,6 +172,11 @@ class Interpreter:
         If token_iter is exhausted the run halts.
         If stop is None and token_iter is None the caller must ensure
         termination through stop.
+
+        References
+        ----------
+        Gavranović, B. et al. (2024). Position: Categorical deep learning is an
+        algebraic theory of all architectures. ICML 2024.  cite{gavranovic2024b}
         """
         outputs = []
         tokens  = iter(token_iter) if token_iter is not None else None

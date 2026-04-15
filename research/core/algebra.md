@@ -98,6 +98,16 @@ restriction. Otherwise it returns b, capping at the weaker value. This is the α
 operation from Sanchez (1976), the algebraic foundation of the Residuate operation in
 `tensor.py`.
 
+## Engine DSL representation
+
+The unified algebra primitives form the bottom layer behind `SemiringDecl` contracts
+in `engine/decl.py`. Hehner's insight — that logical reasoning and arithmetic are
+special cases of the same algebra — is the reason the engine DSL can be
+semiring-parametric: a `SemiringDecl` selects which row of Lawvere's (1973) table to
+operate in, and these primitives provide the operations for each row.
+
+See [engine/decl](../engine/decl.md) for semiring declaration documentation.
+
 **Reference:**
 - Sanchez, E. (1976). Resolution of composite fuzzy relation equations.
   *Information and Control*, 30, 38–48. (α operation)

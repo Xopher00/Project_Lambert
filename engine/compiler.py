@@ -14,6 +14,20 @@ Key phases:
 
 Depends on: parser.py (AST), runtime.py (morphism compilation, chain, fan),
             functor.py (Case, Functor), arch.py (ArchDef, ArchInterpreter, _ArchData)
+
+References
+----------
+Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+theory of all architectures. ICML 2024.  cite{gavranovic2024b}
+
+Green, T. J., Karvounarakis, G., & Tannen, V. (2007). Provenance semirings.
+PODS 2007, pp. 31–40.  cite{green2007}
+
+Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
+*Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
+
+Domingos, P. (2025). Tensor logic: The language of AI.
+arXiv:2510.12269.  cite{domingos2025}
 """
 
 from __future__ import annotations
@@ -157,7 +171,15 @@ def _compile_morphisms(
 
 
 def _build_residual_wrapper(base_fn, norm_fn, has_residual):
-    """Wrap a path callable with residual connection and/or normalization."""
+    """Wrap a path callable with residual connection and/or normalization.
+
+    The residual connection implements the universal map from a coproduct: f(x) + x.
+
+    References
+    ----------
+    Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+    theory of all architectures. ICML 2024.  cite{gavranovic2024b}
+    """
     if has_residual and norm_fn is not None:
         return lambda x, y, temp, _b=base_fn, _n=norm_fn: \
             _n(_b(x, y, temp) + x, y, temp)
@@ -188,6 +210,11 @@ def _resolve_template_instance(
 
     Creates a curried morphism callable and registers it in compiled/morphism_specs.
     Returns the instance name (e.g. 'ln[ln1]') or None if token is not a template inst.
+
+    References
+    ----------
+    Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+    theory of all architectures. ICML 2024.  cite{gavranovic2024b}
     """
     match = _TEMPLATE_INST.match(token)
     if not match:
@@ -420,6 +447,14 @@ def _detect_iterate_groups(
 
     Returns (iterate_groups, iterate_base, iterate_epilogue).
     iterate_groups is None (not an empty dict) when no iterate cases exist.
+
+    References
+    ----------
+    Dannert, K. M. et al. (2021). Semiring provenance for fixed-point logic.
+    CSL 2021, LIPIcs vol. 183.  cite{dannert2021}
+
+    Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+    theory of all architectures. ICML 2024.  cite{gavranovic2024b}
     """
     iterate_groups: dict[str, list[str]] = {}
     base_case: str | None = None
@@ -582,6 +617,14 @@ def compile(source: str | Path | DSLSource, namespace: dict) -> ArchDef:
     source    : str, Path, or DSLSource — DSL text, .ua file path, or pre-parsed AST
     namespace : dict  — Python namespace for resolving dotted names
                         e.g. {'numpy': numpy, 'ops': ops_module}
+
+    References
+    ----------
+    Gavranović, B. et al. (2024). Position: Categorical deep learning is an algebraic
+    theory of all architectures. ICML 2024.  cite{gavranovic2024b}
+
+    Green, T. J., Karvounarakis, G., & Tannen, V. (2007). Provenance semirings.
+    PODS 2007, pp. 31–40.  cite{green2007}
     """
     if isinstance(source, Path) or (isinstance(source, str) and source.endswith('.ua')):
         source = Path(source).read_text()

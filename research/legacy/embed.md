@@ -1,4 +1,4 @@
-> **Legacy documentation.** This document describes `lattice/embed.py`, which has been moved to `legacy/lattice/embed.py`. The patterns described here are now expressed through the engine DSL in `engine/`. See `research/theory.md` for the current architecture overview.
+> **Legacy documentation.** This document describes `lattice/embed.py`, which has been moved to `legacy/lattice/embed.py`. The patterns described here are now expressed through the engine DSL in `engine/`. See `research/theory.md` for the current architecture overview, and `research/engine/` for DSL documentation.
 
 # Embed
 
