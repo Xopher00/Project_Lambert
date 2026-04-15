@@ -78,9 +78,44 @@ from .decl import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-_BLOCK_BOUNDARY = re.compile(
-    r'^(semiring|sort|morphism|leg|path|fan|functor|arch)\b'
+_TOP_LEVEL_DECL = re.compile(
+    r'^(semiring|sort|morphism|leg|path|fan|arch)\b'
 )
+
+_ARCH_SUB_HEADER = re.compile(
+    r'^(cases|algebra|coalgebra|state|step|observer)\s*:'
+)
+
+
+def _scan_sub_block(
+    lines: list[str], i: int, boundary_keywords: re.Pattern | None = None
+) -> tuple[list[str], int]:
+    """Collect non-empty stripped lines for a sub-block inside an arch.
+
+    Starts at index *i* and stops when:
+    - a top-level declaration keyword is seen, or
+    - an arch-level sub-header keyword is seen, or
+    - ``boundary_keywords`` matches the line (if provided), or
+    - end of ``lines`` is reached.
+
+    Returns ``(collected_lines, new_i)`` where ``new_i`` points to the first
+    line *not* consumed (the boundary line itself, or end-of-list).
+    """
+    collected: list[str] = []
+    while i < len(lines):
+        sub = lines[i].strip()
+        if not sub:
+            i += 1
+            continue
+        if _TOP_LEVEL_DECL.match(sub):
+            break
+        if _ARCH_SUB_HEADER.match(sub):
+            break
+        if boundary_keywords and boundary_keywords.match(sub):
+            break
+        collected.append(sub)
+        i += 1
+    return collected, i
 
 
 def _strip_comments(source: str) -> str:
@@ -142,10 +177,6 @@ def _parse_case_line(inner: str) -> CaseDecl | None:
     if 'recursive' not in attrs or 'data' not in attrs:
         raise SyntaxError(
             f"case '{case_name}': must declare 'recursive' and 'data'"
-        )
-    if case_cell is not None and case_morphisms is not None:
-        raise SyntaxError(
-            f"case '{case_name}': cannot specify both 'cell' and 'morphisms'"
         )
     return CaseDecl(
         case_name, attrs['recursive'], attrs['data'],
@@ -211,7 +242,7 @@ def _parse_semiring(lines: list[str], i: int) -> tuple[SemiringDecl, int]:
         if not inner:
             i += 1
             continue
-        if _BLOCK_BOUNDARY.match(inner):
+        if _TOP_LEVEL_DECL.match(inner):
             break
         match_contract = re.match(r'^contract\s*=\s*(.+)$', inner)
         if match_contract:
@@ -374,8 +405,7 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
     match_header = re.match(r'^arch\s+(\w+)\s*:', lines[i].strip())
     arch_name = match_header.group(1)
     unified_cases: list[CaseDecl] | None = None
-    alg_cases:  list[CaseDecl] | None = None
-    alg_cell:   str | None = None
+    alg_cell:        str | None = None
     obs_convergence: str | None = None
     obs_loss:        str | None = None
     state_fields: dict[str, str] | None = None
@@ -387,73 +417,43 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
         if not inner:
             i += 1
             continue
-        if _BLOCK_BOUNDARY.match(inner):
+        if _TOP_LEVEL_DECL.match(inner):
             break
         match_observer = re.match(r'^observer\s*:', inner)
         if match_observer:
             i += 1
-            while i < len(lines):
-                sub = lines[i].strip()
-                if not sub:
-                    i += 1
-                    continue
-                if _BLOCK_BOUNDARY.match(sub):
-                    break
-                if re.match(r'^(cases|algebra|coalgebra|state|step|observer)\s*:', sub):
-                    break
+            collected, i = _scan_sub_block(lines, i)
+            for sub in collected:
                 match_convergence = re.match(r'^convergence\s*=\s*(\w+)$', sub)
                 if match_convergence:
                     obs_convergence = match_convergence.group(1)
-                    i += 1
                     continue
                 match_loss = re.match(r'^loss\s*=\s*(\w+)$', sub)
                 if match_loss:
                     obs_loss = match_loss.group(1)
-                    i += 1
-                    continue
-                i += 1
             continue
         match_state = re.match(r'^state\s*:', inner)
         if match_state:
             state_fields = {}
             i += 1
-            while i < len(lines):
-                sub = lines[i].strip()
-                if not sub:
-                    i += 1
-                    continue
-                if _BLOCK_BOUNDARY.match(sub):
-                    break
-                if re.match(r'^(cases|algebra|coalgebra|state|step|observer)\s*:', sub):
-                    break
+            collected, i = _scan_sub_block(lines, i)
+            for sub in collected:
                 match_field = re.match(r'^(\w+)\s*:\s*(\w+(?:\[[\w,\s]+\])?)$', sub)
                 if match_field:
                     state_fields[match_field.group(1)] = match_field.group(2)
-                i += 1
             continue
         match_step = re.match(r'^step\s*:', inner)
         if match_step:
             i += 1
-            while i < len(lines):
-                sub = lines[i].strip()
-                if not sub:
-                    i += 1
-                    continue
-                if _BLOCK_BOUNDARY.match(sub):
-                    break
-                if re.match(r'^(cases|algebra|coalgebra|state|step|observer)\s*:', sub):
-                    break
+            collected, i = _scan_sub_block(lines, i)
+            for sub in collected:
                 match_enter = re.match(r'^enter\s*=\s*(\w+)$', sub)
                 if match_enter:
                     step_enter = match_enter.group(1)
-                    i += 1
                     continue
                 match_emit = re.match(r'^emit\s*=\s*(\w+)$', sub)
                 if match_emit:
                     step_emit = match_emit.group(1)
-                    i += 1
-                    continue
-                i += 1
             continue
         if re.match(r'^coalgebra\s*:', inner):
             raise SyntaxError(
@@ -466,26 +466,15 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
             cases: list[CaseDecl] = []
             cell_name: str | None = None
             i += 1
-            while i < len(lines):
-                sub = lines[i].strip()
-                if not sub:
-                    i += 1
-                    continue
-                if _BLOCK_BOUNDARY.match(sub):
-                    break
-                if re.match(r'^(cases|algebra|coalgebra|state|step|observer)\s*:', sub):
-                    break
+            collected, i = _scan_sub_block(lines, i)
+            for sub in collected:
                 match_cell = re.match(r'^cell\s*=\s*(.+)$', sub)
                 if match_cell:
                     cell_name = match_cell.group(1).strip()
-                    i += 1
                     continue
                 cd = _parse_case_line(sub)
                 if cd:
                     cases.append(cd)
-                    i += 1
-                    continue
-                i += 1
             if not cases:
                 raise SyntaxError(
                     f"arch '{arch_name}' {mode}: must declare at least one case"
@@ -495,14 +484,14 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
             alg_cell = cell_name
             continue
         i += 1
-    if unified_cases is None and alg_cases is None:
+    if unified_cases is None:
         raise SyntaxError(
             f"arch '{arch_name}' must declare cases or algebra"
         )
     return ArchDecl(
         name=arch_name,
         cases=unified_cases,
-        algebra_cases=alg_cases,
+        algebra_cases=None,
         algebra_cell=alg_cell,
         observer_convergence=obs_convergence,
         observer_loss=obs_loss,
@@ -549,7 +538,7 @@ def parse(source: str) -> DSLSource:
             i += 1
             while i < len(lines):
                 next_raw = lines[i]
-                if next_raw and next_raw[0] in (' ', '\t') and not _BLOCK_BOUNDARY.match(next_raw.strip()):
+                if next_raw and next_raw[0] in (' ', '\t') and not _TOP_LEVEL_DECL.match(next_raw.strip()):
                     line = line + '  ' + next_raw.strip()
                     i += 1
                 else:

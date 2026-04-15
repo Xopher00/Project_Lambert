@@ -11,7 +11,7 @@ and provides a domain-specific language for expressing tensor architectures as c
 of V-functors over arbitrary semirings.
 """
 
-from engine.functor import Case, Functor, CoalgResult, Interpreter
+from engine.functor import Case, Functor, UnfoldStep, NO_OUTPUT, Interpreter
 from engine.runtime import MorphismSpec, compile_morphism, chain, fan, check_sorts
 from engine.decl import (
     SemiringDecl, MorphismDecl, PathDecl, FanDecl, CaseDecl,

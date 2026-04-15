@@ -41,8 +41,33 @@ class _ArchData:
     iterate_base:         str | None = None   # base case name (leaf)
     iterate_epilogue:     list | None = None  # cases after iterate block
     state_type:           object | None = None  # Hydra TypeRecord for coalgebra state
-    step_enter_fn:        Callable | None = None  # compiled enter morphism
-    step_emit_fn:         Callable | None = None  # compiled emit morphism
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _make_convergence_stop(conv_fn: Callable, user_stop: Callable | None,
+                           threshold: float) -> Callable:
+    """Return an effective_stop callable that halts on convergence or user signal.
+
+    Convergence is measured by the max-abs residual of *conv_fn* between
+    consecutive states.  The mutable cell ``prev`` is captured in the closure
+    so callers need not manage it.
+    """
+    prev = [None]
+
+    def effective_stop(step, state, outputs):
+        import numpy as _np
+        if prev[0] is not None:
+            residual = conv_fn(state, prev[0], 0.0)
+            converged = bool(_np.max(_np.abs(residual)) < threshold)
+        else:
+            converged = False
+        prev[0] = state
+        return converged or (user_stop is not None and user_stop(step, state, outputs))
+
+    return effective_stop
 
 
 # ---------------------------------------------------------------------------
@@ -68,35 +93,36 @@ class ArchInterpreter:
         self._iterate_base = iterate_base
         self._iterate_epilogue = iterate_epilogue or []
 
-    def run_algebra(self, data, decompose=None, layers=None, extras=None):
-        """Run the algebra fold.
-
-        Two calling conventions:
-          run_algebra(tree, decompose)     — fold a pre-built tree (original)
-          run_algebra(x0, layers=[...])    — build tree from iterate groups, then fold
+    def run_algebra(self, tree, decompose):
+        """Fold a pre-built tree using the algebra.
 
         Parameters
         ----------
-        data       : tree node (old) or initial value x0 (new)
-        decompose  : callable(node) -> (case_name, payload, children), or None
-        layers     : list of payloads for iterate cases, or None
-        extras     : dict merged into each layer payload, or None
+        tree       : root tree node
+        decompose  : callable(node) -> (case_name, payload, children)
         """
         if self._algebra is None:
             raise ValueError(f"Arch '{self.name}' has no algebra declaration")
-        if layers is not None:
-            if self._iterate_groups is None:
-                raise ValueError(
-                    f"Arch '{self.name}': layers= provided but no cases "
-                    f"have iterate= declared"
-                )
-            tree = self._build_tree(data, layers, extras)
-            return self._algebra.run_algebra(tree, lambda n: n)
-        if decompose is None:
+        return self._algebra.run_algebra(tree, decompose)
+
+    def run_algebra_layers(self, x0, layers, extras=None):
+        """Build a tree from iterate groups, then fold it with the algebra.
+
+        Parameters
+        ----------
+        x0      : initial value (leaf payload)
+        layers  : list of payloads for iterate cases
+        extras  : dict merged into each layer payload, or None
+        """
+        if self._algebra is None:
+            raise ValueError(f"Arch '{self.name}' has no algebra declaration")
+        if self._iterate_groups is None:
             raise ValueError(
-                f"Arch '{self.name}': must provide either decompose= or layers="
+                f"Arch '{self.name}': layers= provided but no cases "
+                f"have iterate= declared"
             )
-        return self._algebra.run_algebra(data, decompose)
+        tree = self._build_tree(x0, layers, extras)
+        return self._algebra.run_algebra(tree, lambda n: n)
 
     def _build_tree(self, x0, layers, extras):
         """Construct an algebra tree from iterate groups.
@@ -127,21 +153,9 @@ class ArchInterpreter:
             raise ValueError(f"Arch '{self.name}' has no coalgebra declaration")
         effective_stop = stop
         if self._convergence_fn is not None:
-            conv_fn = self._convergence_fn
-            user_stop = stop
-            prev = [None]
-            thr = convergence_threshold
-            def effective_stop(step, state, outputs,
-                               _conv=conv_fn, _us=user_stop, _prev=prev,
-                               _thr=thr):
-                if _prev[0] is not None:
-                    import numpy as _np
-                    residual = _conv(state, _prev[0], 0.0)
-                    converged = bool(_np.max(_np.abs(residual)) < _thr)
-                else:
-                    converged = False
-                _prev[0] = state
-                return converged or (_us is not None and _us(step, state, outputs))
+            effective_stop = _make_convergence_stop(
+                self._convergence_fn, stop, convergence_threshold
+            )
         return self._coalgebra.run_coalgebra(
             state, token_iter=token_iter, stop=effective_stop,
             accumulate_legs=self._accumulate_legs,

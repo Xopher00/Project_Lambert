@@ -28,10 +28,10 @@ from .functor import Case, Functor
 from .decl import DSLSource
 from .arch import ArchDef, _ArchData
 from .parser import parse
-from .sorts import morphism_to_term, path_to_term, fan_to_term, functor_to_union_type, arch_to_term, sort_to_type
+import warnings
 
-
-from .sorts import resolve as _resolve
+from .sorts import morphism_to_term, path_to_term, fan_to_term, functor_to_union_type, arch_to_term, sort_to_type, sort_types_from_defs, resolve as _resolve
+from .primitives import register_tensor_primitives
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +79,7 @@ def _build_step_cell(enter_fn, emit_fn, case_morphism_fn, case_name):
     The generated cell reuses the algebra's morphism composition for the
     main computation, wrapping it with enter (input binding) and emit (output).
     """
-    from .functor import CoalgResult
+    from .functor import UnfoldStep
 
     def cell(state, token, params, temp,
              _enter=enter_fn, _emit=emit_fn, _compute=case_morphism_fn,
@@ -97,9 +97,9 @@ def _build_step_cell(enter_fn, emit_fn, case_morphism_fn, case_name):
         # 4. Emit or silent
         if _emit is not None:
             output = _emit(x, state, temp)
-            return CoalgResult(_case, [x], [next_state], output=output)
+            return UnfoldStep(_case, [x], [next_state], output=output)
         else:
-            return CoalgResult(_case, [x], [next_state])
+            return UnfoldStep(_case, [x], [next_state])
 
     return cell
 
@@ -112,7 +112,7 @@ def _compile_morphisms(
     semiring_arity: dict,
     namespace: dict,
 ):
-    """Phase 3: Build MorphismSpecs and compile each morphism.
+    """Build MorphismSpecs and compile each morphism.
 
     Returns (compiled, morphism_specs, equations).
     """
@@ -245,7 +245,7 @@ def _compile_paths(
     semiring_arity: dict,
     sort_types: dict | None = None,
 ) -> dict[str, list[str]]:
-    """Phase 4: Validate and compile paths.
+    """Validate and compile paths.
 
     Mutates compiled in-place to add path callables.
     Returns path_morphisms dict.
@@ -312,7 +312,7 @@ def _compile_paths(
 
 
 def _compile_fans(ast: DSLSource, compiled: dict, namespace: dict) -> None:
-    """Phase 5: Compile fans.
+    """Compile fans.
 
     Mutates compiled in-place.
     """
@@ -368,13 +368,121 @@ def _resolve_case_cells(
 
 
 
+def _build_functor_and_cells(
+    arch_decl,
+    compiled: dict,
+    namespace: dict,
+) -> tuple["Functor", Callable | None]:
+    """Build the endofunctor F and resolve the algebra cell for an arch.
+
+    Handles functor construction from cases and resolves per-case cells or
+    the default algebra_cell.  Returns (functor, alg_cell).
+
+    Raises ValueError for semantic violations:
+    - case must not specify both 'cell' and 'morphisms'
+    """
+    case_list = arch_decl.cases or arch_decl.algebra_cases or []
+
+    # Semantic validation: cell= and morphisms= are mutually exclusive
+    for cd in case_list:
+        if cd.cell is not None and cd.morphisms is not None:
+            raise ValueError(
+                f"Arch '{arch_decl.name}' case '{cd.name}': "
+                f"cannot specify both 'cell' and 'morphisms'"
+            )
+
+    cases = [Case(cd.name, cd.recursive, cd.data, cd.output) for cd in case_list]
+    functor = Functor(cases)
+
+    alg_cell = None
+    if arch_decl.algebra_cell is not None:
+        alg_cell = _resolve(arch_decl.algebra_cell, namespace)
+    else:
+        case_cells = _resolve_case_cells(
+            case_list, f"Arch '{arch_decl.name}' algebra", compiled, namespace
+        )
+        if case_cells:
+            missing = [cd.name for cd in case_list if cd.name not in case_cells]
+            if missing:
+                raise ValueError(
+                    f"Arch '{arch_decl.name}' algebra: per-case cell binding is "
+                    f"incomplete. Missing cells for: {', '.join(missing)}"
+                )
+            alg_cell = _make_dispatch_cell(case_cells)
+
+    return functor, alg_cell
+
+
+def _detect_iterate_groups(
+    case_list,
+) -> tuple[dict | None, str | None, list]:
+    """Detect iterate groups from a list of CaseDecls.
+
+    Returns (iterate_groups, iterate_base, iterate_epilogue).
+    iterate_groups is None (not an empty dict) when no iterate cases exist.
+    """
+    iterate_groups: dict[str, list[str]] = {}
+    base_case: str | None = None
+    epilogue_cases: list[str] = []
+    in_iterate = False
+
+    for case_decl in case_list:
+        if case_decl.iterate is not None:
+            in_iterate = True
+            group_name = case_decl.iterate
+            if group_name not in iterate_groups:
+                iterate_groups[group_name] = []
+            iterate_groups[group_name].append(case_decl.name)
+        elif case_decl.recursive == 0 and not in_iterate:
+            base_case = case_decl.name
+        else:
+            if in_iterate:
+                epilogue_cases.append(case_decl.name)
+            # non-iterate, non-base cases before any iterate block
+            # are just regular cases (no special handling needed)
+
+    if iterate_groups:
+        return iterate_groups, base_case, epilogue_cases
+    return None, None, []
+
+
+def _resolve_observers(
+    arch_decl,
+    compiled: dict,
+) -> tuple[Callable | None, Callable | None]:
+    """Resolve convergence and loss observer paths for an arch.
+
+    Returns (convergence_fn, loss_fn).
+    """
+    convergence_fn = None
+    loss_fn = None
+
+    if arch_decl.observer_convergence:
+        if arch_decl.observer_convergence not in compiled:
+            raise ValueError(
+                f"Arch '{arch_decl.name}': observer convergence path "
+                f"'{arch_decl.observer_convergence}' not found"
+            )
+        convergence_fn = compiled[arch_decl.observer_convergence]
+
+    if arch_decl.observer_loss:
+        if arch_decl.observer_loss not in compiled:
+            raise ValueError(
+                f"Arch '{arch_decl.name}': observer loss path "
+                f"'{arch_decl.observer_loss}' not found"
+            )
+        loss_fn = compiled[arch_decl.observer_loss]
+
+    return convergence_fn, loss_fn
+
+
 def _compile_archs(
     ast: DSLSource,
     compiled: dict,
-    morphism_specs: dict,
     namespace: dict,
+    accumulate_legs: dict,
 ) -> dict[str, _ArchData]:
-    """Phase 7: Compile arch declarations.
+    """Compile arch declarations.
 
     Returns compiled_archs dict.
     """
@@ -382,81 +490,33 @@ def _compile_archs(
     for arch_decl in ast.archs:
         data = _ArchData()
 
-        # Resolve the unified endofunctor F from cases (or legacy algebra_cases)
-        case_list = arch_decl.cases or arch_decl.algebra_cases
-        if case_list is not None:
-            cases = [Case(cd.name, cd.recursive, cd.data, cd.output) for cd in case_list]
-            functor = Functor(cases)
-            data.functor = functor
+        # Centralize the cases fallback once per arch
+        case_list = arch_decl.cases or arch_decl.algebra_cases or []
 
-            # Build algebra cell from case morphism bindings
-            alg_cell = None
-            if arch_decl.algebra_cell is not None:
-                alg_cell = _resolve(arch_decl.algebra_cell, namespace)
-            else:
-                case_cells = _resolve_case_cells(
-                    case_list, f"Arch '{arch_decl.name}' algebra", compiled, namespace
-                )
-                if case_cells:
-                    missing = [cd.name for cd in case_list if cd.name not in case_cells]
-                    if missing:
-                        raise ValueError(
-                            f"Arch '{arch_decl.name}' algebra: per-case cell binding is "
-                            f"incomplete. Missing cells for: {', '.join(missing)}"
-                        )
-                    alg_cell = _make_dispatch_cell(case_cells)
+        # Resolve the unified endofunctor F and algebra cell
+        if case_list:
+            functor, alg_cell = _build_functor_and_cells(arch_decl, compiled, namespace)
+            data.functor = functor
             data.algebra_cell = alg_cell
 
-        # 7b. Build accumulate_morphisms mapping
-        acc_morphisms = {
-            name: (spec.accumulate, spec.accumulate_fields)
-            for name, spec in morphism_specs.items()
-            if spec.accumulate is not None
-        }
-        if acc_morphisms:
-            data.accumulate_legs = acc_morphisms
+        # Propagate pre-computed accumulate_legs
+        if accumulate_legs:
+            data.accumulate_legs = accumulate_legs
 
-        # 7d. Detect iterate groups from unified cases
-        iter_cases = arch_decl.cases or arch_decl.algebra_cases
-        if iter_cases:
-            iterate_groups = {}
-            base_case = None
-            epilogue_cases = []
-            in_iterate = False
-            for case_decl in iter_cases:
-                if case_decl.iterate is not None:
-                    in_iterate = True
-                    group_name = case_decl.iterate
-                    if group_name not in iterate_groups:
-                        iterate_groups[group_name] = []
-                    iterate_groups[group_name].append(case_decl.name)
-                elif case_decl.recursive == 0 and not in_iterate:
-                    base_case = case_decl.name
-                else:
-                    if in_iterate:
-                        epilogue_cases.append(case_decl.name)
-                    # non-iterate, non-base cases before any iterate block
-                    # are just regular cases (no special handling needed)
-            if iterate_groups:
+        # Detect iterate groups from unified cases
+        if case_list:
+            iterate_groups, iterate_base, iterate_epilogue = _detect_iterate_groups(case_list)
+            if iterate_groups is not None:
                 data.iterate_groups = iterate_groups
-                data.iterate_base = base_case
-                data.iterate_epilogue = epilogue_cases
+                data.iterate_base = iterate_base
+                data.iterate_epilogue = iterate_epilogue
 
-        # 7c. Resolve observer paths
-        if arch_decl.observer_convergence:
-            if arch_decl.observer_convergence not in compiled:
-                raise ValueError(
-                    f"Arch '{arch_decl.name}': observer convergence path "
-                    f"'{arch_decl.observer_convergence}' not found"
-                )
-            data.observer_convergence = compiled[arch_decl.observer_convergence]
-        if arch_decl.observer_loss:
-            if arch_decl.observer_loss not in compiled:
-                raise ValueError(
-                    f"Arch '{arch_decl.name}': observer loss path "
-                    f"'{arch_decl.observer_loss}' not found"
-                )
-            data.observer_loss = compiled[arch_decl.observer_loss]
+        # Resolve observer paths
+        convergence_fn, loss_fn = _resolve_observers(arch_decl, compiled)
+        if convergence_fn is not None:
+            data.observer_convergence = convergence_fn
+        if loss_fn is not None:
+            data.observer_loss = loss_fn
 
         # Compile state_fields into a Hydra TypeRecord
         if arch_decl.state_fields is not None:
@@ -485,7 +545,6 @@ def _compile_archs(
 
             # Find the main computation path from case morphisms
             case_morphism_fn = None
-            case_list = arch_decl.cases or arch_decl.algebra_cases
             if case_list:
                 for cd in case_list:
                     if cd.morphisms:
@@ -505,8 +564,6 @@ def _compile_archs(
 
             data.coalgebra_cell = _build_step_cell(enter_fn, emit_fn, case_morphism_fn,
                                                     step_case_name)
-            data.step_enter_fn = enter_fn
-            data.step_emit_fn = emit_fn
 
         compiled_archs[arch_decl.name] = data
     return compiled_archs
@@ -534,7 +591,6 @@ def compile(source: str | Path | DSLSource, namespace: dict) -> ArchDef:
 
     # Warn about morphisms referencing undeclared sorts (if sorts were declared)
     if sort_defs:
-        import warnings
         for morph_decl in ast.morphisms:
             for sort_name, label in [(morph_decl.src_sort, 'src'), (morph_decl.tgt_sort, 'tgt')]:
                 if sort_name not in sort_defs:
@@ -580,12 +636,10 @@ def compile(source: str | Path | DSLSource, namespace: dict) -> ArchDef:
     }
 
     # Build Hydra sort types for type-checked sort validation
-    from .sorts import sort_types_from_defs
     morph_sorts = {s for m in ast.morphisms for s in (m.src_sort, m.tgt_sort)}
     sort_types = sort_types_from_defs(sort_defs, morph_sorts)
 
     # Build Hydra primitives for tensor ops
-    from .primitives import register_tensor_primitives
     morph_decls = {m.name: m for m in ast.morphisms}
     sr_decls = {s.name: s for s in ast.semirings}
     hydra_primitives = register_tensor_primitives(sr_decls, morph_decls, namespace)
@@ -609,7 +663,13 @@ def compile(source: str | Path | DSLSource, namespace: dict) -> ArchDef:
         p.name: path_to_term(p.name, path_morphisms.get(p.name, p.morphisms), p.residual, p.normed)
         for p in ast.paths
     }
-    compiled_archs = _compile_archs(ast, compiled, morphism_specs, namespace)
+    # Compute accumulate_legs once here (from morphism_specs) and pass into _compile_archs
+    accumulate_legs = {
+        name: (spec.accumulate, spec.accumulate_fields)
+        for name, spec in morphism_specs.items()
+        if spec.accumulate is not None
+    }
+    compiled_archs = _compile_archs(ast, compiled, namespace, accumulate_legs)
 
     # Build Hydra arch terms and union types
     arch_terms = {}

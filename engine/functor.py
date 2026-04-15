@@ -8,7 +8,7 @@ and coalgebra unfolds (anamorphisms) over those structures.
 Key abstractions:
   Case       — one variant of a recursive sum type (recursive children + data payload)
   Functor    — a collection of named Cases defining an endofunctor F
-  CoalgResult — the output of a coalgebra step: case name, payload, next states, and optional output
+  UnfoldStep  — the output of a coalgebra step: case name, payload, next states, and optional output
   Interpreter — drives run_algebra (tree fold) and run_coalgebra (stream unfold)
 
 Depends on: nothing (leaf module in the engine stack)
@@ -23,9 +23,9 @@ except ImportError:
     _np = None
 
 # Sentinel objects for coalgebra signaling.
-# _NO_OUTPUT marks cases that transition state without emitting output.
+# NO_OUTPUT marks cases that transition state without emitting output.
 # _EXHAUSTED signals that the token iterator has been fully consumed.
-_NO_OUTPUT = object()
+NO_OUTPUT = object()
 _EXHAUSTED = object()
 
 
@@ -66,11 +66,16 @@ class Functor:
 
 
 @dataclass
-class CoalgResult:
+class UnfoldStep:
     case_name:   str
     payload:     list
     next_states: list
-    output:      object = _NO_OUTPUT
+    output:      object = NO_OUTPUT
+
+    @classmethod
+    def silent(cls, case_name: str, payload: list, next_states: list) -> 'UnfoldStep':
+        """Create a step that transitions state without emitting output."""
+        return cls(case_name=case_name, payload=payload, next_states=next_states, output=NO_OUTPUT)
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +163,7 @@ class Interpreter:
                     f"Case '{result.case_name}' declared data={case.data}, "
                     f"adapter returned {len(result.payload)} payload items"
                 )
-            has_output = result.output is not _NO_OUTPUT
+            has_output = result.output is not NO_OUTPUT
             if has_output != (case.output > 0):
                 raise ValueError(
                     f"Case '{result.case_name}' declared output={case.output}, "

@@ -50,6 +50,8 @@ class MorphismDecl:
 @dataclass
 class PathDecl:
     name:      str
+    # Each token is one of: plain name ("q_proj"), augment bracket ("[kv]"),
+    # or template instantiation ("ln[ln1]"). The compiler re-parses these with regex.
     morphisms: list[str]
     residual:  bool = False
     normed:    str | None = None   # morphism name to apply as norm after path
