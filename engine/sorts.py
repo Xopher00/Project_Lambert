@@ -38,7 +38,7 @@ from hydra.graph import TermCoder  # noqa: E402
 
 import hydra.dsl.types as types  # noqa: E402
 
-from engine.decl import SortDecl  # noqa: E402
+from engine.parser import SortDecl as _SortDecl, SortCoercion as _SortCoercion  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -61,9 +61,11 @@ def _field_type(type_name: str) -> Type:
 
 
 def sort_to_type(
-    name: str, sort_defs: dict[str, SortDecl] | None = None
+    name: str, sort_defs: dict | None = None
 ) -> Type:
     """Map an engine sort to a Hydra Type, encoding the hom-tensor adjunction.
+
+    sort_defs values may be SortDecl objects or plain dicts with a 'fields' key.
 
     References
     ----------
@@ -72,10 +74,11 @@ def sort_to_type(
     """
     if sort_defs and name in sort_defs:
         decl = sort_defs[name]
-        if decl.fields:
+        fields_map = decl.fields
+        if fields_map:
             fields = [
                 types.field(fname, _field_type(ftype))
-                for fname, ftype in decl.fields.items()
+                for fname, ftype in fields_map.items()
             ]
             return types.record_with_name(Name("ua.sort." + name), fields)
     return types.variable("ua.sort." + name)
@@ -102,47 +105,166 @@ def bundle_coder() -> TermCoder:
     )
 
 
-def temp_coder() -> TermCoder:
-    return prims.float64()
-
-
-def equation_coder() -> TermCoder:
-    return prims.string()
-
-
-
 # ---------------------------------------------------------------------------
 # Bulk sort → type mapping
 # ---------------------------------------------------------------------------
 
 
 def sort_types_from_defs(
-    sort_defs: dict[str, SortDecl], morphism_sorts: set[str]
+    sort_defs: dict, morphism_sorts: set[str]
 ) -> dict[str, Type]:
     all_names = set(sort_defs.keys()) | morphism_sorts
     return {name: sort_to_type(name, sort_defs) for name in sorted(all_names)}
 
 
-def functor_to_union_type(cases) -> Type:
-    """Convert a list of CaseDecl objects into a Hydra union type.
 
-    Each case becomes a variant with a payload record encoding
-    its data count and recursive children count.
+# ---------------------------------------------------------------------------
+# Engine construct type declarations (roadmap 3.4 step 3)
+# ---------------------------------------------------------------------------
 
-    Note: hydra.rewriting (fold_over_term, rewrite_term) operates on existing
-    Hydra terms and is not applicable here — this function constructs a new
-    Type from DSL data rather than traversing an existing term.
+
+def morphism_type() -> Type:
+    """ua.engine.Morphism: V-functor type signature (Lawvere 1973, Gavranovic §3).
+
+    Fields are type-level only. equation/op/compiler are representations,
+    not type properties, and are excluded.
+    templateParams is essential: ln[prefix] has a different type than ln.
     """
-    ndarray_type = types.variable("ua.tensor.NDArray")
-
-    def _case_fields(c):
-        fs = [types.field("data", types.list_(ndarray_type))]
-        if c.recursive > 0:
-            fs.append(types.field("children", types.list_(types.variable("ua.engine.TreeNode"))))
-        if getattr(c, 'output', 0) > 0:
-            fs.append(types.field("output", ndarray_type))
-        return types.field(c.name, types.record_with_name(Name("ua.engine.case." + c.name), fs))
-
-    return types.union([_case_fields(c) for c in cases])
+    return types.record_with_name(Name("ua.engine.Morphism"), [
+        types.field("name", types.string()),
+        types.field("srcSort", types.string()),
+        types.field("tgtSort", types.string()),
+        types.field("arity", types.string()),
+        types.field("templateParams", types.list_(types.string())),
+    ])
 
 
+def path_type() -> Type:
+    """ua.engine.Path: V-functor composition (Lawvere 1973).
+
+    src/tgt sorts inferred from chain at step 4. merge excluded (runtime detail).
+    """
+    return types.record_with_name(Name("ua.engine.Path"), [
+        types.field("name", types.string()),
+        types.field("morphisms", types.list_(types.string())),
+        types.field("residual", types.boolean()),
+    ])
+
+
+def fan_type() -> Type:
+    """ua.engine.Fan: V-category product (Lawvere 1973, Shen & Tang 2022).
+
+    merge excluded: runtime aggregation strategy, not a type property.
+    """
+    return types.record_with_name(Name("ua.engine.Fan"), [
+        types.field("name", types.string()),
+        types.field("branches", types.list_(types.string())),
+    ])
+
+
+def case_type() -> Type:
+    """ua.engine.Case: endofunctor F variant (Gavranovic §5).
+
+    recursive + data declare the F-algebra structure.
+    iterate/output/cell excluded: catamorphism hints, not type properties.
+    """
+    return types.record_with_name(Name("ua.engine.Case"), [
+        types.field("name", types.string()),
+        types.field("recursive", types.int32()),
+        types.field("data", types.int32()),
+    ])
+
+
+def arch_type() -> Type:
+    """ua.engine.Arch: initial algebra / final coalgebra (Gavranovic §5).
+
+    cases declare the endofunctor F. stepEnter/stepEmit are essential
+    coalgebra morphisms. Observers and step_compute are excluded.
+    """
+    return types.record_with_name(Name("ua.engine.Arch"), [
+        types.field("name", types.string()),
+        types.field("cases", types.maybe(types.list_(types.string()))),
+        types.field("stepEnter", types.maybe(types.string())),
+        types.field("stepEmit", types.maybe(types.string())),
+    ])
+
+
+# ---------------------------------------------------------------------------
+# Sort coercion algebra
+# ---------------------------------------------------------------------------
+
+
+def _close_coercions(coercions) -> dict:
+    """Compute transitive closure of sort coercions via Floyd-Warshall.
+
+    Input: list[SortCoercion]
+    Returns: dict[(src, tgt), grade] — closed under composition (min, *, 1.0).
+
+    Direct declarations take precedence: transitive paths only fill in pairs
+    that were not explicitly declared.
+    """
+    grades: dict[tuple, float] = {}
+    direct: set = set()
+    for c in coercions:
+        grades[(c.src, c.tgt)] = c.grade
+        direct.add((c.src, c.tgt))
+
+    sorts = {s for c in coercions for s in (c.src, c.tgt)}
+    for k in sorts:
+        for i in sorts:
+            for j in sorts:
+                if (i, j) in direct:
+                    continue  # direct declaration wins; do not overwrite
+                via = grades.get((i, k), 0.0) * grades.get((k, j), 0.0)
+                if via > grades.get((i, j), 0.0):
+                    grades[(i, j)] = via
+    return grades
+
+
+def grade_sorts(
+    morphism_specs: dict,
+    names: list[str],
+    sort_types: dict,
+    coercion_grades: dict,
+    threshold: float = 1.0,
+) -> tuple[list[str], list[str]]:
+    """Check sort compatibility using graded coercions.
+
+    Returns (errors, warnings).
+    Hard errors: adjacent sorts with no declared coercion (grade 0.0).
+    Warnings: adjacent sorts whose coercion grade is below threshold.
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+    for i in range(1, len(names)):
+        prev_tgt = morphism_specs[names[i - 1]].tgt_sort
+        curr_src = morphism_specs[names[i]].src_sort
+        if prev_tgt == curr_src:
+            continue
+        prev_type = sort_types.get(prev_tgt)
+        curr_type = sort_types.get(curr_src)
+        if prev_type is not None and curr_type is not None and prev_type == curr_type:
+            continue
+        grade = coercion_grades.get((prev_tgt, curr_src), 0.0)
+        msg = (
+            f"Type mismatch at step {i}: "
+            f"{names[i - 1]!r} outputs {prev_tgt!r} but "
+            f"{names[i]!r} expects {curr_src!r}"
+        )
+        if grade == 0.0:
+            errors.append(msg)
+        elif grade < threshold:
+            warnings.append(f"{msg} (coercion grade {grade:.3f} < threshold {threshold:.3f})")
+    return errors, warnings
+
+
+# ---------------------------------------------------------------------------
+# Hydra term bridge
+# ---------------------------------------------------------------------------
+
+
+def morphism_to_term(spec) -> "object":
+    """Map a MorphismSpec to a TTerm (Hydra bridging)."""
+    from engine.terms import morphism as _morphism_term
+    template_params = [spec.template_param] if getattr(spec, 'template_param', None) else []
+    return _morphism_term(spec.name, spec.src_sort, spec.tgt_sort, spec.arity, template_params).value

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from engine.decl import MorphismDecl, SemiringDecl
+from engine.parser import SemiringDecl
 from engine.sorts import setup_hydra_path as _setup  # ensures Hydra on sys.path
 
 _setup()
@@ -43,7 +43,15 @@ def qname(namespace: str, local_name: str) -> Name:
     return Name(f"{namespace}.{local_name}")
 
 
-from engine.utils import resolve as _resolve
+def _resolve(dotted: str, namespace: dict) -> object:
+    """Walk a dotted name through a namespace dict."""
+    parts = dotted.split('.')
+    obj = namespace.get(parts[0])
+    if obj is None:
+        raise NameError(f"Name {parts[0]!r} not found in provided namespace")
+    for attr in parts[1:]:
+        obj = getattr(obj, attr)
+    return obj
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +62,7 @@ def register_primitives(
     semiring_contracts: dict,
     morphism_to_semiring: dict,
     compiled_equations: dict,
-    morphism_decls: dict[str, MorphismDecl],
+    morphism_decls: dict[str, Any],
     namespace: dict[str, Any],
 ) -> dict:
     """Build Hydra Primitives for op-override morphisms and semiring-contract morphisms.
@@ -74,18 +82,18 @@ def register_primitives(
 
     # --- morphism op overrides -----------------------------------------------
     for m_name, m_decl in morphism_decls.items():
-        if m_decl.op is None:
+        if m_decl['op'] is None:
             continue
         try:
-            op_fn = _resolve(m_decl.op, namespace)
+            op_fn = _resolve(m_decl['op'], namespace)
         except (KeyError, AttributeError) as exc:
             raise ImportError(
-                f"Cannot resolve morphism op '{m_decl.op}' for '{m_name}': {exc}"
+                f"Cannot resolve morphism op '{m_decl['op']}' for '{m_name}': {exc}"
             ) from exc
 
         prim_name = qname(NS, m_name)
 
-        if m_decl.arity in ("unary", "pointwise"):
+        if m_decl['arity'] in ("unary", "pointwise"):
             primitives[prim_name] = prims.prim1(
                 prim_name, op_fn, [], nd, nd
             )
@@ -105,17 +113,11 @@ def register_primitives(
 
         prim_name = qname(NS, morph_name)
 
-        def _make_bound_fn(fn, compiled_eq):
-            def _bound(x, y):
-                return fn(compiled_eq, x, y, temp=0.0)
-            return _bound
-
-        bound_fn = _make_bound_fn(contract, eq)
-        primitives[prim_name] = prims.prim2(
+        primitives[prim_name] = prims.prim3(
             prim_name,
-            bound_fn,
+            lambda eq_str, x, y, _c=contract: _c(eq_str, x, y, temp=0.0),
             [],
-            nd, nd, nd,
+            prims.string(), nd, nd, nd,
         )
 
     return primitives

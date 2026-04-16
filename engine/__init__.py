@@ -19,18 +19,16 @@ __all__ = [
     # functor
     "Case", "Functor", "UnfoldStep", "NO_OUTPUT", "Interpreter",
     # runtime
-    "MorphismSpec", "compile_morphism", "chain", "fan", "check_sorts",
+    "MorphismSpec", "compile_morphism", "chain", "fan",
     # decl nodes
-    "SemiringDecl", "MorphismDecl", "PathDecl", "FanDecl", "CaseDecl",
-    "ArchDecl", "DSLSource", "SortDecl",
+    "SemiringDecl", "DSLSource", "SortDecl",
 ]
 
 # public API
 from engine.functor import Case, Functor, UnfoldStep, NO_OUTPUT, Interpreter
-from engine.runtime import MorphismSpec, compile_morphism, chain, fan, check_sorts
-from engine.decl import (
-    SemiringDecl, MorphismDecl, PathDecl, FanDecl, CaseDecl,
-    ArchDecl, DSLSource, SortDecl,
+from engine.runtime import MorphismSpec, compile_morphism, chain, fan
+from engine.parser import (
+    SemiringDecl, DSLSource, SortDecl,
 )
 from engine.parser import parse
 from engine.arch import ArchDef, ArchInterpreter
@@ -45,10 +43,11 @@ def load(path, namespace: dict) -> ArchDef:
 # internal — Hydra bridge
 from engine.sorts import (
     sort_to_type, sort_types_from_defs,
-    functor_to_union_type,
-    ndarray_coder, bundle_coder, temp_coder, equation_coder,
+    ndarray_coder, bundle_coder,
+    morphism_type, path_type, fan_type, case_type, arch_type,
 )
-from engine.terms import morphism_to_term, path_to_term, fan_to_term, arch_to_term
+from engine.sorts import morphism_to_term
+from engine.terms import path_to_term, fan_to_term, arch_to_term
 from engine.primitives import (
     register_primitives, build_engine_graph, qname,
 )

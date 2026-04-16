@@ -110,17 +110,17 @@ semiring attn:
 
 sort model, q, scores, probs, mixed, ff
 
-leg q_proj    : model -> q       via "sd,dh->sh"    op ops.proj
-leg score     : q -> scores      via "sh,th->st"    op ops.score
-leg normalize : scores -> probs  via "st->st"        op ops.softmax
-leg mix       : probs -> mixed   via "st,th->sh"    op ops.mix
-leg out_proj  : mixed -> model   via "sh,hd->sd"    op ops.proj
-leg k_proj    : model -> q       via "sd,dh->sh"    op ops.proj
-leg v_proj    : model -> q       via "sd,dh->sh"    op ops.proj
+morphism q_proj    : model -> q       via "sd,dh->sh"    op ops.proj
+morphism score     : q -> scores      via "sh,th->st"    op ops.score
+morphism normalize : scores -> probs  via "st->st"        op ops.softmax
+morphism mix       : probs -> mixed   via "st,th->sh"    op ops.mix
+morphism out_proj  : mixed -> model   via "sh,hd->sd"    op ops.proj
+morphism k_proj    : model -> q       via "sd,dh->sh"    op ops.proj
+morphism v_proj    : model -> q       via "sd,dh->sh"    op ops.proj
 
-leg up   : model -> ff   via "sd,df->sf"   op ops.proj
-leg act  : ff -> ff      via "sf->sf"      op ops.gelu
-leg down : ff -> model   via "sf,fd->sd"   op ops.proj
+morphism up   : model -> ff   via "sd,df->sf"   op ops.proj
+morphism act  : ff -> ff      via "sf->sf"      op ops.gelu
+morphism down : ff -> model   via "sf,fd->sd"   op ops.proj
 
 path read = q_proj score normalize mix out_proj
 path mlp  = up act down

@@ -16,8 +16,6 @@ Key functions:
   _parse_fan      — single-line parser for fan-out declarations
   _parse_arch     — block parser for 'arch <n>:' declarations
 
-Depends on: decl.py (AST dataclasses)
-
 Syntax
 ------
 
@@ -67,12 +65,121 @@ Syntax
 from __future__ import annotations
 
 import re
-import warnings
+from dataclasses import dataclass, field
 
-from .decl import (
-    SemiringDecl, MorphismDecl, PathDecl, FanDecl,
-    CaseDecl, ArchDecl, DSLSource, SortDecl, SortCoercion,
-)
+
+# ---------------------------------------------------------------------------
+# AST node declarations (moved here from decl.py)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SemiringDecl:
+    name:     str
+    contract: str | None = None  # legacy fused contract (optional if plus/times present)
+    compiler: str | None = None
+    arity:    str = 'binary'
+    plus:     str | None = None  # ⊕ operation name
+    times:    str | None = None  # ⊗ operation name
+    zero:     str | None = None  # additive identity (value or dotted name)
+    one:      str | None = None  # multiplicative identity (value or dotted name)
+
+
+@dataclass
+class MorphismDecl:
+    name:      str
+    src_sort:  str
+    tgt_sort:  str
+    equation:  str
+    semiring:  str | None         # None = bridge; '_default' = no using-clause
+    op:        str | None = None  # dotted name; None = use semiring contract
+    transform: str | None = None  # dotted name: (x, y) -> (x', y')
+    compiler:  str | None = None  # dotted name: per-morphism equation compiler override
+    arity:     str = 'binary'     # 'binary' | 'unary' | 'pointwise' | 'ternary'
+    accumulate: str | None = None  # 'cat' | None — coalgebra state accumulation
+    accumulate_fields: list[str] | None = None  # field names for field-level accumulate
+    template_param: str | None = None    # parameter name for template morphisms
+
+
+@dataclass
+class PathDecl:
+    name:      str
+    morphisms: list[str]
+    residual:  bool = False
+    normed:    str | None = None   # morphism name to apply as norm after path
+
+
+@dataclass
+class FanDecl:
+    name:     str
+    branches: list[str]   # morphism/path names
+    merge:    str = 'dict' # 'dict', 'meet', 'join', or dotted.name
+
+
+@dataclass
+class CaseDecl:
+    name:      str
+    recursive: int
+    data:      int
+    output:    int = 0
+    cell:      str | None = None       # dotted name for per-case cell function
+    morphisms: list[str] | None = None  # DSL-derived cell: compose these morphisms
+    iterate:   str | None = None        # payload sequence name for iteration
+
+
+@dataclass
+class ArchDecl:
+    name:              str
+    cases:             list[CaseDecl] | None = None
+    algebra_cell:      str | None = None
+    observer_convergence: str | None = None
+    observer_loss:        str | None = None
+    state_fields:         dict[str, str] | None = None
+    step_enter:           str | None = None
+    step_emit:            str | None = None
+    step_compute:         str | None = None
+
+
+@dataclass
+class SortDecl:
+    name:   str
+    fields: dict[str, str] | None = None  # None = opaque
+
+    def __str__(self):
+        return self.name
+
+    def __eq__(self, other):
+        if isinstance(other, str):
+            return self.name == other
+        return isinstance(other, SortDecl) and self.name == other.name
+
+    def __hash__(self):
+        return hash(self.name)
+
+    def __lt__(self, other):
+        if isinstance(other, str):
+            return self.name < other
+        if isinstance(other, SortDecl):
+            return self.name < other.name
+        return NotImplemented
+
+
+@dataclass
+class SortCoercion:
+    src:   str
+    tgt:   str
+    grade: float
+
+
+@dataclass
+class DSLSource:
+    semirings:      list[SemiringDecl]
+    sorts:          list[SortDecl]
+    morphisms:      list[MorphismDecl]
+    paths:          list[PathDecl]
+    fans:           list[FanDecl]
+    archs:          list[ArchDecl]  = field(default_factory=list)
+    coercions:      list           = field(default_factory=list)   # list[SortCoercion]
+    sort_threshold: float          = 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -231,39 +338,40 @@ def _parse_sort_items(rhs: str) -> list[SortDecl]:
 # ---------------------------------------------------------------------------
 
 def _parse_semiring(lines: list[str], i: int) -> tuple[SemiringDecl, int]:
-    """Parse a 'semiring <n>:' block starting at line index i."""
     match_header = re.match(r'^semiring\s+(\w+)\s*:', lines[i].strip())
     sr_name = match_header.group(1)
-    contract_val = None
-    compiler_val = None
-    sr_arity = 'binary'
+    fields = {}
     i += 1
     while i < len(lines):
         inner = lines[i].strip()
         if not inner:
-            i += 1
-            continue
+            i += 1; continue
         if _TOP_LEVEL_DECL.match(inner):
             break
-        match_contract = re.match(r'^contract\s*=\s*(.+)$', inner)
-        if match_contract:
-            contract_val = match_contract.group(1).strip()
-            i += 1
-            continue
-        match_compiler = re.match(r'^compiler\s*=\s*(.+)$', inner)
-        if match_compiler:
-            compiler_val = match_compiler.group(1).strip()
-            i += 1
-            continue
-        match_arity = re.match(r'^arity\s*=\s*(binary|ternary)$', inner)
-        if match_arity:
-            sr_arity = match_arity.group(1)
-            i += 1
-            continue
+        m = re.match(r'^(\w+)\s*=\s*(.+)$', inner)
+        if m:
+            fields[m.group(1)] = m.group(2).strip()
         i += 1
-    if contract_val is None:
-        raise SyntaxError(f"semiring '{sr_name}' must declare 'contract'")
-    return SemiringDecl(sr_name, contract_val, compiler_val, sr_arity), i
+
+    contract_val = fields.get('contract')
+    compiler_val = fields.get('compiler')
+    sr_arity     = fields.get('arity', 'binary')
+    plus_val     = fields.get('plus')
+    times_val    = fields.get('times')
+    zero_val     = fields.get('zero')
+    one_val      = fields.get('one')
+
+    if sr_arity not in ('binary', 'ternary'):
+        raise SyntaxError(f"semiring '{sr_name}': arity must be 'binary' or 'ternary', got '{sr_arity}'")
+    if contract_val is None and (plus_val is None or times_val is None):
+        raise SyntaxError(
+            f"semiring '{sr_name}': declare 'contract' OR both 'plus' and 'times'"
+        )
+
+    return SemiringDecl(
+        sr_name, contract_val, compiler_val, sr_arity,
+        plus_val, times_val, zero_val, one_val
+    ), i
 
 
 def _parse_morphism(line: str) -> MorphismDecl:
@@ -293,11 +401,6 @@ def _parse_morphism(line: str) -> MorphismDecl:
         )
     if not match_header:
         raise SyntaxError(f"Invalid morphism declaration: {line!r}")
-    if line.startswith('leg '):
-        warnings.warn(
-            "The 'leg' keyword is deprecated. Use 'morphism' instead.",
-            DeprecationWarning, stacklevel=2,
-        )
     template_param = match_header.group(2)  # None if no [param]
     name     = match_header.group(1)
     src_sort = match_header.group(3)
@@ -351,24 +454,7 @@ def _parse_morphism(line: str) -> MorphismDecl:
         if re.match(r'^[\w.]+$', clause) and '.' in clause:
             op_name = clause
             continue
-        _KNOWN_CLAUSE_KEYWORDS = {
-            'op', 'using', 'transform', 'compiler', 'arity', 'accumulate', 'bridge',
-        }
-        hint = ''
-        if ' ' in clause:
-            first_token = clause.split(' ', 1)[0]
-            if first_token in _KNOWN_CLAUSE_KEYWORDS:
-                hint = (
-                    ' DSL clause separator requires 2 or more spaces; '
-                    'got a single space. Separate clauses with 2+ spaces.'
-                )
-        raise SyntaxError(
-            f"morphism '{name}': unrecognised clause {clause!r}; "
-            f"expected 'using <semiring>', 'op <dotted.name>', "
-            f"'transform <dotted.name>', 'compiler <dotted.name>', "
-            f"'arity unary|binary|pointwise|ternary', or 'bridge'"
-            + hint
-        )
+        raise SyntaxError(f"morphism '{name}': unrecognised clause {clause!r}")
 
     return MorphismDecl(
         name, src_sort, tgt_sort, equation, semiring,
@@ -479,10 +565,7 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
                     step_compute = match_compute.group(1)
             continue
         if re.match(r'^coalgebra\s*:', inner):
-            raise SyntaxError(
-                f"'coalgebra:' sub-block has been removed. "
-                f"Use 'cases:' for the endofunctor and 'step:' for coalgebra configuration."
-            )
+            raise SyntaxError("'coalgebra:' is removed; use 'cases:' and 'step:'")
         match_mode = re.match(r'^(cases|algebra)\s*:', inner)
         if match_mode:
             mode = match_mode.group(1)
@@ -580,15 +663,6 @@ def parse(source: str) -> DSLSource:
             fans.append(_parse_fan(line))
             i += 1
             continue
-
-        if re.match(r'^functor\s+\w+\s*:', line):
-            match_functor = re.match(r'^functor\s+(\w+)\s*:', line)
-            fname = match_functor.group(1) if match_functor else '?'
-            raise SyntaxError(
-                f"'functor' keyword has been removed. "
-                f"Replace 'functor {fname}:' with 'arch {fname}: algebra:' — "
-                f"see CLAUDE.md for migration notes."
-            )
 
         if re.match(r'^arch\s+\w+\s*:', line):
             decl, i = _parse_arch(lines, i)

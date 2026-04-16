@@ -16,7 +16,9 @@ from hydra.dsl.meta.phantoms import (  # noqa: E402
     boolean,
     field,
     int32,
+    just,
     list_,
+    nothing,
     record,
     string,
 )
@@ -31,105 +33,94 @@ _ARCH = Name("ua.engine.Arch")
 
 # Field name constants
 _NAME = Name("name")
-_EQUATION = Name("equation")
 _SRC_SORT = Name("srcSort")
 _TGT_SORT = Name("tgtSort")
 _ARITY = Name("arity")
-_ACCUMULATE = Name("accumulate")
+_TEMPLATE_PARAMS = Name("templateParams")
 _MORPHISMS = Name("morphisms")
 _RESIDUAL = Name("residual")
-_NORMED = Name("normed")
 _BRANCHES = Name("branches")
-_MERGE = Name("merge")
 _RECURSIVE = Name("recursive")
 _DATA = Name("data")
-_OUTPUT = Name("output")
 _CASES = Name("cases")
-_OBSERVER_CONVERGENCE = Name("observerConvergence")
-_OBSERVER_LOSS = Name("observerLoss")
+_STEP_ENTER = Name("stepEnter")
+_STEP_EMIT = Name("stepEmit")
 
 
-def morphism(name: str, src: str, tgt: str, equation: str,
-             arity: str = "binary", accumulate: str | None = None) -> TTerm:
+def morphism(name: str, src: str, tgt: str, arity: str = "binary",
+             template_params: list[str] | None = None) -> TTerm:
     """Construct a typed morphism term."""
     fields = [
         field(_NAME, string(name)),
-        field(_EQUATION, string(equation)),
         field(_SRC_SORT, string(src)),
         field(_TGT_SORT, string(tgt)),
         field(_ARITY, string(arity)),
+        field(_TEMPLATE_PARAMS, list_([string(p) for p in (template_params or [])])),
     ]
-    if accumulate:
-        fields.append(field(_ACCUMULATE, string(accumulate)))
     return record(_MORPHISM, fields)
 
 
-def path(name: str, morphisms: list[str],
-         residual: bool = False, normed: str | None = None) -> TTerm:
+def path(name: str, morphisms: list[str], residual: bool = False) -> TTerm:
     """Construct a typed path term."""
-    fields = [
+    return record(_PATH, [
         field(_NAME, string(name)),
         field(_MORPHISMS, list_([string(m) for m in morphisms])),
         field(_RESIDUAL, boolean(residual)),
-    ]
-    if normed:
-        fields.append(field(_NORMED, string(normed)))
-    return record(_PATH, fields)
+    ])
 
 
-def fan(name: str, branches: list[str], merge: str = "dict") -> TTerm:
+def fan(name: str, branches: list[str]) -> TTerm:
     """Construct a typed fan term."""
     return record(_FAN, [
         field(_NAME, string(name)),
         field(_BRANCHES, list_([string(b) for b in branches])),
-        field(_MERGE, string(merge)),
     ])
 
 
-def case(name: str, recursive: int, data: int, output: int = 0) -> TTerm:
+def case(name: str, recursive: int, data: int) -> TTerm:
     """Construct a typed case term."""
     return record(_CASE, [
         field(_NAME, string(name)),
         field(_RECURSIVE, int32(recursive)),
         field(_DATA, int32(data)),
-        field(_OUTPUT, int32(output)),
     ])
 
 
-def arch(name: str, cases: list[TTerm] | None = None,
-         observer_convergence: str | None = None,
-         observer_loss: str | None = None) -> TTerm:
+def arch(name: str, cases: list[str] | None = None,
+         step_enter: str | None = None,
+         step_emit: str | None = None) -> TTerm:
     """Construct a typed arch term."""
-    fields = [field(_NAME, string(name))]
-    if cases is not None:
-        fields.append(field(_CASES, list_(cases)))
-    if observer_convergence:
-        fields.append(field(_OBSERVER_CONVERGENCE, string(observer_convergence)))
-    if observer_loss:
-        fields.append(field(_OBSERVER_LOSS, string(observer_loss)))
+    fields = [
+        field(_NAME, string(name)),
+        field(_CASES, list_([string(n) for n in (cases or [])])),
+        field(_STEP_ENTER, just(string(step_enter)) if step_enter else nothing()),
+        field(_STEP_EMIT, just(string(step_emit)) if step_emit else nothing()),
+    ]
     return record(_ARCH, fields)
 
 
-# Domain-object adapters — take engine objects, return raw Term via .value
-def morphism_to_term(spec) -> "TTerm":
-    return morphism(spec.name, spec.src_sort, spec.tgt_sort, spec.equation,
-                    spec.arity, spec.accumulate).value
+def morphism_call(prim_name: str, eq_str: str) -> "TTerm":
+    """Hydra term: primitive partially applied to its equation argument.
+
+    Returns apply(primitive(ua.lib.tensor.<prim_name>), string(eq_str)).
+    The result has type ndarray -> ndarray -> ndarray and is ready to accept x and y.
+    Used for step-2 end-to-end reduction proofs and step-4 TTerm emission.
+    """
+    from hydra.dsl.meta import phantoms as P
+    return P.apply(P.primitive(Name(f"ua.lib.tensor.{prim_name}")), P.string(eq_str))
 
 
 def path_to_term(name: str, morphism_names: list[str],
-                 residual: bool = False, normed: str | None = None) -> "TTerm":
-    return path(name, morphism_names, residual, normed).value
+                 residual: bool = False) -> "TTerm":
+    return path(name, morphism_names, residual).value
 
 
-def fan_to_term(name: str, branches: list[str], merge: str = "dict") -> "TTerm":
-    return fan(name, branches, merge).value
+def fan_to_term(name: str, branches: list[str]) -> "TTerm":
+    return fan(name, branches).value
 
 
 def arch_to_term(name: str, cases=None,
-                 observer_convergence: str | None = None,
-                 observer_loss: str | None = None) -> "TTerm":
-    case_tterms = None
-    if cases is not None:
-        case_tterms = [case(c.name, c.recursive, c.data, getattr(c, 'output', 0))
-                       for c in cases]
-    return arch(name, case_tterms, observer_convergence, observer_loss).value
+                 step_enter: str | None = None,
+                 step_emit: str | None = None) -> "TTerm":
+    case_names = [c['name'] if isinstance(c, dict) else c.name for c in cases] if cases is not None else []
+    return arch(name, case_names, step_enter, step_emit).value

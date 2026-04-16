@@ -5,7 +5,6 @@ Core functions:
     compile_morphism — turn a MorphismSpec into a cached callable
     chain            — compose callables sequentially
     fan              — fan-out with merge
-    check_sorts      — validate sort adjacency via Hydra types
     explain          — human-readable path description
     trace            — step-by-step execution with shapes
 
@@ -51,6 +50,10 @@ class Backend:
     concatenate: Callable   # concatenate sequence of arrays along axis
     abs:         Callable   # elementwise absolute value
     max:         Callable   # reduce-max (returns scalar or array)
+    add:         Callable   # elementwise x + y
+    multiply:    Callable   # elementwise x * y
+    sum:         Callable   # reduce-sum over axis
+    min:         Callable   # reduce-min over axis
 
 
 NUMPY_BACKEND = Backend(
@@ -59,6 +62,10 @@ NUMPY_BACKEND = Backend(
     concatenate=_np.concatenate,
     abs=_np.abs,
     max=_np.max,
+    add=_np.add,
+    multiply=_np.multiply,
+    sum=_np.sum,
+    min=_np.min,
 )
 
 
@@ -204,102 +211,6 @@ def fan(branches: dict[str, Callable], merge: Callable) -> Callable:
         return merge({name: fn(x, y, temp) for name, fn in branches.items()})
     return CompiledMorphism(prog, name=f"fan({' & '.join(branch_names)})")
 
-
-def check_sorts(
-    morphism_specs: dict[str, MorphismSpec],
-    names: list[str],
-    sort_types: dict[str, object],
-) -> str | None:
-    """Return an error message if sorts don't compose, or None if valid.
-
-    Uses Hydra Type equality (frozen dataclass ``==``) for comparison.
-    Falls back to string equality for sorts missing from sort_types.
-
-    References
-    ----------
-    Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
-    *Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
-    """
-    for i in range(1, len(names)):
-        prev_tgt = morphism_specs[names[i - 1]].tgt_sort
-        curr_src = morphism_specs[names[i]].src_sort
-        prev_type = sort_types.get(prev_tgt)
-        curr_type = sort_types.get(curr_src)
-        if prev_type is not None and curr_type is not None:
-            mismatch = (prev_type != curr_type)
-        else:
-            mismatch = (prev_tgt != curr_src)
-        if mismatch:
-            return (
-                f"Type mismatch at step {i}: "
-                f"{names[i - 1]!r} outputs {prev_tgt!r} but "
-                f"{names[i]!r} expects {curr_src!r}"
-            )
-    return None
-
-
-def _close_coercions(coercions) -> dict:
-    """Compute transitive closure of sort coercions via Floyd-Warshall.
-
-    Input: list[SortCoercion]
-    Returns: dict[(src, tgt), grade] — closed under composition (min, *, 1.0).
-
-    Direct declarations take precedence: transitive paths only fill in pairs
-    that were not explicitly declared.
-    """
-    grades: dict[tuple, float] = {}
-    direct: set = set()
-    for c in coercions:
-        grades[(c.src, c.tgt)] = c.grade
-        direct.add((c.src, c.tgt))
-
-    sorts = {s for c in coercions for s in (c.src, c.tgt)}
-    for k in sorts:
-        for i in sorts:
-            for j in sorts:
-                if (i, j) in direct:
-                    continue  # direct declaration wins; do not overwrite
-                via = grades.get((i, k), 0.0) * grades.get((k, j), 0.0)
-                if via > grades.get((i, j), 0.0):
-                    grades[(i, j)] = via
-    return grades
-
-
-def grade_sorts(
-    morphism_specs: dict[str, MorphismSpec],
-    names: list[str],
-    sort_types: dict[str, object],
-    coercion_grades: dict,
-    threshold: float = 1.0,
-) -> tuple[list[str], list[str]]:
-    """Check sort compatibility using graded coercions.
-
-    Returns (errors, warnings).
-    Hard errors: adjacent sorts with no declared coercion (grade 0.0).
-    Warnings: adjacent sorts whose coercion grade is below threshold.
-    """
-    errors: list[str] = []
-    warnings: list[str] = []
-    for i in range(1, len(names)):
-        prev_tgt = morphism_specs[names[i - 1]].tgt_sort
-        curr_src = morphism_specs[names[i]].src_sort
-        if prev_tgt == curr_src:
-            continue
-        prev_type = sort_types.get(prev_tgt)
-        curr_type = sort_types.get(curr_src)
-        if prev_type is not None and curr_type is not None and prev_type == curr_type:
-            continue
-        grade = coercion_grades.get((prev_tgt, curr_src), 0.0)
-        msg = (
-            f"Type mismatch at step {i}: "
-            f"{names[i - 1]!r} outputs {prev_tgt!r} but "
-            f"{names[i]!r} expects {curr_src!r}"
-        )
-        if grade == 0.0:
-            errors.append(msg)
-        elif grade < threshold:
-            warnings.append(f"{msg} (coercion grade {grade:.3f} < threshold {threshold:.3f})")
-    return errors, warnings
 
 
 def explain(path_name: str, names: list[str],

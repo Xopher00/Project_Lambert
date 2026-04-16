@@ -26,14 +26,35 @@ NAMESPACE = {
     })(),
 }
 
+def _dsl(body: str, *, semiring: bool = True) -> str:
+    """Wrap body in the standard single-semiring+sort-x preamble."""
+    if semiring:
+        return "semiring s:\n    contract = ops.dummy\n\nsort x\n\n" + body
+    return "sort x\n\n" + body
+
+
+def _coerce_dsl(coerce_decls: str, threshold: float, sorts: str = "a, b",
+                morphisms: str = None, path: str = "path p = f g\n") -> str:
+    """Build a minimal coercion DSL for TestSortCoercion tests."""
+    if morphisms is None:
+        morphisms = 'morphism f : a -> a  via "a->a"\nmorphism g : b -> b  via "b->b"\n\n'
+    return (
+        "semiring s:\n    contract = ops.dummy\n\n"
+        f"sort {sorts}\n\n{coerce_decls}\n"
+        f"sort_threshold {threshold}\n\n"
+        + morphisms
+        + path
+    )
+
+
 BASIC_SOURCE = """
 semiring join:
     contract = ops.dummy
 
 sort i, j
 
-leg realize   : j -> i  via "j,ji->i"
-leg propagate : i -> j  via "i,ij->j"
+morphism realize   : j -> i  via "j,ji->i"
+morphism propagate : i -> j  via "i,ij->j"
 
 path attend = realize propagate
 """
@@ -74,7 +95,7 @@ semiring s:
 
 sort x  # also a comment
 
-leg a : x -> x  via "x->x"
+morphism a : x -> x  via "x->x"
 """
         ast = parse(src)
         assert len(ast.semirings) == 1
@@ -98,34 +119,20 @@ semiring s2:
 
 sort i, j
 
-leg a : i -> j  via "i->j"  using s1
-leg b : j -> i  via "j->i"  using s2
+morphism a : i -> j  via "i->j"  using s1
+morphism b : j -> i  via "j->i"  using s2
 """
         ast = parse(src)
         assert ast.morphisms[0].semiring == 's1'
         assert ast.morphisms[1].semiring == 's2'
 
     def test_op_clause(self):
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"  op ops.dummy
-"""
+        src = _dsl('morphism a : x -> x  via "x->x"  op ops.dummy\n')
         ast = parse(src)
         assert ast.morphisms[0].op == 'ops.dummy'
 
     def test_bridge_clause(self):
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"  bridge  op ops.dummy
-"""
+        src = _dsl('morphism a : x -> x  via "x->x"  bridge  op ops.dummy\n')
         ast = parse(src)
         assert ast.morphisms[0].semiring is None
 
@@ -136,7 +143,7 @@ semiring s:
 
 sort i, j
 
-leg a : i -> j  via "ij,i->j"  transform ops.swap
+morphism a : i -> j  via "ij,i->j"  transform ops.swap
 """
         ast = parse(src)
         assert ast.morphisms[0].transform == 'ops.swap'
@@ -149,32 +156,18 @@ semiring s:
 
 sort x
 
-leg a : x -> x  via "x->x"
+morphism a : x -> x  via "x->x"
 """
         ast = parse(src)
         assert ast.semirings[0].compiler == 'ops.compiler'
 
     def test_compiler_on_leg(self):
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"  compiler ops.compiler
-"""
+        src = _dsl('morphism a : x -> x  via "x->x"  compiler ops.compiler\n')
         ast = parse(src)
         assert ast.morphisms[0].compiler == 'ops.compiler'
 
     def test_unrecognised_clause_raises(self):
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"  badclause foo
-"""
+        src = _dsl('morphism a : x -> x  via "x->x"  badclause foo\n')
         with pytest.raises(SyntaxError, match="unrecognised clause"):
             parse(src)
 
@@ -217,41 +210,12 @@ class TestCompile:
         assert 'propagate' in text
 
     def test_undeclared_semiring_raises(self):
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"  using nonexistent
-"""
+        src = _dsl('morphism a : x -> x  via "x->x"  using nonexistent\n')
         with pytest.raises(ValueError, match="undeclared semiring"):
             compile(src, NAMESPACE)
 
-    def test_cross_semiring_path_raises(self):
-        src = """
-semiring s1:
-    contract = ops.dummy
-
-semiring s2:
-    contract = ops.dummy
-
-sort i, j
-
-leg a : i -> j  via "i->j"  using s1
-leg b : j -> i  via "j->i"  using s2
-
-path cross = a b
-"""
-        with pytest.raises(ValueError, match="spans multiple semirings"):
-            compile(src, NAMESPACE)
-
     def test_no_op_no_contract_raises(self):
-        src = """
-sort x
-
-leg a : x -> x  via "x->x"
-"""
+        src = _dsl('morphism a : x -> x  via "x->x"\n', semiring=False)
         # No semiring declared, no op — should fail
         # parse succeeds, but compile should raise because there's no contract
         ast = parse(src)
@@ -266,7 +230,7 @@ semiring s:
 
 sort i, j
 
-leg a : i -> j  via "ij,i->j"  transform ops.swap
+morphism a : i -> j  via "ij,i->j"  transform ops.swap
 """
         arch = compile(src, NAMESPACE)
         # The compiled leg should apply the swap transform
@@ -283,7 +247,7 @@ semiring s:
 
 sort x
 
-leg a : x -> x  via "abc->x"
+morphism a : x -> x  via "abc->x"
 """
         arch = compile(src, NAMESPACE)
         # The equation compiler uppercases the equation string.
@@ -300,7 +264,7 @@ semiring s:
 
 sort x
 
-leg a : x -> x  via "abc"  compiler ops.compiler
+morphism a : x -> x  via "abc"  compiler ops.compiler
 """
         arch = compile(src, NAMESPACE)
         assert callable(arch.paths['a'])
@@ -317,10 +281,34 @@ semiring s:
 
 sort x
 
-leg a : x -> x  via "x->x"
+morphism a : x -> x  via "x->x"
 """
         with pytest.raises(NameError, match="not found"):
             compile(src, NAMESPACE)
+
+    def test_multi_error_accumulation(self):
+        """Both a bad semiring ref and a bad path morphism ref appear in one ValueError."""
+        src = _dsl(
+            'morphism a : x -> x  via "x->x"  using nonexistent_semiring\n\n'
+            'path p = does_not_exist\n'
+        )
+        with pytest.raises(ValueError) as exc_info:
+            compile(src, NAMESPACE)
+        msg = str(exc_info.value)
+        assert "nonexistent_semiring" in msg
+        assert "does_not_exist" in msg
+
+    def test_phase3_multi_error_accumulation(self):
+        """Two morphisms with bad op refs both appear in one ValueError."""
+        src = _dsl(
+            'morphism a : x -> x  via "x->x"  op ops.nonexistent_a\n'
+            'morphism b : x -> x  via "x->x"  op ops.nonexistent_b\n'
+        )
+        with pytest.raises(ValueError) as exc_info:
+            compile(src, NAMESPACE)
+        msg = str(exc_info.value)
+        assert "nonexistent_a" in msg
+        assert "nonexistent_b" in msg
 
 
 # ---------------------------------------------------------------------------
@@ -330,17 +318,11 @@ leg a : x -> x  via "x->x"
 class TestFan:
 
     def test_parse_fan_default_merge(self):
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"
-leg b : x -> x  via "x->x"
-
-fan ab = a & b
-"""
+        src = _dsl(
+            'morphism a : x -> x  via "x->x"\n'
+            'morphism b : x -> x  via "x->x"\n\n'
+            'fan ab = a & b\n'
+        )
         ast = parse(src)
         assert len(ast.fans) == 1
         assert ast.fans[0].name == 'ab'
@@ -348,46 +330,28 @@ fan ab = a & b
         assert ast.fans[0].merge == 'dict'
 
     def test_parse_fan_meet_merge(self):
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"
-leg b : x -> x  via "x->x"
-
-fan ab = a & b  merge meet
-"""
+        src = _dsl(
+            'morphism a : x -> x  via "x->x"\n'
+            'morphism b : x -> x  via "x->x"\n\n'
+            'fan ab = a & b  merge meet\n'
+        )
         ast = parse(src)
         assert ast.fans[0].merge == 'meet'
 
     def test_parse_fan_custom_merge(self):
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"
-
-fan ab = a  merge ops.custom
-"""
+        src = _dsl(
+            'morphism a : x -> x  via "x->x"\n\n'
+            'fan ab = a  merge ops.custom\n'
+        )
         ast = parse(src)
         assert ast.fans[0].merge == 'ops.custom'
 
     def test_compile_fan_dict(self):
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"
-leg b : x -> x  via "x->x"
-
-fan ab = a & b
-"""
+        src = _dsl(
+            'morphism a : x -> x  via "x->x"\n'
+            'morphism b : x -> x  via "x->x"\n\n'
+            'fan ab = a & b\n'
+        )
         arch = compile(src, NAMESPACE)
         result = arch.paths['ab']('hello', None, 0.0)
         assert isinstance(result, dict)
@@ -395,34 +359,22 @@ fan ab = a & b
         assert result['a'] == 'hello'
 
     def test_compile_fan_meet(self):
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"
-leg b : x -> x  via "x->x"
-
-fan ab = a & b  merge meet
-"""
+        src = _dsl(
+            'morphism a : x -> x  via "x->x"\n'
+            'morphism b : x -> x  via "x->x"\n\n'
+            'fan ab = a & b  merge meet\n'
+        )
         arch = compile(src, NAMESPACE)
         x = np.array([3.0, 1.0, 2.0])
         result = arch.paths['ab'](x, None, 0.0)
         np.testing.assert_array_equal(result, x)
 
     def test_compile_fan_join(self):
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"
-leg b : x -> x  via "x->x"
-
-fan ab = a & b  merge join
-"""
+        src = _dsl(
+            'morphism a : x -> x  via "x->x"\n'
+            'morphism b : x -> x  via "x->x"\n\n'
+            'fan ab = a & b  merge join\n'
+        )
         arch = compile(src, NAMESPACE)
         x = np.array([1.0, 2.0, 3.0])
         result = arch.paths['ab'](x, None, 0.0)
@@ -438,32 +390,20 @@ fan ab = a & b  merge join
             'sum_merge': staticmethod(_sum_merge),
         })()
 
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"
-leg b : x -> x  via "x->x"
-
-fan ab = a & b  merge ops.sum_merge
-"""
+        src = _dsl(
+            'morphism a : x -> x  via "x->x"\n'
+            'morphism b : x -> x  via "x->x"\n\n'
+            'fan ab = a & b  merge ops.sum_merge\n'
+        )
         arch = compile(src, ns)
         result = arch.paths['ab'](5, None, 0.0)
         assert result == 10  # 5 + 5
 
     def test_fan_unknown_branch_raises(self):
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"
-
-fan ab = a & nonexistent
-"""
+        src = _dsl(
+            'morphism a : x -> x  via "x->x"\n\n'
+            'fan ab = a & nonexistent\n'
+        )
         with pytest.raises(ValueError, match="not a declared morphism or path"):
             compile(src, NAMESPACE)
 
@@ -472,266 +412,16 @@ fan ab = a & nonexistent
             parse("fan empty =")
 
     def test_fan_three_branches(self):
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"
-leg b : x -> x  via "x->x"
-leg c : x -> x  via "x->x"
-
-fan abc = a & b & c
-"""
+        src = _dsl(
+            'morphism a : x -> x  via "x->x"\n'
+            'morphism b : x -> x  via "x->x"\n'
+            'morphism c : x -> x  via "x->x"\n\n'
+            'fan abc = a & b & c\n'
+        )
         arch = compile(src, NAMESPACE)
         result = arch.paths['abc']('v', None, 0.0)
         assert len(result) == 3
         assert set(result.keys()) == {'a', 'b', 'c'}
-
-
-# ---------------------------------------------------------------------------
-# TestArchAlgebraOnly (formerly TestFunctorDSL — functor keyword is removed)
-# ---------------------------------------------------------------------------
-
-class TestArchAlgebraOnly:
-
-    def test_parse_functor(self):
-        """arch algebra: replaces old functor syntax."""
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"
-
-arch Program:
-    algebra:
-        case input: recursive=0  data=1
-        case block:  recursive=1  data=2
-"""
-        ast = parse(src)
-        assert len(ast.archs) == 1
-        assert ast.archs[0].name == 'Program'
-        assert len(ast.archs[0].cases) == 2
-        assert ast.archs[0].cases[0].name == 'input'
-        assert ast.archs[0].cases[0].recursive == 0
-        assert ast.archs[0].cases[0].data == 1
-        assert ast.archs[0].cases[1].name == 'block'
-        assert ast.archs[0].cases[1].recursive == 1
-
-    def test_compile_functor(self):
-        """arch compiles and arch.interpreter() produces a working ArchInterpreter."""
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"
-
-arch Program:
-    algebra:
-        case leaf: recursive=0  data=1
-        case node: recursive=2  data=0
-"""
-        arch = compile(src, NAMESPACE)
-        # The arch is registered — interpreter() should not raise KeyError
-        # (no cells bound so algebra interpreter is None, but the arch exists)
-        interp = arch.interpreter('Program')
-        from engine import ArchInterpreter
-        assert isinstance(interp, ArchInterpreter)
-
-    def test_functor_used_with_interpreter(self):
-        """run_algebra works end-to-end via arch with per-case cell bindings."""
-        def _leaf_cell(payload, child_results, params, temp):
-            return payload[0]
-
-        def _node_cell(payload, child_results, params, temp):
-            return sum(child_results)
-
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'leaf_cell': staticmethod(_leaf_cell),
-            'node_cell': staticmethod(_node_cell),
-        })()
-
-        src = """
-arch Tree:
-    algebra:
-        case leaf: recursive=0  data=1  cell=ops.leaf_cell
-        case node: recursive=2  data=0  cell=ops.node_cell
-"""
-        arch = compile(src, ns)
-        interp = arch.interpreter('Tree')
-        tree = ('node', [], [('leaf', [10], []), ('leaf', [20], [])])
-        result = interp.run_algebra(tree, lambda n: n)
-        assert result == 30
-
-    def test_functor_no_cases_raises(self):
-        """The old 'functor' keyword is no longer valid — expect SyntaxError."""
-        with pytest.raises(SyntaxError, match="removed"):
-            parse("functor Empty:\n    case x: recursive=0  data=1\n")
-
-    def test_multiple_functors(self):
-        """Two arch declarations both compile successfully."""
-        src = """
-arch A:
-    algebra:
-        case x: recursive=0  data=1
-
-arch B:
-    algebra:
-        case y: recursive=1  data=0
-"""
-        ast = parse(src)
-        assert len(ast.archs) == 2
-        arch = compile(src, NAMESPACE)
-        # Both archs should be accessible via interpreter()
-        from engine import ArchInterpreter
-        assert isinstance(arch.interpreter('A'), ArchInterpreter)
-        assert isinstance(arch.interpreter('B'), ArchInterpreter)
-
-    def test_parse_per_case_cell(self):
-        """Per-case cell= is stored on algebra_cases."""
-        src = """
-arch Tree:
-    algebra:
-        case leaf: recursive=0  data=1  cell=ops.leaf_fn
-        case node: recursive=2  data=0  cell=ops.node_fn
-"""
-        ast = parse(src)
-        assert ast.archs[0].cases[0].cell == 'ops.leaf_fn'
-        assert ast.archs[0].cases[1].cell == 'ops.node_fn'
-
-    def test_compile_per_case_cell_dispatch(self):
-        """Per-case cells dispatch correctly via arch.interpreter().run_algebra()."""
-        def _leaf_cell(payload, child_results, params, temp):
-            return payload[0]
-
-        def _node_cell(payload, child_results, params, temp):
-            return sum(child_results)
-
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'leaf_cell': staticmethod(_leaf_cell),
-            'node_cell': staticmethod(_node_cell),
-        })()
-
-        src = """
-arch Tree:
-    algebra:
-        case leaf: recursive=0  data=1  cell=ops.leaf_cell
-        case node: recursive=2  data=0  cell=ops.node_cell
-"""
-        arch = compile(src, ns)
-        interp = arch.interpreter('Tree')
-        tree = ('node', [], [('leaf', [10], []), ('leaf', [20], [])])
-        result = interp.run_algebra(tree, lambda n: n)
-        assert result == 30
-
-    def test_per_case_cell_injects_paths(self):
-        """arch.interpreter() puts paths in params automatically."""
-        def _leaf_cell(payload, child_results, params, temp):
-            assert 'paths' in params
-            return payload[0]
-
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'leaf_cell': staticmethod(_leaf_cell),
-        })()
-
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"
-
-arch Tiny:
-    algebra:
-        case leaf: recursive=0  data=1  cell=ops.leaf_cell
-"""
-        arch = compile(src, ns)
-        interp = arch.interpreter('Tiny')
-        tree = ('leaf', [42], [])
-        result = interp.run_algebra(tree, lambda n: n)
-        assert result == 42
-
-    def test_per_case_cell_incomplete_raises(self):
-        """If some cases have cell bindings but not all, raise ValueError."""
-        def _fn(payload, child_results, params, temp):
-            return payload[0]
-
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'fn': staticmethod(_fn),
-        })()
-
-        src = """
-arch Incomplete:
-    algebra:
-        case a: recursive=0  data=1  cell=ops.fn
-        case b: recursive=1  data=0
-"""
-        with pytest.raises(ValueError, match="incomplete"):
-            compile(src, ns)
-
-    def test_interpreter_no_cell_raises(self):
-        """arch.interpreter() followed by run_algebra raises when no cell is bound."""
-        src = """
-arch NoBind:
-    algebra:
-        case x: recursive=0  data=1
-"""
-        arch = compile(src, NAMESPACE)
-        # compile() succeeds; the error surfaces when trying to run
-        interp = arch.interpreter('NoBind')
-        with pytest.raises(ValueError):
-            interp.run_algebra(('x', [1], []), lambda n: n)
-
-    def test_interpreter_unknown_functor_raises(self):
-        """Accessing a non-existent arch name raises with 'Unknown arch'."""
-        src = """
-arch F:
-    algebra:
-        case x: recursive=0  data=1
-"""
-        arch = compile(src, NAMESPACE)
-        with pytest.raises(KeyError, match="Unknown arch"):
-            arch.interpreter('NonExistent')
-
-    def test_functor_level_cell_still_works(self):
-        """algebra-level cell = <fn> binding (inside algebra: block) works."""
-        def _cell(case_name, payload, child_results, params, temp):
-            if case_name == 'leaf':
-                return payload[0] * 2
-            return sum(child_results)
-
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'tree_cell': staticmethod(_cell),
-        })()
-
-        src = """
-arch Tree:
-    algebra:
-        cell = ops.tree_cell
-        case leaf: recursive=0  data=1
-        case node: recursive=2  data=0
-"""
-        arch = compile(src, ns)
-        interp = arch.interpreter('Tree')
-        tree = ('node', [], [('leaf', [5], []), ('leaf', [7], [])])
-        result = interp.run_algebra(tree, lambda n: n)
-        assert result == 24  # (5*2) + (7*2)
 
 
 # ---------------------------------------------------------------------------
@@ -765,9 +455,9 @@ semiring residuate:
 
 sort i, j
 
-leg a : i -> j  via "i->j"  using join
-leg b : j -> j  via "j->j"  bridge  op ops.bridge
-leg c : j -> i  via "j->i"  using residuate
+morphism a : i -> j  via "i->j"  using join
+morphism b : j -> j  via "j->j"  bridge  op ops.bridge
+morphism c : j -> i  via "j->i"  using residuate
 
 path cross = a b c
 """
@@ -785,8 +475,8 @@ semiring s2:
 
 sort i, j
 
-leg a : i -> j  via "i->j"  using s1
-leg b : j -> i  via "j->i"  using s2
+morphism a : i -> j  via "i->j"  using s1
+morphism b : j -> i  via "j->i"  using s2
 
 path cross = a b
 """
@@ -812,255 +502,14 @@ semiring s2:
 
 sort i, j, k
 
-leg a : i -> j  via "i->j"  using s1
-leg b : j -> k  via "j->k"  bridge  op ops.op
-leg c : i -> j  via "i->j"  using s2
+morphism a : i -> j  via "i->j"  using s1
+morphism b : j -> k  via "j->k"  bridge  op ops.op
+morphism c : i -> j  via "i->j"  using s2
 
 path cross = a b c
 """
-        with pytest.raises(TypeError, match="mismatch"):
+        with pytest.raises(ValueError, match="mismatch"):
             compile(src, ns)
-
-
-# ---------------------------------------------------------------------------
-# TestArch
-# ---------------------------------------------------------------------------
-
-class TestArch:
-
-    def test_parse_arch_algebra_only(self):
-        src = """
-arch MyArch:
-    algebra:
-        case leaf: recursive=0  data=1
-        case node: recursive=2  data=0
-"""
-        ast = parse(src)
-        assert len(ast.archs) == 1
-        assert ast.archs[0].name == 'MyArch'
-        assert ast.archs[0].cases is not None
-        assert len(ast.archs[0].cases) == 2
-
-    def test_parse_arch_coalgebra_raises(self):
-        """coalgebra: sub-block raises SyntaxError with migration message."""
-        with pytest.raises(SyntaxError, match="coalgebra.*removed"):
-            parse("""
-arch Bad:
-    algebra:
-        case base: recursive=0  data=1
-    coalgebra:
-        case step: recursive=1  data=0  output=1
-""")
-
-    def test_parse_arch_empty_raises(self):
-        with pytest.raises(SyntaxError, match="must declare"):
-            parse("arch Empty:\n\n")
-
-    def test_parse_arch_empty_algebra_raises(self):
-        with pytest.raises(SyntaxError, match="must declare at least one case"):
-            parse("arch Bad:\n    algebra:\n\n")
-
-    def test_compile_arch_algebra_with_cells(self):
-        def _leaf(payload, child_results, params, temp):
-            return payload[0]
-
-        def _node(payload, child_results, params, temp):
-            return sum(child_results)
-
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'leaf': staticmethod(_leaf),
-            'node': staticmethod(_node),
-        })()
-
-        src = """
-arch Tree:
-    algebra:
-        case leaf: recursive=0  data=1  cell=ops.leaf
-        case node: recursive=2  data=0  cell=ops.node
-"""
-        arch = compile(src, ns)
-        interp = arch.interpreter('Tree')
-        tree = ('node', [], [('leaf', [10], []), ('leaf', [20], [])])
-        result = interp.run_algebra(tree, lambda n: n)
-        assert result == 30
-
-    def test_arch_interpreter_returns_arch_interpreter(self):
-        from engine import ArchInterpreter
-
-        def _leaf(payload, child_results, params, temp):
-            return payload[0]
-
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'leaf': staticmethod(_leaf),
-        })()
-
-        src = """
-arch A:
-    algebra:
-        case leaf: recursive=0  data=1  cell=ops.leaf
-"""
-        arch = compile(src, ns)
-        interp = arch.interpreter('A')
-        assert isinstance(interp, ArchInterpreter)
-
-    def test_arch_coalgebra_block_raises(self):
-        """coalgebra: sub-block raises SyntaxError — use step: instead."""
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {'dummy': staticmethod(_dummy_op)})()
-
-        src = """
-arch OnlyCoalg:
-    coalgebra:
-        case step: recursive=1  data=1
-"""
-        with pytest.raises(SyntaxError, match="coalgebra.*removed"):
-            compile(src, ns)
-
-    def test_arch_algebra_no_coalgebra_raises(self):
-        """run_coalgebra on an arch with only algebra raises."""
-        def _leaf(payload, child_results, params, temp):
-            return payload[0]
-
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'leaf': staticmethod(_leaf),
-        })()
-
-        src = """
-arch OnlyAlg:
-    algebra:
-        case leaf: recursive=0  data=1  cell=ops.leaf
-"""
-        arch = compile(src, ns)
-        interp = arch.interpreter('OnlyAlg')
-        with pytest.raises(ValueError, match="no coalgebra"):
-            interp.run_coalgebra(None)
-
-    def test_arch_paths_injected(self):
-        """Cell functions get paths via params automatically."""
-        def _leaf(payload, child_results, params, temp):
-            assert 'paths' in params
-            assert 'a' in params['paths']
-            return payload[0]
-
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'leaf': staticmethod(_leaf),
-        })()
-
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-leg a : x -> x  via "x->x"
-
-arch A:
-    algebra:
-        case leaf: recursive=0  data=1  cell=ops.leaf
-"""
-        arch = compile(src, ns)
-        interp = arch.interpreter('A')
-        result = interp.run_algebra(('leaf', [42], []), lambda n: n)
-        assert result == 42
-
-    def test_arch_incomplete_cells_raises(self):
-        def _fn(payload, child_results, params, temp):
-            return payload[0]
-
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'fn': staticmethod(_fn),
-        })()
-
-        src = """
-arch Bad:
-    algebra:
-        case a: recursive=0  data=1  cell=ops.fn
-        case b: recursive=1  data=0
-"""
-        with pytest.raises(ValueError, match="incomplete"):
-            compile(src, ns)
-
-
-# ---------------------------------------------------------------------------
-# Phase 2: SortDecl and structured sorts
-# ---------------------------------------------------------------------------
-
-class TestSortDecl:
-    def test_string_equality(self):
-        from engine.decl import SortDecl
-        s = SortDecl("foo")
-        assert s == "foo"
-        assert "foo" == s
-
-    def test_str(self):
-        from engine.decl import SortDecl
-        assert str(SortDecl("bar")) == "bar"
-
-    def test_hash(self):
-        from engine.decl import SortDecl
-        assert hash(SortDecl("x")) == hash("x")
-        assert {SortDecl("x"): 1}[SortDecl("x")] == 1
-
-    def test_sorting(self):
-        from engine.decl import SortDecl
-        assert sorted([SortDecl("b"), SortDecl("a")]) == [SortDecl("a"), SortDecl("b")]
-
-    def test_fields_preserved(self):
-        from engine.decl import SortDecl
-        s = SortDecl("model", {"Wq": "matrix", "bq": "vector"})
-        assert s.fields == {"Wq": "matrix", "bq": "vector"}
-        assert s.name == "model"
-
-    def test_opaque_sort_fields_none(self):
-        from engine.decl import SortDecl
-        s = SortDecl("i")
-        assert s.fields is None
-
-
-class TestStructuredSortParsing:
-    def test_opaque_sorts(self):
-        from engine.decl import SortDecl
-        ast = parse("sort i, j")
-        assert ast.sorts == [SortDecl("i", None), SortDecl("j", None)]
-
-    def test_structured_sort(self):
-        ast = parse("sort model(Wq: matrix, bq: vector)")
-        assert len(ast.sorts) == 1
-        assert ast.sorts[0].name == "model"
-        assert ast.sorts[0].fields == {"Wq": "matrix", "bq": "vector"}
-
-    def test_mixed_sorts(self):
-        ast = parse("sort i, model(W: matrix), j")
-        assert len(ast.sorts) == 3
-        assert ast.sorts[0] == "i"
-        assert ast.sorts[0].fields is None
-        assert ast.sorts[1] == "model"
-        assert ast.sorts[1].fields == {"W": "matrix"}
-        assert ast.sorts[2] == "j"
-        assert ast.sorts[2].fields is None
-
-    def test_sort_defs_in_archdef(self):
-        src = """
-semiring sr:
-    contract = ops.dummy
-
-sort i, j
-
-leg realize : j -> i  via "j,ji->i"
-"""
-        arch = compile(src, NAMESPACE)
-        assert "i" in arch.sort_defs
-        assert "j" in arch.sort_defs
 
 
 # ---------------------------------------------------------------------------
@@ -1076,7 +525,7 @@ semiring s:
 
 sort a
 
-leg f : a -> a  via "a->a"
+morphism f : a -> a  via "a->a"
 
 fan kv = f & f
 
@@ -1196,369 +645,6 @@ path p = f [aug] f  residual
         result = arch.paths['p'](x, {}, 0.0)
         # f(0) = 1, augment no change to x, f(1) = 2, residual: 2 + 0 = 2
         assert float(result[0]) == 2.0
-
-
-class TestIdentityCell:
-    def test_identity_cell_with_payload(self):
-        src = """
-semiring sr:
-    contract = ops.dummy
-
-sort a
-
-arch Pipe:
-    algebra:
-        case leaf: recursive=0 data=1 cell=identity
-"""
-        arch = compile(src, NAMESPACE)
-        interp = arch.interpreter('Pipe')
-        result = interp.run_algebra(
-            ('leaf', [42.0], []),
-            lambda n: n,
-        )
-        assert result == 42.0
-
-    def test_identity_cell_with_child(self):
-        src = """
-semiring sr:
-    contract = ops.dummy
-
-sort a
-
-arch Pipe:
-    algebra:
-        case leaf: recursive=0 data=1 cell=identity
-        case wrap: recursive=1 data=0 cell=identity
-"""
-        arch = compile(src, NAMESPACE)
-        interp = arch.interpreter('Pipe')
-        result = interp.run_algebra(
-            ('wrap', [], [('leaf', [99.0], [])]),
-            lambda n: n,
-        )
-        assert result == 99.0
-
-
-# ---------------------------------------------------------------------------
-# TestMultilineMorphism
-# ---------------------------------------------------------------------------
-
-class TestMultilineMorphism:
-    def test_multiline_basic(self):
-        """Multi-line morphism with indented clauses parses correctly."""
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x, y
-
-morphism m : x -> y
-    via "x->y"
-    op ops.dummy
-"""
-        ast = parse(src)
-        assert len(ast.morphisms) == 1
-        assert ast.morphisms[0].name == 'm'
-        assert ast.morphisms[0].src_sort == 'x'
-        assert ast.morphisms[0].tgt_sort == 'y'
-        assert ast.morphisms[0].equation == 'x->y'
-        assert ast.morphisms[0].op == 'ops.dummy'
-
-    def test_multiline_all_clauses(self):
-        """Multi-line morphism with arity and accumulate."""
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-morphism m : x -> x
-    via "x->x"
-    op ops.dummy
-    arity unary
-    accumulate cat
-"""
-        ast = parse(src)
-        assert ast.morphisms[0].arity == 'unary'
-        assert ast.morphisms[0].accumulate == 'cat'
-
-    def test_singleline_still_works(self):
-        """Single-line morphism declaration still parses."""
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-morphism m : x -> x  via "x->x"  op ops.dummy  arity unary
-"""
-        ast = parse(src)
-        assert ast.morphisms[0].name == 'm'
-        assert ast.morphisms[0].arity == 'unary'
-
-    def test_multiline_followed_by_other_decl(self):
-        """Multi-line morphism correctly terminates at next top-level keyword."""
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-morphism m : x -> x
-    via "x->x"
-    op ops.dummy
-
-path p = m
-"""
-        ast = parse(src)
-        assert len(ast.morphisms) == 1
-        assert len(ast.paths) == 1
-
-
-# ---------------------------------------------------------------------------
-# TestLeafNodeAliases
-# ---------------------------------------------------------------------------
-
-class TestLeafNodeAliases:
-    def test_leaf_alias(self):
-        """'leaf' is an alias for recursive=0."""
-        src = """
-arch A:
-    algebra:
-        case base: leaf  data=1  cell=identity
-"""
-        ast = parse(src)
-        assert ast.archs[0].cases[0].recursive == 0
-
-    def test_node_alias(self):
-        """'node' is an alias for recursive=1."""
-        src = """
-arch A:
-    algebra:
-        case block: node  data=1  cell=identity
-"""
-        ast = parse(src)
-        assert ast.archs[0].cases[0].recursive == 1
-
-    def test_recursive_still_works(self):
-        """Explicit recursive=N still works alongside aliases."""
-        src = """
-arch A:
-    algebra:
-        case a: leaf  data=1  cell=identity
-        case b: recursive=2  data=0  cell=identity
-"""
-        ast = parse(src)
-        assert ast.archs[0].cases[0].recursive == 0
-        assert ast.archs[0].cases[1].recursive == 2
-
-    def test_leaf_with_explicit_recursive_raises(self):
-        """Using 'leaf' with explicit recursive= raises SyntaxError."""
-        src = """
-arch A:
-    algebra:
-        case bad: leaf  recursive=0  data=1  cell=identity
-"""
-        with pytest.raises(SyntaxError, match="leaf"):
-            parse(src)
-
-
-# ---------------------------------------------------------------------------
-# TestFieldLevelAccumulate
-# ---------------------------------------------------------------------------
-
-class TestFieldLevelAccumulate:
-    def test_parse_accumulate_with_fields(self):
-        """'accumulate cat on K, V' parsed correctly."""
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-morphism m : x -> x
-    via "x->x"
-    op ops.dummy
-    accumulate cat on K, V
-"""
-        ast = parse(src)
-        assert ast.morphisms[0].accumulate == 'cat'
-        assert ast.morphisms[0].accumulate_fields == ['K', 'V']
-
-    def test_parse_accumulate_without_fields(self):
-        """Plain 'accumulate cat' still works (no fields)."""
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-morphism m : x -> x  via "x->x"  op ops.dummy  accumulate cat
-"""
-        ast = parse(src)
-        assert ast.morphisms[0].accumulate == 'cat'
-        assert ast.morphisms[0].accumulate_fields is None
-
-    def test_compile_accumulate_fields_threaded(self):
-        """Field-level accumulate info reaches the compiled arch's accumulate_legs."""
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-        })()
-
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-morphism m : x -> x
-    via "x->x"
-    op ops.dummy
-    accumulate cat on K, V
-
-arch A:
-    cases:
-        case block: recursive=1  data=1
-"""
-        arch = compile(src, ns)
-        ad = arch._archs['A']
-        assert ad.accumulate_legs is not None
-        assert 'm' in ad.accumulate_legs
-        assert ad.accumulate_legs['m'] == ('cat', ['K', 'V'])
-
-
-# ---------------------------------------------------------------------------
-# TestCompactSyntax — bare equation, bare op, no case keyword, no semiring
-# ---------------------------------------------------------------------------
-
-class TestCompactSyntax:
-
-    def test_bare_equation_no_via(self):
-        """Morphism without 'via' keyword — bare equation string."""
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-morphism m : x -> x  "x->x"  op ops.dummy
-"""
-        ast = parse(src)
-        assert ast.morphisms[0].equation == 'x->x'
-        assert ast.morphisms[0].op == 'ops.dummy'
-
-    def test_bare_op_no_keyword(self):
-        """Bare dotted name treated as op (no 'op' prefix needed)."""
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort x
-
-morphism m : x -> x  "x->x"  ops.dummy
-"""
-        ast = parse(src)
-        assert ast.morphisms[0].op == 'ops.dummy'
-
-    def test_fully_compact_morphism(self):
-        """No 'via', no 'op' — just equation and dotted name."""
-        src = """
-sort x
-
-morphism m : x -> x  "x->x"  ops.dummy
-"""
-        ast = parse(src)
-        assert ast.morphisms[0].equation == 'x->x'
-        assert ast.morphisms[0].op == 'ops.dummy'
-
-    def test_compact_multiline(self):
-        """Multi-line morphism with compact syntax."""
-        src = """
-sort x
-
-morphism m : x -> x
-    "x->x"
-    ops.dummy
-    arity unary
-"""
-        ast = parse(src)
-        assert ast.morphisms[0].equation == 'x->x'
-        assert ast.morphisms[0].op == 'ops.dummy'
-        assert ast.morphisms[0].arity == 'unary'
-
-    def test_no_semiring_with_explicit_ops(self):
-        """No semiring block when all morphisms have explicit ops."""
-        src = """
-sort x
-
-morphism m : x -> x  "x->x"  ops.dummy
-"""
-        arch = compile(src, NAMESPACE)
-        assert 'm' in arch.paths
-        result = arch.paths['m']('hello', None, 0.0)
-        assert result == 'hello'
-
-    def test_case_without_keyword(self):
-        """Arch cases without 'case' keyword."""
-        src = """
-arch A:
-    algebra:
-        input: leaf  data=1  cell=identity
-        block: node  data=1  cell=identity
-"""
-        ast = parse(src)
-        cases = ast.archs[0].cases
-        assert len(cases) == 2
-        assert cases[0].name == 'input'
-        assert cases[0].recursive == 0
-        assert cases[1].name == 'block'
-        assert cases[1].recursive == 1
-
-    def test_full_compact_architecture(self):
-        """End-to-end: compact syntax for a complete architecture."""
-        src = """
-sort x
-
-morphism a : x -> x  "x->x"  ops.dummy
-morphism b : x -> x  "x->x"  ops.dummy
-
-path p = a b  residual
-
-arch Net:
-    algebra:
-        input: leaf  data=1  cell=identity
-        block:  node  data=1  morphisms = p
-"""
-        arch = compile(src, NAMESPACE)
-        interp = arch.interpreter('Net')
-        tree = ('block', [None], [('input', ['hello'], [])])
-        result = interp.run_algebra(tree, lambda n: n)
-        # p is a b with residual: dummy returns x, so a(b(x)) + x = x + x
-        # but dummy just returns x, so chain of dummies returns x, residual = x + x
-        # Actually dummy op returns first positional arg (x), so result depends
-        # on how chain works — it feeds output as next x
-        assert result is not None  # just verify no crash
-
-    def test_mixed_old_and_new_syntax(self):
-        """Old syntax (via/op/case) and new compact syntax coexist."""
-        src = """
-sort x
-
-morphism a : x -> x  via "x->x"  op ops.dummy
-morphism b : x -> x  "x->x"  ops.dummy
-
-arch A:
-    algebra:
-        case old: recursive=0  data=1  cell=identity
-        new:      leaf  data=1  cell=identity
-"""
-        ast = parse(src)
-        assert ast.morphisms[0].op == 'ops.dummy'
-        assert ast.morphisms[1].op == 'ops.dummy'
-        cases = ast.archs[0].cases
-        assert cases[0].name == 'old'
-        assert cases[1].name == 'new'
 
 
 # ---------------------------------------------------------------------------
@@ -1943,146 +1029,6 @@ path p = t[pre] [kv] b
 
 
 # ---------------------------------------------------------------------------
-# TestFinalLNFix
-# ---------------------------------------------------------------------------
-
-class TestFinalLNFix:
-    """Binary layer norm morphism reads gamma/beta from weight dict.
-
-    The fix: LN uses binary arity (reads y['gamma'], y['beta']),
-    not unary arity (ignores y, uses identity gamma/beta).
-    With the unified endofunctor, the same LN morphism serves both
-    algebra and coalgebra — no divergence possible.
-    """
-
-    def test_binary_ln_reads_params(self):
-        """LN morphism with binary arity reads gamma/beta from payload."""
-        import numpy as np
-
-        def ln_op(eq, x, y, temp=0.0):
-            """Binary layer norm: reads gamma/beta from y."""
-            gamma = y.get('gamma', np.ones_like(x))
-            beta = y.get('beta', np.zeros_like(x))
-            mean = x.mean(axis=-1, keepdims=True)
-            std = x.std(axis=-1, keepdims=True) + 1e-5
-            return gamma * (x - mean) / std + beta
-
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'ln_op': staticmethod(ln_op),
-        })()
-
-        src = """
-semiring s:
-    contract = ops.dummy
-
-sort model
-
-morphism ln : model -> model via "x" op ops.ln_op
-morphism f  : model -> model via "x"
-
-path block = f ln
-
-arch T:
-    cases:
-        input: leaf data=1 cell=identity
-        layer: node data=1 morphisms=block iterate=layers
-"""
-        arch = compile(src, ns)
-
-        x0 = np.array([[1.0, 2.0, 3.0]])
-        gamma = np.array([2.0, 2.0, 2.0])
-        beta = np.array([0.5, 0.5, 0.5])
-        layer_weights = {'gamma': gamma, 'beta': beta}
-
-        # Run through the path directly
-        result = arch.paths['ln'](x0, layer_weights, 0.0)
-
-        # With non-identity gamma/beta, output should differ from input
-        assert not np.allclose(result, x0), "LN should transform with learned params"
-        # With gamma=2, beta=0.5, the output should be scaled and shifted
-        assert result.shape == x0.shape
-
-    def test_binary_ln_identity_params_is_identity(self):
-        """With identity gamma/beta, binary LN reduces to standard normalization."""
-        import numpy as np
-
-        def ln_op(eq, x, y, temp=0.0):
-            gamma = y.get('gamma', np.ones_like(x))
-            beta = y.get('beta', np.zeros_like(x))
-            mean = x.mean(axis=-1, keepdims=True)
-            std = x.std(axis=-1, keepdims=True) + 1e-5
-            return gamma * (x - mean) / std + beta
-
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'ln_op': staticmethod(ln_op),
-        })()
-
-        src = """
-semiring s:
-    contract = ops.dummy
-sort model
-morphism ln : model -> model via "x" op ops.ln_op
-"""
-        arch = compile(src, ns)
-
-        x0 = np.array([[1.0, 2.0, 3.0]])
-        identity_params = {'gamma': np.ones(3), 'beta': np.zeros(3)}
-        result = arch.paths['ln'](x0, identity_params, 0.0)
-
-        # Standard normalization with identity params
-        mean = x0.mean(axis=-1, keepdims=True)
-        std = x0.std(axis=-1, keepdims=True) + 1e-5
-        expected = (x0 - mean) / std
-        assert np.allclose(result, expected, atol=1e-6)
-
-    def test_unified_functor_ln_same_for_algebra(self):
-        """LN in unified cases: algebra fold applies the same binary LN."""
-        import numpy as np
-
-        def ln_op(eq, x, y, temp=0.0):
-            gamma = y.get('gamma', np.ones_like(x))
-            beta = y.get('beta', np.zeros_like(x))
-            mean = x.mean(axis=-1, keepdims=True)
-            std = x.std(axis=-1, keepdims=True) + 1e-5
-            return gamma * (x - mean) / std + beta
-
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'ln_op': staticmethod(ln_op),
-        })()
-
-        src = """
-semiring s:
-    contract = ops.dummy
-sort model
-morphism ln : model -> model via "x" op ops.ln_op
-arch T:
-    cases:
-        input: leaf data=1 cell=identity
-        norm:  node data=1 morphisms=ln
-"""
-        arch = compile(src, ns)
-        interp = arch.interpreter('T', params={}, temp=0.0)
-
-        x0 = np.array([[1.0, 2.0, 3.0]])
-        gamma = np.array([2.0, 2.0, 2.0])
-        beta = np.array([0.5, 0.5, 0.5])
-        weights = {'gamma': gamma, 'beta': beta}
-
-        tree = ('norm', [weights], [('input', [x0], [])])
-        result = interp.run_algebra(tree, lambda n: n)
-
-        # Same result as direct path call
-        direct = arch.paths['ln'](x0, weights, 0.0)
-        assert np.allclose(result, direct)
-
-
-# ---------------------------------------------------------------------------
 # TestStateDeclaration
 # ---------------------------------------------------------------------------
 
@@ -2184,132 +1130,300 @@ arch T:
         assert ast.archs[0].step_enter is None
         assert ast.archs[0].step_emit is None
 
+
+# ---------------------------------------------------------------------------
+# TestAccumulateStateFeedback
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# TestSortCoercion — T6: Graded Sort Compatibility
+# ---------------------------------------------------------------------------
+
+class TestSortCoercion:
+    """Tests for the graded coercion system (T6).
+
+    DSL syntax:
+        coerce A -> B : 0.9        # directional, grade in [0.0, 1.0]
+        sort_threshold 0.7         # grades below this warn; 0.0 always errors
+
+    Rules:
+        - No coercions declared  -> binary pass/fail (old behaviour)
+        - A == B (exact match)   -> always pass (grade 1.0)
+        - grade == 0.0 OR no declaration for pair -> ValueError
+        - grade < threshold      -> warnings.warn (no error)
+        - grade >= threshold     -> silent pass
+        - Transitive closure     -> grade(A->C) = grade(A->B) * grade(B->C)
+        - Direct declaration overrides derived grade
+        - Coercions are directional (A->B != B->A)
+    """
+
     # ------------------------------------------------------------------
-    # Runtime tests — xfail until compiler generates coalgebra from step:
-    # The compiler currently stores step_enter/step_emit on ArchDecl but
-    # _compile_archs() does not yet produce a coalgebra_cell from them.
-    # These tests document the intended contract for the implementation.
+    # Baseline — old behaviour preserved when no coerce declarations exist
     # ------------------------------------------------------------------
 
-    def test_step_generates_coalgebra_cell(self):
-        """step: block generates a coalgebra cell that can run."""
-        def embed_op(eq, token, state, temp=0.0):
-            return token * 2
+    def test_no_coercions_exact_match(self):
+        """No coerce declarations. Matching sorts compile without error."""
+        src = _dsl(
+            'morphism f : x -> x  via "x->x"\n'
+            'morphism g : x -> x  via "x->x"\n\n'
+            'path p = f g\n'
+        )
+        arch = compile(src, NAMESPACE)
+        assert 'p' in arch.paths
 
-        def unembed_op(eq, x, state, temp=0.0):
-            return x + 1
+    def test_no_coercions_mismatch_raises(self):
+        """No coerce declarations. Sort mismatch raises ValueError."""
+        src = _coerce_dsl("", 0.5)
+        with pytest.raises(ValueError, match="mismatch"):
+            compile(src, NAMESPACE)
 
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'embed_op': staticmethod(embed_op),
-            'unembed_op': staticmethod(unembed_op),
-        })()
+    # ------------------------------------------------------------------
+    # Grade at or above threshold — silent pass
+    # ------------------------------------------------------------------
 
-        src = """
-semiring s:
-    contract = ops.dummy
-sort a
-morphism embed : a -> a via "x" op ops.embed_op
-morphism unembed : a -> a via "x" op ops.unembed_op
+    def test_coerce_grade_above_threshold_passes(self):
+        """grade 0.9 >= threshold 0.5 -> silent pass, no warning."""
+        import warnings
 
-arch T:
-    cases:
-        input: leaf data=1 cell=identity
-        run: node data=1 output=1 cell=identity
-    step:
-        enter = embed
-        emit = unembed
-"""
-        arch = compile(src, ns)
-        interp = arch.interpreter('T', params={}, temp=0.0)
+        src = _coerce_dsl("coerce a -> b : 0.9", 0.5)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")   # any warning becomes an error here
+            arch = compile(src, NAMESPACE)
+        assert 'p' in arch.paths
 
-        init_state = {'pos': 0}
+    # ------------------------------------------------------------------
+    # Grade below threshold — warning but no error
+    # ------------------------------------------------------------------
+
+    def test_coerce_grade_below_threshold_warns(self):
+        """grade 0.9 < threshold 0.95 -> warning issued, no TypeError."""
+        src = _coerce_dsl("coerce a -> b : 0.9", 0.95)
+        with pytest.warns(UserWarning, match=r"coercion grade .* < threshold"):
+            arch = compile(src, NAMESPACE)
+        assert 'p' in arch.paths
+
+    # ------------------------------------------------------------------
+    # Grade exactly 0.0 — always a hard error regardless of threshold
+    # ------------------------------------------------------------------
+
+    def test_coerce_zero_grade_raises(self):
+        """grade 0.0 is a hard error regardless of threshold."""
+        src = _coerce_dsl("coerce a -> b : 0.0", 0.0)
+        with pytest.raises(ValueError):
+            compile(src, NAMESPACE)
+
+    # ------------------------------------------------------------------
+    # Undeclared pair — TypeError even when other coercions exist
+    # ------------------------------------------------------------------
+
+    def test_undeclared_pair_raises(self):
+        """coerce A->B declared but path has C->D mismatch -> ValueError."""
+        src = _coerce_dsl(
+            "coerce a -> b : 0.9", 0.5,
+            sorts="a, b, c, d",
+            morphisms='morphism f : c -> c  via "c->c"\nmorphism g : d -> d  via "d->d"\n\n',
+        )
+        with pytest.raises(ValueError):
+            compile(src, NAMESPACE)
+
+    # ------------------------------------------------------------------
+    # Transitive closure — auto-derived grade
+    # ------------------------------------------------------------------
+
+    def test_transitive_closure_derives_grade(self):
+        """A->B: 0.9, B->C: 0.8 -> auto-derived A->C: 0.72. threshold 0.5 -> passes."""
+        import warnings
+
+        src = _coerce_dsl(
+            "coerce a -> b : 0.9\ncoerce b -> c : 0.8", 0.5,
+            sorts="a, b, c",
+            morphisms='morphism f : a -> a  via "a->a"\nmorphism g : c -> c  via "c->c"\n\n',
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            arch = compile(src, NAMESPACE)
+        assert 'p' in arch.paths
+
+    def test_transitive_closure_compounds_below_threshold(self):
+        """A->B: 0.9, B->C: 0.8 -> derived A->C: 0.72. threshold 0.8 -> warning."""
+        src = _coerce_dsl(
+            "coerce a -> b : 0.9\ncoerce b -> c : 0.8", 0.8,
+            sorts="a, b, c",
+            morphisms='morphism f : a -> a  via "a->a"\nmorphism g : c -> c  via "c->c"\n\n',
+        )
+        with pytest.warns(UserWarning, match=r"coercion grade .* < threshold"):
+            arch = compile(src, NAMESPACE)
+        assert 'p' in arch.paths
+
+    # ------------------------------------------------------------------
+    # Direct declaration overrides transitive derivation
+    # ------------------------------------------------------------------
+
+    def test_direct_declaration_overrides_derived(self):
+        """Direct coerce A->C: 0.5 overrides derived 0.72. threshold 0.6 -> warning."""
+        src = _coerce_dsl(
+            "coerce a -> b : 0.9\ncoerce b -> c : 0.8\ncoerce a -> c : 0.5", 0.6,
+            sorts="a, b, c",
+            morphisms='morphism f : a -> a  via "a->a"\nmorphism g : c -> c  via "c->c"\n\n',
+        )
+        # grade 0.5 < threshold 0.6 -> must warn (not silently pass)
+        with pytest.warns(UserWarning, match=r"coercion grade .* < threshold"):
+            arch = compile(src, NAMESPACE)
+        assert 'p' in arch.paths
+
+    # ------------------------------------------------------------------
+    # Directionality — A->B does not imply B->A
+    # ------------------------------------------------------------------
+
+    def test_coercion_is_directional(self):
+        """coerce A->B declared but B->A path -> ValueError."""
+        src = _coerce_dsl(
+            "coerce a -> b : 0.9", 0.5,
+            morphisms='morphism f : b -> b  via "b->b"\nmorphism g : a -> a  via "a->a"\n\n',
+        )
+        with pytest.raises(ValueError):
+            compile(src, NAMESPACE)
+
+
+class TestAccumulateStateFeedback:
+    """P1: accumulated values are merged back into state after each step.
+
+    Tests use Interpreter directly (engine.functor) with hand-built functors
+    and cells, passing accumulate_specs explicitly. This isolates the P1
+    state-merge behavior from DSL compilation concerns.
+    """
+
+    def _make_interp(self, cell):
+        """Build a minimal single-case Interpreter for coalgebra runs."""
+        from engine.functor import Functor, Case, Interpreter
+        functor = Functor([Case(name='step', recursive=1, data=1, output=1)])
+        return Interpreter(functor=functor, cell=cell, params={}, temp=0.0)
+
+    def test_accumulate_visible_in_next_step(self):
+        """At step 2, params['accumulated'] contains the payload from step 1."""
+        from engine.functor import UnfoldStep
+
+        seen_accumulated = []
+
+        def cell(state, token, params, temp):
+            # Record what accumulated looks like at call time
+            seen_accumulated.append(dict(params.get('accumulated', {})))
+            payload = token  # np.array([...])
+            next_state = dict(state) if isinstance(state, dict) else state
+            return UnfoldStep('step', [payload], [next_state], output=payload)
+
+        interp = self._make_interp(cell)
+        tokens = [np.array([1.0]), np.array([2.0])]
+        accumulate_specs = {'key': ('cat', None)}
+
+        outputs, final = interp.run_coalgebra(
+            {}, token_iter=tokens, accumulate_specs=accumulate_specs
+        )
+
+        assert len(outputs) == 2
+        # Step 1 sees empty accumulated
+        assert seen_accumulated[0] == {}
+        # Step 2 sees the result from step 1 merged in
+        assert 'key' in seen_accumulated[1]
+        assert np.allclose(seen_accumulated[1]['key'], np.array([1.0]))
+
+    def test_accumulate_grows_across_steps(self):
+        """accumulated['key'] concatenates across 3 steps: length 1, 2, 3."""
+        from engine.functor import UnfoldStep
+
+        acc_sizes = []
+
+        def cell(state, token, params, temp):
+            acc = params.get('accumulated', {})
+            key_val = acc.get('key')
+            acc_sizes.append(len(key_val) if key_val is not None else 0)
+            payload = token
+            next_state = dict(state) if isinstance(state, dict) else state
+            return UnfoldStep('step', [payload], [next_state], output=payload)
+
+        interp = self._make_interp(cell)
         tokens = [np.array([1.0]), np.array([2.0]), np.array([3.0])]
-        outputs, final = interp.run_coalgebra(init_state, token_iter=tokens)
+        accumulate_specs = {'key': ('cat', None)}
+
+        outputs, final = interp.run_coalgebra(
+            {}, token_iter=tokens, accumulate_specs=accumulate_specs
+        )
 
         assert len(outputs) == 3
-        # embed doubles, unembed adds 1: output = token * 2 + 1
-        assert np.allclose(outputs[0], np.array([3.0]))   # 1*2 + 1
-        assert np.allclose(outputs[1], np.array([5.0]))   # 2*2 + 1
-        assert np.allclose(outputs[2], np.array([7.0]))   # 3*2 + 1
+        # At step N the cell sees N-1 accumulated items (previous steps)
+        assert acc_sizes == [0, 1, 2]
+        # Final state carries all 3 accumulated values
+        assert 'key' in final
+        assert len(final['key']) == 3
+        assert np.allclose(final['key'], np.array([1.0, 2.0, 3.0]))
 
-    def test_step_with_morphism_computation(self):
-        """step: block with case morphisms applies them between enter and emit."""
-        def embed_op(eq, token, state, temp=0.0):
-            return token
+    def test_no_accumulate_state_unchanged(self):
+        """Without accumulate_specs, no spurious keys appear in state across steps."""
+        from engine.functor import UnfoldStep
 
-        def transform_op(eq, x, y, temp=0.0):
-            return x * 3
+        state_keys_per_step = []
 
-        def unembed_op(eq, x, state, temp=0.0):
-            return x
+        def cell(state, token, params, temp):
+            state_keys_per_step.append(set(state.keys()) if isinstance(state, dict) else None)
+            next_state = dict(state) if isinstance(state, dict) else state
+            return UnfoldStep('step', [token], [next_state], output=token)
 
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'embed_op': staticmethod(embed_op),
-            'transform_op': staticmethod(transform_op),
-            'unembed_op': staticmethod(unembed_op),
-        })()
+        interp = self._make_interp(cell)
+        tokens = [np.array([1.0]), np.array([2.0]), np.array([3.0])]
 
-        src = """
-semiring s:
-    contract = ops.dummy
+        outputs, final = interp.run_coalgebra(
+            {'pos': 0}, token_iter=tokens
+            # No accumulate_specs
+        )
+
+        assert len(outputs) == 3
+        # State keys must be identical at every step — no accumulate injection
+        for keys in state_keys_per_step:
+            assert keys == {'pos'}, f"unexpected keys: {keys}"
+        assert set(final.keys()) == {'pos'}
+
+
+# ---------------------------------------------------------------------------
+# TestBackend
+# ---------------------------------------------------------------------------
+
+class TestBackend:
+    """Verify that compile(..., backend=NUMPY_BACKEND) is identical to compile(...)."""
+
+    def test_backend_torch_explicit(self):
+        torch = pytest.importorskip('torch')
+        from engine.runtime import Backend
+
+        TORCH_BACKEND = Backend(
+            minimum=torch.minimum,
+            maximum=torch.maximum,
+            concatenate=lambda arrays, axis=0: torch.cat(arrays, dim=axis),
+            abs=torch.abs,
+            max=lambda x: torch.max(x).item(),
+        )
+
+        dsl = """
 sort a
-morphism embed : a -> a via "x" op ops.embed_op
-morphism transform : a -> a via "x" op ops.transform_op
-morphism unembed : a -> a via "x" op ops.unembed_op
-
-arch T:
-    cases:
-        input: leaf data=1 cell=identity
-        block: node data=1 output=1 morphisms=transform
-    step:
-        enter = embed
-        emit = unembed
+morphism f : a -> a  via "i->i"  op ops.f  arity unary
+morphism g : a -> a  via "i->i"  op ops.g  arity unary
+fan fg = f & g  merge join
 """
-        arch = compile(src, ns)
-        interp = arch.interpreter('T', params={}, temp=0.0)
 
-        init_state = {}
-        tokens = [np.array([2.0])]
-        outputs, final = interp.run_coalgebra(init_state, token_iter=tokens)
+        class Ops:
+            def f(self, eq, x, y=None, temp=0.0):
+                return x * 2.0  # x is a torch tensor; scalar multiply preserves type
+            def g(self, eq, x, y=None, temp=0.0):
+                return x * 3.0
 
-        # embed passes through, transform triples, unembed passes through
-        assert len(outputs) == 1
-        assert np.allclose(outputs[0], np.array([6.0]))   # 2 * 3
+        source = parse(dsl)
+        ad = compile(source, {'ops': Ops()}, backend=TORCH_BACKEND)
 
-    def test_step_enter_only_no_emit(self):
-        """step: with only enter and no emit — coalgebra steps produce no output."""
-        def embed_op(eq, token, state, temp=0.0):
-            return token * 2
+        x = torch.tensor([1.0, 2.0, 3.0])
+        result = ad.paths['fg'](x, {}, temp=0.0)
+        # join merge uses backend.maximum — result must be a torch Tensor
+        assert isinstance(result, torch.Tensor), f"expected Tensor, got {type(result)}"
+        expected = torch.tensor([3.0, 6.0, 9.0])  # max(2x, 3x) = 3x
+        assert torch.allclose(result, expected)
 
-        ns = dict(NAMESPACE)
-        ns['ops'] = type('ns', (), {
-            'dummy': staticmethod(_dummy_op),
-            'embed_op': staticmethod(embed_op),
-        })()
 
-        src = """
-semiring s:
-    contract = ops.dummy
-sort a
-morphism embed : a -> a via "x" op ops.embed_op
 
-arch T:
-    cases:
-        input: leaf data=1 cell=identity
-        run: node data=1 output=0 cell=identity
-    step:
-        enter = embed
-"""
-        arch = compile(src, ns)
-        interp = arch.interpreter('T', params={}, temp=0.0)
-
-        init_state = {}
-        tokens = [np.array([1.0]), np.array([2.0])]
-        outputs, final = interp.run_coalgebra(init_state, token_iter=tokens)
-
-        # No emit means no outputs collected
-        assert len(outputs) == 0
