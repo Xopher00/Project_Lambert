@@ -98,13 +98,13 @@ def case(name: str, recursive: int, data: int, output: int = 0) -> TTerm:
     ])
 
 
-def arch(name: str, algebra_cases: list[TTerm] | None = None,
+def arch(name: str, cases: list[TTerm] | None = None,
          observer_convergence: str | None = None,
          observer_loss: str | None = None) -> TTerm:
     """Construct a typed arch term."""
     fields = [field(_NAME, string(name))]
-    if algebra_cases is not None:
-        fields.append(field(_ALGEBRA_CASES, list_(algebra_cases)))
+    if cases is not None:
+        fields.append(field(_ALGEBRA_CASES, list_(cases)))
     if observer_convergence:
         fields.append(field(_OBSERVER_CONVERGENCE, string(observer_convergence)))
     if observer_loss:

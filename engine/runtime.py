@@ -36,6 +36,51 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Callable
+import numpy as _np
+
+
+# ---------------------------------------------------------------------------
+# Backend — pluggable array operations
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Backend:
+    """Array operation backend. Default is numpy; swap for torch or others."""
+    minimum:     Callable   # elementwise min of two arrays
+    maximum:     Callable   # elementwise max of two arrays
+    concatenate: Callable   # concatenate sequence of arrays along axis
+    abs:         Callable   # elementwise absolute value
+    max:         Callable   # reduce-max (returns scalar or array)
+
+
+NUMPY_BACKEND = Backend(
+    minimum=_np.minimum,
+    maximum=_np.maximum,
+    concatenate=_np.concatenate,
+    abs=_np.abs,
+    max=_np.max,
+)
+
+
+# ---------------------------------------------------------------------------
+# CompiledMorphism — named callable wrapper for better tracebacks
+# ---------------------------------------------------------------------------
+
+class CompiledMorphism:
+    __slots__ = ('_fn', 'name', 'equation')
+
+    def __init__(self, fn: Callable, name: str, equation: str = ''):
+        self._fn = fn
+        self.name = name
+        self.equation = equation
+
+    def __call__(self, x, y, temp=0.0):
+        return self._fn(x, y, temp)
+
+    def __repr__(self):
+        if self.equation:
+            return f"Morphism({self.name!r}, eq={self.equation!r})"
+        return f"Morphism({self.name!r})"
 
 
 # ---------------------------------------------------------------------------
@@ -81,17 +126,19 @@ class MorphismSpec:
 # Core functions
 # ---------------------------------------------------------------------------
 
-def compile_morphism(spec: MorphismSpec) -> Callable:
+def compile_morphism(spec: MorphismSpec) -> CompiledMorphism:
     """Compile a MorphismSpec into a ``(x, y, temp) -> result`` callable."""
     compiled_eq = spec.equation_compiler(spec.equation)
     op, transform_fn = spec.op, spec.transform
     if spec.arity == 'unary':
-        return lambda x, _, temp: op(compiled_eq, x, temp=temp)
-    if spec.arity == 'pointwise':
-        return lambda x, y, temp: op(compiled_eq, x, y, temp=temp)
-    if spec.arity == 'ternary':
-        return lambda x, y, temp: op(compiled_eq, x, y[0], y[1], temp=temp)
-    return lambda x, y, temp: op(compiled_eq, *transform_fn(x, y), temp=temp)
+        fn = lambda x, _, temp: op(compiled_eq, x, temp=temp)
+    elif spec.arity == 'pointwise':
+        fn = lambda x, y, temp: op(compiled_eq, x, y, temp=temp)
+    elif spec.arity == 'ternary':
+        fn = lambda x, y, temp: op(compiled_eq, x, y[0], y[1], temp=temp)
+    else:
+        fn = lambda x, y, temp: op(compiled_eq, *transform_fn(x, y), temp=temp)
+    return CompiledMorphism(fn, name=spec.name, equation=spec.equation)
 
 
 def chain(callables: list[Callable]) -> Callable:
@@ -107,12 +154,13 @@ def chain(callables: list[Callable]) -> Callable:
     """
     if len(callables) == 1:
         return callables[0]
+    names = [getattr(c, 'name', repr(c)) for c in callables]
     def prog(x, y, temp, fns=callables):
         z = x
         for f in fns:
             z = f(z, y, temp)
         return z
-    return prog
+    return CompiledMorphism(prog, name=f"chain({' >> '.join(names)})")
 
 
 def chain_with_augments(steps: list[tuple[str, Callable]]) -> Callable:
@@ -127,6 +175,7 @@ def chain_with_augments(steps: list[tuple[str, Callable]]) -> Callable:
     quantale-enriched two-variable adjunctions. *Applied Categorical Structures*,
     29, 823–858.  cite{shen2021}
     """
+    names = [getattr(fn, 'name', repr(fn)) for _, fn in steps]
     def prog(x, y, temp, _steps=steps):
         z = x
         y_cur = y
@@ -137,7 +186,7 @@ def chain_with_augments(steps: list[tuple[str, Callable]]) -> Callable:
             else:
                 z = fn(z, y_cur, temp)
         return z
-    return prog
+    return CompiledMorphism(prog, name=f"chain({' >> '.join(names)})")
 
 
 def fan(branches: dict[str, Callable], merge: Callable) -> Callable:
@@ -150,9 +199,10 @@ def fan(branches: dict[str, Callable], merge: Callable) -> Callable:
     Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
     *Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
     """
+    branch_names = list(branches.keys())
     def prog(x, y, temp, branches=branches, merge=merge):
         return merge({name: fn(x, y, temp) for name, fn in branches.items()})
-    return prog
+    return CompiledMorphism(prog, name=f"fan({' & '.join(branch_names)})")
 
 
 def check_sorts(
@@ -186,6 +236,70 @@ def check_sorts(
                 f"{names[i]!r} expects {curr_src!r}"
             )
     return None
+
+
+def _close_coercions(coercions) -> dict:
+    """Compute transitive closure of sort coercions via Floyd-Warshall.
+
+    Input: list[SortCoercion]
+    Returns: dict[(src, tgt), grade] — closed under composition (min, *, 1.0).
+
+    Direct declarations take precedence: transitive paths only fill in pairs
+    that were not explicitly declared.
+    """
+    grades: dict[tuple, float] = {}
+    direct: set = set()
+    for c in coercions:
+        grades[(c.src, c.tgt)] = c.grade
+        direct.add((c.src, c.tgt))
+
+    sorts = {s for c in coercions for s in (c.src, c.tgt)}
+    for k in sorts:
+        for i in sorts:
+            for j in sorts:
+                if (i, j) in direct:
+                    continue  # direct declaration wins; do not overwrite
+                via = grades.get((i, k), 0.0) * grades.get((k, j), 0.0)
+                if via > grades.get((i, j), 0.0):
+                    grades[(i, j)] = via
+    return grades
+
+
+def grade_sorts(
+    morphism_specs: dict[str, MorphismSpec],
+    names: list[str],
+    sort_types: dict[str, object],
+    coercion_grades: dict,
+    threshold: float = 1.0,
+) -> tuple[list[str], list[str]]:
+    """Check sort compatibility using graded coercions.
+
+    Returns (errors, warnings).
+    Hard errors: adjacent sorts with no declared coercion (grade 0.0).
+    Warnings: adjacent sorts whose coercion grade is below threshold.
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+    for i in range(1, len(names)):
+        prev_tgt = morphism_specs[names[i - 1]].tgt_sort
+        curr_src = morphism_specs[names[i]].src_sort
+        if prev_tgt == curr_src:
+            continue
+        prev_type = sort_types.get(prev_tgt)
+        curr_type = sort_types.get(curr_src)
+        if prev_type is not None and curr_type is not None and prev_type == curr_type:
+            continue
+        grade = coercion_grades.get((prev_tgt, curr_src), 0.0)
+        msg = (
+            f"Type mismatch at step {i}: "
+            f"{names[i - 1]!r} outputs {prev_tgt!r} but "
+            f"{names[i]!r} expects {curr_src!r}"
+        )
+        if grade == 0.0:
+            errors.append(msg)
+        elif grade < threshold:
+            warnings.append(f"{msg} (coercion grade {grade:.3f} < threshold {threshold:.3f})")
+    return errors, warnings
 
 
 def explain(path_name: str, names: list[str],

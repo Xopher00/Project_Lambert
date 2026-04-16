@@ -33,19 +33,55 @@ arXiv:2510.12269.  cite{domingos2025}
 from __future__ import annotations
 
 import re as _re
+from dataclasses import dataclass, field as dc_field
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 from functools import reduce
 
-from .runtime import MorphismSpec, compile_morphism, chain, chain_with_augments, fan, check_sorts
+from .runtime import MorphismSpec, Backend, NUMPY_BACKEND, compile_morphism, chain, chain_with_augments, fan, check_sorts, _close_coercions, grade_sorts
 from .functor import Case, Functor
 from .decl import DSLSource
 from .arch import ArchDef, _ArchData
 from .parser import parse
 import warnings
 
-from .sorts import morphism_to_term, path_to_term, fan_to_term, functor_to_union_type, arch_to_term, sort_to_type, sort_types_from_defs, resolve as _resolve
+from .sorts import morphism_to_term, path_to_term, fan_to_term, functor_to_union_type, arch_to_term, sort_to_type, sort_types_from_defs
+from .utils import resolve as _resolve
 from .primitives import register_tensor_primitives
+
+
+# ---------------------------------------------------------------------------
+# Compilation context
+# ---------------------------------------------------------------------------
+
+@dataclass
+class CompilationContext:
+    ast: Any          # DSLSource
+    namespace: dict
+    backend: Backend = dc_field(default_factory=lambda: NUMPY_BACKEND)
+    # Semiring resolution
+    semiring_contract: dict = dc_field(default_factory=dict)
+    semiring_compiler: dict = dc_field(default_factory=dict)
+    semiring_arity: dict = dc_field(default_factory=dict)
+    morphism_to_semiring: dict = dc_field(default_factory=dict)
+    # Compiled callables and specs
+    compiled: dict = dc_field(default_factory=dict)   # name -> callable
+    specs: dict = dc_field(default_factory=dict)      # name -> MorphismSpec
+    equations: dict = dc_field(default_factory=dict)  # name -> str
+    # Template registry and sort info
+    templates: dict = dc_field(default_factory=dict)
+    sort_types: dict = dc_field(default_factory=dict)
+    coercion_grades: Any = None
+    # Hydra terms and types (populated after compilation)
+    morphism_terms: dict = dc_field(default_factory=dict)
+    path_morphisms: dict = dc_field(default_factory=dict)
+    path_terms: dict = dc_field(default_factory=dict)
+    fan_terms: dict = dc_field(default_factory=dict)
+    arch_terms: dict = dc_field(default_factory=dict)
+    arch_types: dict = dc_field(default_factory=dict)
+    hydra_primitives: Any = None
+    errors: list = dc_field(default_factory=list)
+    warnings: list = dc_field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -271,6 +307,7 @@ def _compile_paths(
     namespace: dict,
     semiring_arity: dict,
     sort_types: dict | None = None,
+    coercion_grades: dict | None = None,
 ) -> dict[str, list[str]]:
     """Validate and compile paths.
 
@@ -291,9 +328,19 @@ def _compile_paths(
                          if not (m.startswith('[') and m.endswith(']'))
                          and m in morphism_specs]
         # Sort validation
-        err = check_sorts(morphism_specs, sort_morphisms, sort_types)
-        if err:
-            raise TypeError(f"Path '{path.name}': {err}")
+        if coercion_grades is not None:
+            errs, warns = grade_sorts(
+                morphism_specs, sort_morphisms, sort_types or {},
+                coercion_grades, ast.sort_threshold,
+            )
+            for w in warns:
+                warnings.warn(f"Path '{path.name}': {w}", stacklevel=4)
+            if errs:
+                raise TypeError(f"Path '{path.name}': {errs[0]}")
+        else:
+            err = check_sorts(morphism_specs, sort_morphisms, sort_types)
+            if err:
+                raise TypeError(f"Path '{path.name}': {err}")
         # Semiring validation
         used = {morphism_to_semiring[m] for m in sort_morphisms if m in morphism_to_semiring}
         if len(used) > 1 and '_bridge' not in used:
@@ -338,11 +385,14 @@ def _compile_paths(
     return path_morphisms
 
 
-def _compile_fans(ast: DSLSource, compiled: dict, namespace: dict) -> None:
+def _compile_fans(ast: DSLSource, compiled: dict, namespace: dict,
+                  backend: "Backend" = None) -> None:
     """Compile fans.
 
     Mutates compiled in-place.
     """
+    if backend is None:
+        backend = NUMPY_BACKEND
     for f in ast.fans:
         branch_callables = {}
         for b in f.branches:
@@ -354,11 +404,9 @@ def _compile_fans(ast: DSLSource, compiled: dict, namespace: dict) -> None:
         if f.merge == 'dict':
             merge_fn = lambda results: results
         elif f.merge == 'meet':
-            import numpy as _np
-            merge_fn = lambda results, _np=_np: reduce(_np.minimum, results.values())
+            merge_fn = lambda results, _be=backend: reduce(_be.minimum, results.values())
         elif f.merge == 'join':
-            import numpy as _np
-            merge_fn = lambda results, _np=_np: reduce(_np.maximum, results.values())
+            merge_fn = lambda results, _be=backend: reduce(_be.maximum, results.values())
         else:
             merge_fn = _resolve(f.merge, namespace)
         compiled[f.name] = fan(branch_callables, merge_fn)
@@ -408,7 +456,7 @@ def _build_functor_and_cells(
     Raises ValueError for semantic violations:
     - case must not specify both 'cell' and 'morphisms'
     """
-    case_list = arch_decl.cases or arch_decl.algebra_cases or []
+    case_list = arch_decl.cases or []
 
     # Semantic validation: cell= and morphisms= are mutually exclusive
     for cd in case_list:
@@ -515,18 +563,22 @@ def _compile_archs(
     ast: DSLSource,
     compiled: dict,
     namespace: dict,
-    accumulate_legs: dict,
+    accumulate_specs: dict,
+    backend: "Backend" = None,
 ) -> dict[str, _ArchData]:
     """Compile arch declarations.
 
     Returns compiled_archs dict.
     """
+    if backend is None:
+        backend = NUMPY_BACKEND
     compiled_archs: dict[str, _ArchData] = {}
     for arch_decl in ast.archs:
         data = _ArchData()
+        data.backend = backend
 
         # Centralize the cases fallback once per arch
-        case_list = arch_decl.cases or arch_decl.algebra_cases or []
+        case_list = arch_decl.cases or []
 
         # Resolve the unified endofunctor F and algebra cell
         if case_list:
@@ -534,9 +586,9 @@ def _compile_archs(
             data.functor = functor
             data.algebra_cell = alg_cell
 
-        # Propagate pre-computed accumulate_legs
-        if accumulate_legs:
-            data.accumulate_legs = accumulate_legs
+        # Propagate pre-computed accumulate_specs
+        if accumulate_specs:
+            data.accumulate_specs = accumulate_specs
 
         # Detect iterate groups from unified cases
         if case_list:
@@ -575,17 +627,25 @@ def _compile_archs(
                     f"Arch '{arch_decl.name}': step emit morphism "
                     f"'{arch_decl.step_emit}' not found"
                 )
+            if arch_decl.step_compute and arch_decl.step_compute not in compiled:
+                raise ValueError(
+                    f"Arch '{arch_decl.name}': step compute morphism "
+                    f"'{arch_decl.step_compute}' not found"
+                )
             enter_fn = compiled.get(arch_decl.step_enter) if arch_decl.step_enter else None
             emit_fn = compiled.get(arch_decl.step_emit) if arch_decl.step_emit else None
 
-            # Find the main computation path from case morphisms
-            case_morphism_fn = None
-            if case_list:
-                for cd in case_list:
-                    if cd.morphisms:
-                        case_morphism_fn = chain([compiled[m] for m in cd.morphisms]) \
-                            if len(cd.morphisms) > 1 else compiled[cd.morphisms[0]]
-                        break
+            # Find the main computation path: explicit step_compute overrides first-case heuristic
+            if arch_decl.step_compute:
+                case_morphism_fn = compiled[arch_decl.step_compute]
+            else:
+                case_morphism_fn = None
+                if case_list:
+                    for cd in case_list:
+                        if cd.morphisms:
+                            case_morphism_fn = chain([compiled[m] for m in cd.morphisms]) \
+                                if len(cd.morphisms) > 1 else compiled[cd.morphisms[0]]
+                            break
 
             # Find the first recursive case name for the coalgebra step
             step_case_name = None
@@ -605,10 +665,57 @@ def _compile_archs(
 
 
 # ---------------------------------------------------------------------------
+# Name validation pass
+# ---------------------------------------------------------------------------
+
+def _validate_names(ctx: CompilationContext) -> None:
+    """Check that all name references in arch blocks, fans, and step fields resolve to declared names."""
+    ast = ctx.ast
+    declared: set[str] = set()
+    declared.update(m.name for m in ast.morphisms)
+    declared.update(p.name for p in ast.paths)
+    declared.update(f.name for f in ast.fans)
+
+    for arch in ast.archs:
+        for case in (arch.cases or []):
+            if case.morphisms:
+                for m in case.morphisms:
+                    if m not in declared:
+                        ctx.errors.append(
+                            f"arch '{arch.name}' case '{case.name}': "
+                            f"morphism/path '{m}' not declared"
+                        )
+        for attr in ('step_enter', 'step_emit', 'step_compute'):
+            ref = getattr(arch, attr, None)
+            if ref and ref not in declared:
+                ctx.errors.append(
+                    f"arch '{arch.name}' step '{attr}': '{ref}' not declared"
+                )
+        if arch.observer_convergence and arch.observer_convergence not in declared:
+            ctx.errors.append(
+                f"arch '{arch.name}' observer convergence: "
+                f"'{arch.observer_convergence}' not declared"
+            )
+        if arch.observer_loss and arch.observer_loss not in declared:
+            ctx.errors.append(
+                f"arch '{arch.name}' observer loss: "
+                f"'{arch.observer_loss}' not declared"
+            )
+
+    for fan in ast.fans:
+        for branch in (fan.branches or []):
+            if branch not in declared:
+                ctx.errors.append(
+                    f"fan '{fan.name}' branch: '{branch}' is not a declared morphism or path"
+                )
+
+
+# ---------------------------------------------------------------------------
 # Top-level compiler
 # ---------------------------------------------------------------------------
 
-def compile(source: str | Path | DSLSource, namespace: dict) -> ArchDef:
+def compile(source: str | Path | DSLSource, namespace: dict,
+            backend: Backend = None) -> ArchDef:
     """
     Compile DSL source into an ArchDef.
 
@@ -617,6 +724,7 @@ def compile(source: str | Path | DSLSource, namespace: dict) -> ArchDef:
     source    : str, Path, or DSLSource — DSL text, .ua file path, or pre-parsed AST
     namespace : dict  — Python namespace for resolving dotted names
                         e.g. {'numpy': numpy, 'ops': ops_module}
+    backend   : Backend or None — array operation backend; defaults to NUMPY_BACKEND
 
     References
     ----------
@@ -630,6 +738,13 @@ def compile(source: str | Path | DSLSource, namespace: dict) -> ArchDef:
         source = Path(source).read_text()
     ast = parse(source) if isinstance(source, str) else source
 
+    ctx = CompilationContext(ast=ast, namespace=namespace,
+                             backend=backend if backend is not None else NUMPY_BACKEND)
+
+    # Phase 1: Validate names
+    _validate_names(ctx)
+    if ctx.errors:
+        raise ValueError("DSL name validation failed:\n" + "\n".join(f"  - {e}" for e in ctx.errors))
     sort_defs = {s.name: s for s in ast.sorts}
 
     # Warn about morphisms referencing undeclared sorts (if sorts were declared)
@@ -643,36 +758,37 @@ def compile(source: str | Path | DSLSource, namespace: dict) -> ArchDef:
                         stacklevel=2,
                     )
 
-    # Resolve semirings
-    semiring_contract: dict[str, Callable] = {
-        semiring_decl.name: _resolve(semiring_decl.contract, namespace) for semiring_decl in ast.semirings
+    # Phase 2: Resolve semirings
+    ctx.semiring_contract = {
+        sd.name: _resolve(sd.contract, namespace) for sd in ast.semirings
     }
-    semiring_compiler: dict[str, Callable] = {
-        semiring_decl.name: _resolve(semiring_decl.compiler, namespace)
-        for semiring_decl in ast.semirings if semiring_decl.compiler is not None
+    ctx.semiring_compiler = {
+        sd.name: _resolve(sd.compiler, namespace)
+        for sd in ast.semirings if sd.compiler is not None
     }
-    semiring_arity: dict[str, str] = {semiring_decl.name: semiring_decl.arity for semiring_decl in ast.semirings}
+    ctx.semiring_arity = {sd.name: sd.arity for sd in ast.semirings}
 
-    # Assign semiring groups (semiring block is optional if all morphisms have explicit ops)
     sole = ast.semirings[0].name if len(ast.semirings) == 1 else None
-    morphism_to_semiring: dict[str, str] = {}
     for morph_decl in ast.morphisms:
         if morph_decl.semiring is None:
-            morphism_to_semiring[morph_decl.name] = '_bridge'
+            ctx.morphism_to_semiring[morph_decl.name] = '_bridge'
         elif morph_decl.semiring == '_default':
-            morphism_to_semiring[morph_decl.name] = sole if sole else '_default'
-        elif morph_decl.semiring not in semiring_contract:
+            ctx.morphism_to_semiring[morph_decl.name] = sole if sole else '_default'
+        elif morph_decl.semiring not in ctx.semiring_contract:
             raise ValueError(
                 f"Morphism '{morph_decl.name}' references undeclared semiring '{morph_decl.semiring}'"
             )
         else:
-            morphism_to_semiring[morph_decl.name] = morph_decl.semiring
-    compiled, morphism_specs, equations, morphism_terms = _compile_morphisms(
-        ast, morphism_to_semiring, semiring_contract, semiring_compiler, semiring_arity, namespace
+            ctx.morphism_to_semiring[morph_decl.name] = morph_decl.semiring
+
+    # Phase 3: Compile morphisms
+    ctx.compiled, ctx.specs, ctx.equations, ctx.morphism_terms = _compile_morphisms(
+        ast, ctx.morphism_to_semiring, ctx.semiring_contract,
+        ctx.semiring_compiler, ctx.semiring_arity, namespace,
     )
 
     # Build template registry for parameterized morphisms
-    templates = {
+    ctx.templates = {
         morph_decl.name: morph_decl
         for morph_decl in ast.morphisms
         if morph_decl.template_param is not None
@@ -680,66 +796,67 @@ def compile(source: str | Path | DSLSource, namespace: dict) -> ArchDef:
 
     # Build Hydra sort types for type-checked sort validation
     morph_sorts = {s for m in ast.morphisms for s in (m.src_sort, m.tgt_sort)}
-    sort_types = sort_types_from_defs(sort_defs, morph_sorts)
+    ctx.sort_types = sort_types_from_defs(sort_defs, morph_sorts)
 
     # Build Hydra primitives for tensor ops
     morph_decls = {m.name: m for m in ast.morphisms}
     sr_decls = {s.name: s for s in ast.semirings}
-    hydra_primitives = register_tensor_primitives(sr_decls, morph_decls, namespace)
+    ctx.hydra_primitives = register_tensor_primitives(sr_decls, morph_decls, namespace)
 
-    # Pre-resolve template instances referenced in fan branches before _compile_fans
+    # Phase 4: Compile fans (pre-resolve template instances in branches first)
     for f in ast.fans:
         for b in f.branches:
             _resolve_template_instance(
-                b, templates, compiled, morphism_specs,
-                morphism_to_semiring, equations, namespace, semiring_arity,
+                b, ctx.templates, ctx.compiled, ctx.specs,
+                ctx.morphism_to_semiring, ctx.equations, namespace, ctx.semiring_arity,
             )
+    _compile_fans(ast, ctx.compiled, namespace, ctx.backend)
+    ctx.fan_terms = {f.name: fan_to_term(f.name, f.branches, f.merge) for f in ast.fans}
 
-    _compile_fans(ast, compiled, namespace)
-    fan_terms = {f.name: fan_to_term(f.name, f.branches, f.merge) for f in ast.fans}
-    path_morphisms = _compile_paths(
-        ast, compiled, morphism_specs, morphism_to_semiring,
-        templates, equations, namespace, semiring_arity,
-        sort_types,
+    # Phase 5: Compile paths
+    ctx.coercion_grades = _close_coercions(ast.coercions) if ast.coercions else None
+    ctx.path_morphisms = _compile_paths(
+        ast, ctx.compiled, ctx.specs, ctx.morphism_to_semiring,
+        ctx.templates, ctx.equations, namespace, ctx.semiring_arity,
+        ctx.sort_types, ctx.coercion_grades,
     )
-    path_terms = {
-        p.name: path_to_term(p.name, path_morphisms.get(p.name, p.morphisms), p.residual, p.normed)
+    ctx.path_terms = {
+        p.name: path_to_term(p.name, ctx.path_morphisms.get(p.name, p.morphisms), p.residual, p.normed)
         for p in ast.paths
     }
-    # Compute accumulate_legs once here (from morphism_specs) and pass into _compile_archs
-    accumulate_legs = {
+
+    # Phase 6: Compile archs
+    accumulate_specs = {
         name: (spec.accumulate, spec.accumulate_fields)
-        for name, spec in morphism_specs.items()
+        for name, spec in ctx.specs.items()
         if spec.accumulate is not None
     }
-    compiled_archs = _compile_archs(ast, compiled, namespace, accumulate_legs)
+    compiled_archs = _compile_archs(ast, ctx.compiled, namespace, accumulate_specs, ctx.backend)
 
-    # Build Hydra arch terms and union types
-    arch_terms = {}
-    arch_types = {}
+    # Phase 7: Build Hydra arch terms and union types
     for arch_decl in ast.archs:
-        unified = arch_decl.cases or arch_decl.algebra_cases
-        arch_terms[arch_decl.name] = arch_to_term(
+        unified = arch_decl.cases
+        ctx.arch_terms[arch_decl.name] = arch_to_term(
             arch_decl.name,
-            algebra_cases=unified,
+            cases=unified,
             observer_convergence=arch_decl.observer_convergence,
             observer_loss=arch_decl.observer_loss,
         )
         if unified:
-            arch_types[f"{arch_decl.name}.cases"] = functor_to_union_type(unified)
+            ctx.arch_types[f"{arch_decl.name}.cases"] = functor_to_union_type(unified)
 
     return ArchDef(
-        paths              = compiled,
-        morphism_semiring  = morphism_to_semiring,
-        _morphism_specs    = morphism_specs,
-        _equations         = equations,
-        _path_morphisms    = path_morphisms,
+        paths              = ctx.compiled,
+        morphism_semiring  = ctx.morphism_to_semiring,
+        _morphism_specs    = ctx.specs,
+        _equations         = ctx.equations,
+        _path_morphisms    = ctx.path_morphisms,
         _archs             = compiled_archs,
         sort_defs          = sort_defs,
-        _morphism_terms    = morphism_terms,
-        _path_terms        = path_terms,
-        _fan_terms         = fan_terms,
-        _hydra_primitives  = hydra_primitives,
-        _arch_terms        = arch_terms,
-        _arch_types        = arch_types,
+        _morphism_terms    = ctx.morphism_terms,
+        _path_terms        = ctx.path_terms,
+        _fan_terms         = ctx.fan_terms,
+        _hydra_primitives  = ctx.hydra_primitives,
+        _arch_terms        = ctx.arch_terms,
+        _arch_types        = ctx.arch_types,
     )

@@ -31,7 +31,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .runtime import MorphismSpec, explain as _explain, trace as _trace
+from .runtime import MorphismSpec, Backend, NUMPY_BACKEND, explain as _explain, trace as _trace
 from .functor import Functor, Interpreter
 
 
@@ -47,11 +47,12 @@ class _ArchData:
     coalgebra_cell:       Callable | None = None
     observer_convergence: Callable | None = None
     observer_loss:        Callable | None = None
-    accumulate_legs:      dict | None = None  # morphism_name -> mode ('cat')
+    accumulate_specs:     dict | None = None  # morphism_name -> mode ('cat')
     iterate_groups:       dict | None = None  # group_name -> [case_names] (data flow order)
     iterate_base:         str | None = None   # base case name (leaf)
     iterate_epilogue:     list | None = None  # cases after iterate block
     state_type:           object | None = None  # Hydra TypeRecord for coalgebra state
+    backend:              Backend | None = None  # array operation backend
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +60,8 @@ class _ArchData:
 # ---------------------------------------------------------------------------
 
 def _make_convergence_stop(conv_fn: Callable, user_stop: Callable | None,
-                           threshold: float) -> Callable:
+                           threshold: float,
+                           backend: Backend = None) -> Callable:
     """Return an effective_stop callable that halts on convergence or user signal.
 
     Convergence is measured by the max-abs residual of *conv_fn* between
@@ -71,13 +73,14 @@ def _make_convergence_stop(conv_fn: Callable, user_stop: Callable | None,
     Ramsauer, H. et al. (2021). Hopfield networks is all you need.
     ICLR 2021.  cite{ramsauer2021}
     """
+    if backend is None:
+        backend = NUMPY_BACKEND
     prev = [None]
 
-    def effective_stop(step, state, outputs):
-        import numpy as _np
+    def effective_stop(step, state, outputs, _be=backend):
         if prev[0] is not None:
             residual = conv_fn(state, prev[0], 0.0)
-            converged = bool(_np.max(_np.abs(residual)) < threshold)
+            converged = bool(_be.max(_be.abs(residual)) < threshold)
         else:
             converged = False
         prev[0] = state
@@ -102,18 +105,20 @@ class ArchInterpreter:
     def __init__(self, name: str, algebra: Interpreter | None = None,
                  coalgebra: Interpreter | None = None,
                  convergence_fn: Callable | None = None,
-                 accumulate_legs: dict | None = None,
+                 accumulate_specs: dict | None = None,
                  iterate_groups: dict | None = None,
                  iterate_base: str | None = None,
-                 iterate_epilogue: list | None = None):
+                 iterate_epilogue: list | None = None,
+                 backend: Backend = None):
         self.name = name
         self._algebra = algebra
         self._coalgebra = coalgebra
         self._convergence_fn = convergence_fn
-        self._accumulate_legs = accumulate_legs
+        self._accumulate_specs = accumulate_specs
         self._iterate_groups = iterate_groups
         self._iterate_base = iterate_base
         self._iterate_epilogue = iterate_epilogue or []
+        self._backend = backend if backend is not None else NUMPY_BACKEND
 
     def run_algebra(self, tree, decompose):
         """Fold a pre-built tree using the algebra.
@@ -186,11 +191,13 @@ class ArchInterpreter:
         effective_stop = stop
         if self._convergence_fn is not None:
             effective_stop = _make_convergence_stop(
-                self._convergence_fn, stop, convergence_threshold
+                self._convergence_fn, stop, convergence_threshold,
+                backend=self._backend,
             )
         return self._coalgebra.run_coalgebra(
             state, token_iter=token_iter, stop=effective_stop,
-            accumulate_legs=self._accumulate_legs,
+            accumulate_specs=self._accumulate_specs,
+            backend=self._backend,
         )
 
 
@@ -272,10 +279,11 @@ class ArchDef:
             return ArchInterpreter(
                 name, alg, coalg,
                 convergence_fn=ad.observer_convergence,
-                accumulate_legs=ad.accumulate_legs,
+                accumulate_specs=ad.accumulate_specs,
                 iterate_groups=ad.iterate_groups,
                 iterate_base=ad.iterate_base,
                 iterate_epilogue=ad.iterate_epilogue,
+                backend=ad.backend,
             )
 
         raise KeyError(f"Unknown arch: {name!r}")

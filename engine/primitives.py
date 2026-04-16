@@ -43,7 +43,7 @@ def qname(namespace: str, local_name: str) -> Name:
     return Name(f"{namespace}.{local_name}")
 
 
-from engine.sorts import resolve as _resolve
+from engine.utils import resolve as _resolve
 
 
 # ---------------------------------------------------------------------------

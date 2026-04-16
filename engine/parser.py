@@ -67,10 +67,11 @@ Syntax
 from __future__ import annotations
 
 import re
+import warnings
 
 from .decl import (
     SemiringDecl, MorphismDecl, PathDecl, FanDecl,
-    CaseDecl, ArchDecl, DSLSource, SortDecl,
+    CaseDecl, ArchDecl, DSLSource, SortDecl, SortCoercion,
 )
 
 
@@ -79,7 +80,7 @@ from .decl import (
 # ---------------------------------------------------------------------------
 
 _TOP_LEVEL_DECL = re.compile(
-    r'^(semiring|sort|morphism|leg|path|fan|arch)\b'
+    r'^(semiring|sort|morphism|leg|path|fan|arch|coerce|sort_threshold)\b'
 )
 
 _ARCH_SUB_HEADER = re.compile(
@@ -292,6 +293,11 @@ def _parse_morphism(line: str) -> MorphismDecl:
         )
     if not match_header:
         raise SyntaxError(f"Invalid morphism declaration: {line!r}")
+    if line.startswith('leg '):
+        warnings.warn(
+            "The 'leg' keyword is deprecated. Use 'morphism' instead.",
+            DeprecationWarning, stacklevel=2,
+        )
     template_param = match_header.group(2)  # None if no [param]
     name     = match_header.group(1)
     src_sort = match_header.group(3)
@@ -409,8 +415,9 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
     obs_convergence: str | None = None
     obs_loss:        str | None = None
     state_fields: dict[str, str] | None = None
-    step_enter: str | None = None
-    step_emit:  str | None = None
+    step_enter:   str | None = None
+    step_emit:    str | None = None
+    step_compute: str | None = None
     i += 1
     while i < len(lines):
         inner = lines[i].strip()
@@ -454,6 +461,10 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
                 match_emit = re.match(r'^emit\s*=\s*(\w+)$', sub)
                 if match_emit:
                     step_emit = match_emit.group(1)
+                    continue
+                match_compute = re.match(r'^compute\s*=\s*(\w+)$', sub)
+                if match_compute:
+                    step_compute = match_compute.group(1)
             continue
         if re.match(r'^coalgebra\s*:', inner):
             raise SyntaxError(
@@ -491,13 +502,13 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
     return ArchDecl(
         name=arch_name,
         cases=unified_cases,
-        algebra_cases=None,
         algebra_cell=alg_cell,
         observer_convergence=obs_convergence,
         observer_loss=obs_loss,
         state_fields=state_fields,
         step_enter=step_enter,
         step_emit=step_emit,
+        step_compute=step_compute,
     ), i
 
 
@@ -507,12 +518,14 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
 
 def parse(source: str) -> DSLSource:
     source = _strip_comments(source)
-    semirings: list[SemiringDecl]   = []
-    sorts:     list[SortDecl]       = []
-    morphisms: list[MorphismDecl]   = []
-    paths:     list[PathDecl]       = []
-    fans:      list[FanDecl]        = []
-    archs:     list[ArchDecl]       = []
+    semirings:      list[SemiringDecl]  = []
+    sorts:          list[SortDecl]      = []
+    morphisms:      list[MorphismDecl]  = []
+    paths:          list[PathDecl]      = []
+    fans:           list[FanDecl]       = []
+    archs:          list[ArchDecl]      = []
+    coercions:      list[SortCoercion]  = []
+    sort_threshold: float               = 1.0
 
     lines = source.splitlines()
     i = 0
@@ -570,6 +583,22 @@ def parse(source: str) -> DSLSource:
             archs.append(decl)
             continue
 
+        match_coerce = re.match(r'^coerce\s+(\w+)\s*->\s*(\w+)\s*:\s*([0-9]*\.?[0-9]+)$', line)
+        if match_coerce:
+            coercions.append(SortCoercion(
+                src=match_coerce.group(1),
+                tgt=match_coerce.group(2),
+                grade=float(match_coerce.group(3)),
+            ))
+            i += 1
+            continue
+
+        match_threshold = re.match(r'^sort_threshold\s+([0-9]*\.?[0-9]+)$', line)
+        if match_threshold:
+            sort_threshold = float(match_threshold.group(1))
+            i += 1
+            continue
+
         raise SyntaxError(f"Unrecognised DSL line: {line!r}")
 
-    return DSLSource(semirings, sorts, morphisms, paths, fans, archs)
+    return DSLSource(semirings, sorts, morphisms, paths, fans, archs, coercions, sort_threshold)

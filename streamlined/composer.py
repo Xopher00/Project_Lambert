@@ -1,6 +1,6 @@
 from torch_semiring_einsum import compile_equation
 
-from engine.path_engine import MorphismSpec, compile_morphism, chain
+from engine.runtime import MorphismSpec, compile_morphism, chain
 
 from streamlined.relational_einsum import join_einsum_forward, residuate_einsum_forward
 

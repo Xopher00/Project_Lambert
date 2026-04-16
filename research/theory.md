@@ -13,27 +13,25 @@ Mathematical foundations of Project Lambert, organised by layer.
 
 These documents describe the original implementation, now preserved in `legacy/`. The patterns they describe are expressed through the engine DSL in `engine/`.
 
-- [embed](lattice/embed.md) — formal concepts, ConceptEmbed, coverage-based concept selection
-- [attention](lattice/attention.md) — attention as dense associative memory, correction principle, conjunctive queries, multi-head retrieval
-- [explorer](lattice/explorer.md) — multi-relational formal concepts, second-order FCA, lattice closure
+- [embed](legacy/embed.md) — formal concepts, ConceptEmbed, coverage-based concept selection
+- [attention](legacy/attention.md) — attention as dense associative memory, correction principle, conjunctive queries, multi-head retrieval
+- [explorer](legacy/explorer.md) — multi-relational formal concepts, second-order FCA, lattice closure
 
 ---
 
 ## Engine DSL (active development)
 
-`engine/` implements a domain-specific language for expressing ML architectures over arbitrary semirings. Rather than hand-coding forward passes, a user declares morphisms, paths, and cases; the compiler assembles them into a runnable architecture.
+`engine/` implements a domain-specific language for expressing ML architectures as
+compositions of typed morphisms over arbitrary semirings. The DSL makes the categorical
+structure described in the preceding sections executable.
 
-**Key files:**
-- `parser.py` — DSL grammar → AST
-- `compiler.py` — AST → `ArchDef`
-- `decl.py` — declaration types (`SemiringDecl`, `MorphismDecl`, `PathDecl`, `FanDecl`, `CaseDecl`, `ArchDecl`)
-- `functor.py` — `Functor`, `Case`, `Interpreter`; algebra/coalgebra execution
-- `arch.py` — compiled architecture runtime
-- `path_engine.py` — morphism composition: `chain`, `fan`, `augment`
+- [decl](engine/decl.md) — `SemiringDecl`, `MorphismDecl`, `PathDecl`, `FanDecl`, `CaseDecl`, `ArchDecl` (Lawvere 1973, Gavranović 2024, Green 2007, Domingos 2025, Schultz 2017/2025)
+- [functor](engine/functor.md) — `Functor`, `Case`, `Interpreter`; catamorphism and anamorphism (Gavranović 2024, Tarski 1955)
+- [runtime](engine/runtime.md) — `MorphismSpec`, `chain`, `fan`, `check_sorts`; V-functor composition (Lawvere 1973, Shen & Tang 2021)
+- [compiler](engine/compiler.md) — five-phase compilation pipeline; semiring resolution, template instantiation, iterate groups (Gavranović 2024, Green 2007, Dannert 2021, Domingos 2025)
+- [arch](engine/arch.md) — `ArchDef`, `ArchInterpreter`; algebra/coalgebra duality, convergence (Gavranović 2024, Ramsauer 2021, Schultz 2025)
 
-**Key abstractions.** A `SemiringDecl` fixes the operation algebra (e.g. max-min, log-sum-exp, standard). A `MorphismDecl` is a typed operation between sorts. A `PathDecl` chains morphisms sequentially; a `FanDecl` runs branches in parallel and gathers their outputs. A `CaseDecl` maps a functor case (base or recursive) to a path composition. An `ArchDecl` pairs an algebra side (forward pass, initial algebra) with a coalgebra side (streaming/KV-cache, final coalgebra) over a shared base functor — the category-theoretic framing that makes the algebra/coalgebra duality precise.
-
-The DSL supersedes the hand-coded `lattice/` layer by expressing the same structural patterns as compositions of typed morphisms with no Python escape hatches. The **augment combinator** `[fan_name]` is the concrete mechanism: it runs a fan and merges its dict output into the current payload, which eliminated the last algebra-side Python cell needed for bundle assembly in the attention case.
+**Key files:** `parser.py` (grammar → AST), `compiler.py` (AST → `ArchDef`), `decl.py` (declarations), `functor.py` (recursive types), `runtime.py` (morphism composition), `arch.py` (compiled runtime), `sorts.py` (Hydra type bridge), `primitives.py` (Hydra primitives).
 
 ---
 
@@ -136,9 +134,9 @@ composition of left Kan extension, restriction, and right Kan extension.
 - Zadeh, L.A. (1965). Fuzzy sets. *Information and Control*, 8(3), 338–353.
   — foundation of the max-min semiring; max-min relational composition. Referenced in [tensor](core/tensor.md).
 - Sanchez, E. (1976). Resolution of composite fuzzy relation equations. *Information and Control*, 30, 38–48.
-  — greatest solution to `A ∘ B = C` under max-min composition (Theorem 5); basis for `Residuate`, Join, and the attention correction step. Referenced in [tensor](core/tensor.md), [embed](lattice/embed.md), [attention](lattice/attention.md).
+  — greatest solution to `A ∘ B = C` under max-min composition (Theorem 5); basis for `Residuate`, Join, and the attention correction step. Referenced in [tensor](core/tensor.md), [embed](legacy/embed.md), [attention](legacy/attention.md).
 - Shen, L., & Tang, X. (2021). Isbell adjunctions and Kan adjunctions via quantale-enriched two-variable adjunctions. *Applied Categorical Structures*, 29, 823–858.
-  — situates Lambert's Join ⊣ Residuate pair inside the framework of quantale-enriched two-variable adjunctions (Definition 3.3). Lambert's quantale is V = ([0,1], min, 1) with Gödel implication as residuum — one of the paper's canonical cases. Key results: (1) every V-bifunctor φ: A^op ⊗ B → Z induces an Isbell adjunction φ↑ ⊣ φ↓ whose fixed points Mφ form a complete V-category (Theorem 6.2) — this is Lambert's concept lattice; (2) the Kan adjunctions (Proposition 5.3) arising from suitable associated two-variable adjunctions are exactly Lambert's Join and Residuate in vector form (equations 5.iv–5.v); (3) multi-head combination by lattice meet is justified because Mφ is a complete V-category, so arbitrary meets exist. Referenced in [tensor](core/tensor.md), [embed](lattice/embed.md).
+  — situates Lambert's Join ⊣ Residuate pair inside the framework of quantale-enriched two-variable adjunctions (Definition 3.3). Lambert's quantale is V = ([0,1], min, 1) with Gödel implication as residuum — one of the paper's canonical cases. Key results: (1) every V-bifunctor φ: A^op ⊗ B → Z induces an Isbell adjunction φ↑ ⊣ φ↓ whose fixed points Mφ form a complete V-category (Theorem 6.2) — this is Lambert's concept lattice; (2) the Kan adjunctions (Proposition 5.3) arising from suitable associated two-variable adjunctions are exactly Lambert's Join and Residuate in vector form (equations 5.iv–5.v); (3) multi-head combination by lattice meet is justified because Mφ is a complete V-category, so arbitrary meets exist. Referenced in [tensor](core/tensor.md), [embed](legacy/embed.md).
 ### Smooth approximations
 
 - Nesterov, Y. (2005). Smooth minimization of non-smooth functions. *Mathematical Programming*, 103(1), 127–152.
@@ -147,28 +145,28 @@ composition of left Kan extension, restriction, and right Kan extension.
 ### Fixpoint theory
 
 - Tarski, A. (1955). A lattice-theoretical fixpoint theorem and its applications. *Pacific Journal of Mathematics*, 5(2), 285–309.
-  — guarantees convergence of monotone operators on complete lattices. Referenced in [embed](lattice/embed.md).
+  — guarantees convergence of monotone operators on complete lattices. Referenced in [embed](legacy/embed.md).
 
 ### Fuzzy logical associative memory
 
 - Bělohlávek, R. (2000). Fuzzy logical bidirectional associative memory. *Information Sciences*, 128, 91–103.
-  — Theorem 1: Lambert's `_concept_fixpoint` (`O*`/`A∧` alternation with Gödel implication) converges to a formal concept in exactly two steps via idempotence of Galois adjunctions (Ore 1944). Theorem 2: stable points form the complete concept lattice. Theorem 6: constructive learning rule for R from labeled concepts. Lambert's algebra (min, Gödel implication) is Example 2 — one of three canonical cases the theorems directly cover. Referenced in [embed](lattice/embed.md), [attention](lattice/attention.md).
+  — Theorem 1: Lambert's `_concept_fixpoint` (`O*`/`A∧` alternation with Gödel implication) converges to a formal concept in exactly two steps via idempotence of Galois adjunctions (Ore 1944). Theorem 2: stable points form the complete concept lattice. Theorem 6: constructive learning rule for R from labeled concepts. Lambert's algebra (min, Gödel implication) is Example 2 — one of three canonical cases the theorems directly cover. Referenced in [embed](legacy/embed.md), [attention](legacy/attention.md).
 
 ### Formal concept analysis
 
 - Brito, A. M. et al. (2018). *Fuzzy Formal Concept Analysis.*
-  — Definition 15: fuzzy formal context `⟨O, A, I_f⟩`; Definition 17: formal concept as simultaneous fixpoint of `O*` and `A∧`; Theorem 8: completeness of the concept lattice. Referenced in [embed](lattice/embed.md), [attention](lattice/attention.md), [explorer](lattice/explorer.md).
+  — Definition 15: fuzzy formal context `⟨O, A, I_f⟩`; Definition 17: formal concept as simultaneous fixpoint of `O*` and `A∧`; Theorem 8: completeness of the concept lattice. Referenced in [embed](legacy/embed.md), [attention](legacy/attention.md), [explorer](legacy/explorer.md).
 - Trnecka, M. & Vyjidacek, R. (2020). Revisiting the GreCon Algorithm for Boolean Matrix Factorization. *CLA 2020.*
-  — coverage-based concept selection as matrix decomposition. Referenced in [embed](lattice/embed.md).
+  — coverage-based concept selection as matrix decomposition. Referenced in [embed](legacy/embed.md).
 - Belohlavek, R. & Vychodil, V. (2007). Fuzzy concept lattices constrained by hedges. *Journal of Advanced Computational Intelligence and Intelligent Informatics*, 11(6), 536–545.
-  — fuzzy FCA with graded membership. Referenced in [embed](lattice/embed.md).
+  — fuzzy FCA with graded membership. Referenced in [embed](legacy/embed.md).
 
 ### Associative memory and attention
 
 - Krotov, D. & Hopfield, J. (2021). Large Associative Memory Problem in Neurobiology and Machine Learning. *ICLR 2021.*
-  — §3.2 Model B: derivation of transformer attention as the fast-memory limit of dense associative memory; partial pattern initialisation and attractor convergence. Referenced in [attention](lattice/attention.md), [explorer](lattice/explorer.md).
+  — §3.2 Model B: derivation of transformer attention as the fast-memory limit of dense associative memory; partial pattern initialisation and attractor convergence. Referenced in [attention](legacy/attention.md), [explorer](legacy/explorer.md).
 - Ramsauer, H. et al. (2020, revised 2021). Hopfield Networks is All You Need. *arXiv:2008.02217.*
-  — modern Hopfield networks and their connection to attention. Referenced in [embed](lattice/embed.md).
+  — modern Hopfield networks and their connection to attention. Referenced in [embed](legacy/embed.md).
 
 ### Predictive coding and free energy
 

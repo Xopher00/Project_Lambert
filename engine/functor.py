@@ -111,6 +111,56 @@ class UnfoldStep:
 
 
 # ---------------------------------------------------------------------------
+# Accumulator
+# ---------------------------------------------------------------------------
+
+class Accumulator:
+    """Manages per-morphism state accumulation across coalgebra steps."""
+
+    def __init__(self, accumulate_specs: dict | None, backend):
+        self.specs = accumulate_specs or {}
+        self.backend = backend
+        self._store: dict = {}
+
+    def update(self, payload: list) -> None:
+        for i, (name, (mode, fields)) in enumerate(self.specs.items()):
+            if i >= len(payload):
+                break
+            item = payload[i]
+            if fields is not None:
+                if name not in self._store:
+                    self._store[name] = {f: item[f] for f in fields}
+                else:
+                    self._store[name] = {
+                        f: self.backend.concatenate(
+                            [self._store[name][f], item[f]], axis=0
+                        )
+                        for f in fields
+                    }
+            else:
+                if name not in self._store:
+                    self._store[name] = item
+                else:
+                    self._store[name] = self.backend.concatenate(
+                        [self._store[name], item], axis=0
+                    )
+
+    def inject_into_params(self, params: dict) -> dict:
+        if self._store:
+            return {**params, 'accumulated': self._store}
+        return params
+
+    def merge_into_state(self, state: dict) -> dict:
+        if self._store and isinstance(state, dict):
+            return {**state, **self._store}
+        return state
+
+    @property
+    def active(self) -> bool:
+        return bool(self.specs)
+
+
+# ---------------------------------------------------------------------------
 # Interpreter
 # ---------------------------------------------------------------------------
 
@@ -159,7 +209,8 @@ class Interpreter:
         return self.cell(case_name, payload, child_results, self.params, self.temp)
 
     def run_coalgebra(self, state, token_iter=None, stop: Callable = None,
-                      accumulate_legs: dict | None = None):
+                      accumulate_specs: dict | None = None,
+                      backend=None):
         """
         Generic coalgebra runner for the linear single-successor subset:
         functors where each active case has recursive=1.
@@ -167,7 +218,7 @@ class Interpreter:
         token_iter      : iterable of input tokens, or None
         stop            : callable(step, state, outputs) -> bool, or None
                           returns True to halt
-        accumulate_legs : dict mapping leg_name -> mode ('cat'), or None
+        accumulate_specs : dict mapping leg_name -> mode ('cat'), or None
 
         If token_iter is exhausted the run halts.
         If stop is None and token_iter is None the caller must ensure
@@ -178,10 +229,15 @@ class Interpreter:
         Gavranović, B. et al. (2024). Position: Categorical deep learning is an
         algebraic theory of all architectures. ICML 2024.  cite{gavranovic2024b}
         """
+        if backend is None:
+            if _np is None:
+                raise ImportError("numpy is required when no backend is provided")
+            from .runtime import NUMPY_BACKEND
+            backend = NUMPY_BACKEND
         outputs = []
         tokens  = iter(token_iter) if token_iter is not None else None
         step    = 0
-        accumulated = {}
+        acc     = Accumulator(accumulate_specs, backend)
 
         while True:
             token = None
@@ -190,10 +246,8 @@ class Interpreter:
                 if token is _EXHAUSTED:
                     break
 
-            if accumulate_legs:
-                self.params['accumulated'] = accumulated
-
-            result = self.cell(state, token, self.params, self.temp)
+            params = acc.inject_into_params(self.params)
+            result = self.cell(state, token, params, self.temp)
             case   = self.functor[result.case_name]
 
             if case.recursive != 1:
@@ -224,29 +278,11 @@ class Interpreter:
                 outputs.append(result.output)
 
             # Accumulate leg outputs from payload
-            if accumulate_legs and result.payload:
-                if _np is None:
-                    raise ImportError("numpy is required for accumulate_legs")
-                for i, (leg_name, (mode, fields)) in enumerate(accumulate_legs.items()):
-                    if i < len(result.payload) and mode == 'cat':
-                        if fields is not None:
-                            # Field-level accumulate: payload item is a dict, concat specific fields
-                            new = result.payload[i]
-                            if leg_name not in accumulated:
-                                accumulated[leg_name] = {}
-                            for field in fields:
-                                old_field = accumulated[leg_name].get(field)
-                                new_field = new[field] if isinstance(new, dict) else new
-                                accumulated[leg_name][field] = (
-                                    _np.concatenate([old_field, new_field]) if old_field is not None else new_field
-                                )
-                        else:
-                            # Whole-sort accumulate (existing behavior)
-                            old = accumulated.get(leg_name)
-                            new = result.payload[i]
-                            accumulated[leg_name] = (
-                                _np.concatenate([old, new]) if old is not None else new
-                            )
+            if acc.active and result.payload:
+                acc.update(result.payload)
+
+            # Feed accumulated values forward into state so the next step sees them
+            state = acc.merge_into_state(state)
 
             step += 1
             if stop is not None and stop(step, state, outputs):

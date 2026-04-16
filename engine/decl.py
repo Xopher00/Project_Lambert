@@ -152,13 +152,13 @@ class ArchDecl:
     """
     name:              str
     cases:             list[CaseDecl] | None = None    # unified endofunctor F
-    algebra_cases:     list[CaseDecl] | None = None    # legacy alias for cases (algebra: block)
     algebra_cell:      str | None = None   # functor-level cell override for algebra
     observer_convergence: str | None = None  # path name for convergence check
     observer_loss:        str | None = None  # path name for loss computation
     state_fields:         dict[str, str] | None = None  # coalgebra state shape: field_name -> type_name
     step_enter:           str | None = None  # morphism/path for coalgebra input binding
     step_emit:            str | None = None  # morphism/path for coalgebra output
+    step_compute:         str | None = None  # explicit morphism/path for coalgebra computation
 
 
 @dataclass
@@ -187,10 +187,24 @@ class SortDecl:
 
 
 @dataclass
+class SortCoercion:
+    """Declared graded compatibility between two sorts.
+
+    grade is an element of [0.0, 1.0] under the (min, *, 1.0) quantale:
+    1.0 = fully compatible (no loss), 0.0 = incompatible (hard error).
+    """
+    src:   str
+    tgt:   str
+    grade: float
+
+
+@dataclass
 class DSLSource:
-    semirings: list[SemiringDecl]
-    sorts:     list[SortDecl]
-    morphisms: list[MorphismDecl]
-    paths:     list[PathDecl]
-    fans:      list[FanDecl]
-    archs:     list[ArchDecl]       = field(default_factory=list)
+    semirings:      list[SemiringDecl]
+    sorts:          list[SortDecl]
+    morphisms:      list[MorphismDecl]
+    paths:          list[PathDecl]
+    fans:           list[FanDecl]
+    archs:          list[ArchDecl]  = field(default_factory=list)
+    coercions:      list           = field(default_factory=list)   # list[SortCoercion]
+    sort_threshold: float          = 1.0                           # grades below this produce warnings

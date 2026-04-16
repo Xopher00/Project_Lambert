@@ -2,7 +2,6 @@
 
 Maps engine sorts to Hydra Types, provides TermCoders for numpy arrays,
 bundles, and scalars, and builds Hydra function types for morphisms.
-Also provides the shared dotted-name resolver used by the compiler and primitives.
 
 References
 ----------
@@ -12,8 +11,6 @@ Lawvere, F. W. (1973). Metric spaces, generalized logic, and closed categories.
 
 import sys
 from pathlib import Path
-from typing import Any
-
 _hydra_initialized = False
 
 
@@ -42,21 +39,6 @@ from hydra.graph import TermCoder  # noqa: E402
 import hydra.dsl.types as types  # noqa: E402
 
 from engine.decl import SortDecl  # noqa: E402
-
-
-# ---------------------------------------------------------------------------
-# Dotted-name resolver (shared by compiler.py and primitives.py)
-# ---------------------------------------------------------------------------
-
-def resolve(dotted: str, namespace: dict[str, Any]) -> Any:
-    """Walk a dotted name through a namespace dict."""
-    parts = dotted.split('.')
-    obj = namespace.get(parts[0])
-    if obj is None:
-        raise NameError(f"Name {parts[0]!r} not found in provided namespace")
-    for attr in parts[1:]:
-        obj = getattr(obj, attr)
-    return obj
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +200,7 @@ def functor_to_union_type(cases) -> Type:
     return T.union(fields)
 
 
-def arch_to_term(name: str, algebra_cases=None,
+def arch_to_term(name: str, cases=None,
                  observer_convergence: str | None = None,
                  observer_loss: str | None = None) -> Term:
     """Encode an arch declaration as a Hydra record term."""
@@ -226,7 +208,7 @@ def arch_to_term(name: str, algebra_cases=None,
 
     fields = [Terms.field("name", Terms.string(name))]
 
-    if algebra_cases is not None:
+    if cases is not None:
         case_terms = [
             Terms.record(Name("ua.engine.Case"), [
                 Terms.field("name", Terms.string(c.name)),
@@ -234,7 +216,7 @@ def arch_to_term(name: str, algebra_cases=None,
                 Terms.field("data", Terms.int32(c.data)),
                 Terms.field("output", Terms.int32(getattr(c, 'output', 0))),
             ])
-            for c in algebra_cases
+            for c in cases
         ]
         fields.append(Terms.field("algebraCases", Terms.list_(case_terms)))
 
