@@ -351,11 +351,23 @@ def _parse_morphism(line: str) -> MorphismDecl:
         if re.match(r'^[\w.]+$', clause) and '.' in clause:
             op_name = clause
             continue
+        _KNOWN_CLAUSE_KEYWORDS = {
+            'op', 'using', 'transform', 'compiler', 'arity', 'accumulate', 'bridge',
+        }
+        hint = ''
+        if ' ' in clause:
+            first_token = clause.split(' ', 1)[0]
+            if first_token in _KNOWN_CLAUSE_KEYWORDS:
+                hint = (
+                    ' DSL clause separator requires 2 or more spaces; '
+                    'got a single space. Separate clauses with 2+ spaces.'
+                )
         raise SyntaxError(
             f"morphism '{name}': unrecognised clause {clause!r}; "
             f"expected 'using <semiring>', 'op <dotted.name>', "
             f"'transform <dotted.name>', 'compiler <dotted.name>', "
             f"'arity unary|binary|pointwise|ternary', or 'bridge'"
+            + hint
         )
 
     return MorphismDecl(

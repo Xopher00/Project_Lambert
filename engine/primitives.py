@@ -2,13 +2,13 @@
 Registers engine tensor operations as Hydra Primitive objects.
 
 Follows the pattern in hydra.sources.libraries (qname, primN constructors).
-hydra_bridge is imported lazily inside register_tensor_primitives so that
+hydra_bridge is imported lazily inside register_primitives so that
 setup_hydra_path() runs before any Hydra import at call site.
 
 Public API
 ----------
 qname(ns, local)                     -> Name
-register_tensor_primitives(...)      -> dict[Name, Primitive]
+register_primitives(...)             -> dict[Name, Primitive]
 build_engine_graph(primitives)       -> Graph
 
 References
@@ -50,23 +50,16 @@ from engine.utils import resolve as _resolve
 # Main registration
 # ---------------------------------------------------------------------------
 
-def register_tensor_primitives(
-    semirings: dict[str, SemiringDecl],
-    morphisms: dict[str, MorphismDecl],
+def register_primitives(
+    semiring_contracts: dict,
+    morphism_to_semiring: dict,
+    compiled_equations: dict,
+    morphism_decls: dict[str, MorphismDecl],
     namespace: dict[str, Any],
 ) -> dict:
-    """Build a dict of Hydra Primitives for semiring contracts and morphism op overrides.
+    """Build Hydra Primitives for op-override morphisms and semiring-contract morphisms.
 
-    Parameters
-    ----------
-    semirings:  parsed SemiringDecl map (name -> decl)
-    morphisms:  parsed MorphismDecl map (name -> decl)
-    namespace:  Python namespace for resolving dotted callable names
-                (e.g. {'ops': <module>})
-
-    Returns
-    -------
-    dict[Name, Primitive]  ready to pass to build_engine_graph
+    Returns hydra_primitives: Name -> Primitive
 
     References
     ----------
@@ -79,38 +72,8 @@ def register_tensor_primitives(
     primitives: dict = {}
     nd = ndarray_coder()
 
-    # --- semiring contracts ---------------------------------------------------
-    # Register each semiring contract as a prim2: (x, y) -> result.
-    # The equation and temp are defaulted (equation pre-compiled at morphism
-    # compile time; temp=0.0 default). Phase 2 will wrap these into per-morphism
-    # primitives with the equation baked in.
-    for sr_name, sr_decl in semirings.items():
-        try:
-            contract = _resolve(sr_decl.contract, namespace)
-        except (KeyError, AttributeError) as exc:
-            raise ImportError(
-                f"Cannot resolve semiring contract '{sr_decl.contract}': {exc}"
-            ) from exc
-
-        prim_name = qname(NS, sr_name)
-
-        # Wrap: (x, y) -> contract(compiled_eq=None, x, y, temp=0.0)
-        # compiled_eq=None signals the contract to skip equation dispatch
-        # (Phase 2 will supply a real compiled equation).
-        def _make_contract_fn(fn):
-            return lambda x, y: fn(None, x, y, temp=0.0)
-
-        primitives[prim_name] = prims.prim2(
-            prim_name,
-            _make_contract_fn(contract),
-            [],
-            nd, nd, nd,
-        )
-
     # --- morphism op overrides -----------------------------------------------
-    # For morphisms with an explicit op= override, register as a prim1 or prim2
-    # depending on arity.
-    for m_name, m_decl in morphisms.items():
+    for m_name, m_decl in morphism_decls.items():
         if m_decl.op is None:
             continue
         try:
@@ -127,10 +90,33 @@ def register_tensor_primitives(
                 prim_name, op_fn, [], nd, nd
             )
         else:
-            # binary / ternary — expose as prim2 (x, y) -> result
             primitives[prim_name] = prims.prim2(
                 prim_name, op_fn, [], nd, nd, nd
             )
+
+    # --- semiring-contract morphisms (equation baked in) ---------------------
+    for morph_name, eq in compiled_equations.items():
+        sr_name = morphism_to_semiring.get(morph_name)
+        if sr_name is None or sr_name == '_bridge':
+            continue
+        contract = semiring_contracts.get(sr_name)
+        if contract is None:
+            continue
+
+        prim_name = qname(NS, morph_name)
+
+        def _make_bound_fn(fn, compiled_eq):
+            def _bound(x, y):
+                return fn(compiled_eq, x, y, temp=0.0)
+            return _bound
+
+        bound_fn = _make_bound_fn(contract, eq)
+        primitives[prim_name] = prims.prim2(
+            prim_name,
+            bound_fn,
+            [],
+            nd, nd, nd,
+        )
 
     return primitives
 
@@ -143,14 +129,28 @@ def build_engine_graph(primitives: dict, bound_terms: dict | None = None):
     """Assemble a Hydra Graph containing engine primitives and optional bound terms."""
     from hydra.dsl.python import FrozenDict
     from hydra.graph import Graph
+    from hydra.lexical import build_graph
 
-    return Graph(
-        bound_terms=FrozenDict(bound_terms or {}),
-        bound_types=FrozenDict({}),
-        class_constraints=FrozenDict({}),
-        lambda_variables=frozenset(),
-        metadata=FrozenDict({}),
-        primitives=FrozenDict(primitives),
-        schema_types=FrozenDict({}),
-        type_variables=frozenset(),
-    )
+    # Convert dict of primitives to FrozenDict for build_graph
+    prim_dict = FrozenDict(primitives)
+
+    # build_graph returns a Graph with all non-primitive fields filtered/empty
+    # Pass empty tuple for elements, empty FrozenDict for environment
+    graph = build_graph((), FrozenDict({}), prim_dict)
+
+    # hydra.lexical.build_graph does not accept bound_terms; reconstruct Graph manually
+    # to splice in bound_terms alongside the built primitives and environment.
+    # Revisit if hydra.lexical adds a bound_terms parameter in a future kernel version.
+    if bound_terms:
+        return Graph(
+            bound_terms=FrozenDict(bound_terms),
+            bound_types=graph.bound_types,
+            class_constraints=graph.class_constraints,
+            lambda_variables=graph.lambda_variables,
+            metadata=graph.metadata,
+            primitives=graph.primitives,
+            schema_types=graph.schema_types,
+            type_variables=graph.type_variables,
+        )
+
+    return graph

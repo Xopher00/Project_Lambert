@@ -11,6 +11,21 @@ and provides a domain-specific language for expressing tensor architectures as c
 of V-functors over arbitrary semirings.
 """
 
+__all__ = [
+    # compilation
+    "compile", "parse", "load",
+    # arch
+    "ArchDef", "ArchInterpreter",
+    # functor
+    "Case", "Functor", "UnfoldStep", "NO_OUTPUT", "Interpreter",
+    # runtime
+    "MorphismSpec", "compile_morphism", "chain", "fan", "check_sorts",
+    # decl nodes
+    "SemiringDecl", "MorphismDecl", "PathDecl", "FanDecl", "CaseDecl",
+    "ArchDecl", "DSLSource", "SortDecl",
+]
+
+# public API
 from engine.functor import Case, Functor, UnfoldStep, NO_OUTPUT, Interpreter
 from engine.runtime import MorphismSpec, compile_morphism, chain, fan, check_sorts
 from engine.decl import (
@@ -27,12 +42,13 @@ def load(path, namespace: dict) -> ArchDef:
     """Load and compile a .ua file."""
     return compile(_Path(path).read_text(), namespace)
 
+# internal — Hydra bridge
 from engine.sorts import (
     sort_to_type, sort_types_from_defs,
-    morphism_to_term, path_to_term, fan_to_term,
-    functor_to_union_type, arch_to_term,
+    functor_to_union_type,
     ndarray_coder, bundle_coder, temp_coder, equation_coder,
 )
+from engine.terms import morphism_to_term, path_to_term, fan_to_term, arch_to_term
 from engine.primitives import (
-    register_tensor_primitives, build_engine_graph, qname,
+    register_primitives, build_engine_graph, qname,
 )

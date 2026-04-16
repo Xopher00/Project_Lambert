@@ -2,8 +2,6 @@
 
 Provides typed wrappers around Hydra's phantom DSL for constructing
 engine morphism, path, fan, and arch terms with type safety.
-
-Requires Python 3.12+ (hydra.dsl.meta.phantoms uses `type` syntax).
 """
 
 from __future__ import annotations
@@ -46,7 +44,7 @@ _MERGE = Name("merge")
 _RECURSIVE = Name("recursive")
 _DATA = Name("data")
 _OUTPUT = Name("output")
-_ALGEBRA_CASES = Name("algebraCases")
+_CASES = Name("cases")
 _OBSERVER_CONVERGENCE = Name("observerConvergence")
 _OBSERVER_LOSS = Name("observerLoss")
 
@@ -104,9 +102,34 @@ def arch(name: str, cases: list[TTerm] | None = None,
     """Construct a typed arch term."""
     fields = [field(_NAME, string(name))]
     if cases is not None:
-        fields.append(field(_ALGEBRA_CASES, list_(cases)))
+        fields.append(field(_CASES, list_(cases)))
     if observer_convergence:
         fields.append(field(_OBSERVER_CONVERGENCE, string(observer_convergence)))
     if observer_loss:
         fields.append(field(_OBSERVER_LOSS, string(observer_loss)))
     return record(_ARCH, fields)
+
+
+# Domain-object adapters — take engine objects, return raw Term via .value
+def morphism_to_term(spec) -> "TTerm":
+    return morphism(spec.name, spec.src_sort, spec.tgt_sort, spec.equation,
+                    spec.arity, spec.accumulate).value
+
+
+def path_to_term(name: str, morphism_names: list[str],
+                 residual: bool = False, normed: str | None = None) -> "TTerm":
+    return path(name, morphism_names, residual, normed).value
+
+
+def fan_to_term(name: str, branches: list[str], merge: str = "dict") -> "TTerm":
+    return fan(name, branches, merge).value
+
+
+def arch_to_term(name: str, cases=None,
+                 observer_convergence: str | None = None,
+                 observer_loss: str | None = None) -> "TTerm":
+    case_tterms = None
+    if cases is not None:
+        case_tterms = [case(c.name, c.recursive, c.data, getattr(c, 'output', 0))
+                       for c in cases]
+    return arch(name, case_tterms, observer_convergence, observer_loss).value

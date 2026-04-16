@@ -2,7 +2,53 @@
 
 ## Overview
 
-The `engine/` module provides a domain-specific language for declaring tensor architectures as compositions of V-functors over arbitrary semirings. You write a DSL program as a string, pass it to `compile()` along with a Python namespace, and get back an `ArchDef` — a compiled object whose paths are callable and whose arch declarations support both batch (algebra) and streaming (coalgebra) evaluation.
+Write your architecture as a short text program, pass it to `compile()` with your NumPy/PyTorch ops, and get back callable layers and a streaming interpreter. The DSL handles sequential composition, parallel branches, skip connections, and autoregressive state — you supply the math functions.
+
+Formally, the DSL expresses V-enriched functor compositions over arbitrary semirings, but you don't need that to use it.
+
+You write a DSL string, pass it to `compile()` along with a Python namespace, and get back an `ArchDef` — a compiled object whose paths are callable and whose arch declarations support both batch (algebra) and streaming (coalgebra) evaluation.
+
+## Quickstart
+
+A 2-layer GPT-style transformer in ~20 lines of DSL (from `engine/gpt_demo.ipynb`):
+
+```
+semiring attn:
+    contract = ops.join_fn       # how tensors combine — standard einsum passthrough here
+    compiler = ops.compile_einsum
+
+sort model, h, scores, probs    # tensor sorts — used for composition checking
+
+morphism proj[prefix] : model -> h     via "sd,dh->sh"  op ops.proj
+# ↑ parameterized linear projection: input sort "model", output sort "h"
+#   proj[q] reads y['q_W']/y['q_b']; proj[k] reads y['k_W']/y['k_b'] — same op, different weight keys
+
+morphism ln[prefix]   : model -> model via "sd->sd"     op ops.ln
+morphism score        : h -> scores    via "sh,th->st"  op ops.score
+morphism normalize    : scores -> probs via "st->st"    op ops.softmax  arity unary
+morphism mix          : probs -> h     via "st,th->sh"  op ops.mix
+
+fan kv = proj[k] & proj[v]  merge dict
+# ↑ parallel branch: runs proj[k] and proj[v] on the same input, merges into context dict y
+
+path read = proj[q] score normalize mix proj_out[o]
+# ↑ sequential pipeline: Q-projection -> attention scores -> softmax -> weighted sum -> output projection
+
+path attn = ln[1] [kv] read  residual
+# ↑ full attention sub-layer: layer norm, then inject K/V into context, then read path, then skip connection
+
+arch Transformer:
+    cases:
+        input: leaf  data=1  cell=identity
+        block: node  data=1  morphisms=attn ffn  iterate=layers
+        # ↑ one block = attn + ffn; iterate=layers stacks N blocks from a layer list
+```
+
+```python
+arch = engine.compile(DSL_SOURCE, {'ops': ops})
+interp = arch.interpreter('Transformer', params={}, temp=0.0)
+result = interp.run_algebra_layers(x0, layers=layer_weights)   # batch forward pass
+```
 
 ## Architecture
 
@@ -22,9 +68,9 @@ The `engine/` module provides a domain-specific language for declaring tensor ar
 
 ## Key Abstractions
 
-### `SemiringDecl` — the algebraic structure
+### `SemiringDecl` — the algebraic structure (your choice of tensor reduction operations)
 
-Declares the quantale V = (V, ⊗, k) that morphisms compose over. The `contract` function is V's binary (or ternary) product operation; its signature must be `(compiled_eq, x, y, temp=0.0) -> tensor`. The optional `compiler` preprocesses equation strings before they reach `contract`.
+Declares the quantale (the algebraic structure that determines how tensors combine — your choice of sum-product, max-min, tropical, etc.) V = (V, ⊗, k) that morphisms compose over. The `contract` function is V's binary (or ternary) product operation; its signature must be `(compiled_eq, x, y, temp=0.0) -> tensor`. The optional `compiler` preprocesses equation strings before they reach `contract`.
 
 ```python
 @dataclass
@@ -35,7 +81,7 @@ class SemiringDecl:
     arity:    str        # 'binary' (default) or 'ternary'
 ```
 
-### `MorphismDecl` / `MorphismSpec` — a single V-functor
+### `MorphismDecl` / `MorphismSpec` — a single V-functor (a structure-preserving layer operation)
 
 `MorphismDecl` is the parsed AST node. `MorphismSpec` (in `runtime.py`) is the resolved runtime version with actual Python callables. After `compile()`, each morphism is stored in `ArchDef.paths` as a `(x, y, temp) -> result` callable.
 

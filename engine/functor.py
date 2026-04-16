@@ -123,9 +123,12 @@ class Accumulator:
         self._store: dict = {}
 
     def update(self, payload: list) -> None:
+        if len(self.specs) > len(payload):
+            raise ValueError(
+                f"Accumulator has {len(self.specs)} spec(s) but payload has "
+                f"{len(payload)} item(s). Specs: {list(self.specs.keys())}"
+            )
         for i, (name, (mode, fields)) in enumerate(self.specs.items()):
-            if i >= len(payload):
-                break
             item = payload[i]
             if fields is not None:
                 if name not in self._store:
@@ -277,7 +280,7 @@ class Interpreter:
             if has_output:
                 outputs.append(result.output)
 
-            # Accumulate leg outputs from payload
+            # Accumulate morphism outputs from payload
             if acc.active and result.payload:
                 acc.update(result.payload)
 
