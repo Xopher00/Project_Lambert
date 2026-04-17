@@ -31,14 +31,62 @@ def setup_hydra_path():
 
 setup_hydra_path()
 
-from hydra.core import Name, Type  # noqa: E402
+from hydra.core import Name, Type, TypeScheme, TypeVariable as _TypeVariable  # noqa: E402
 from hydra.dsl import prims  # noqa: E402
-from hydra.dsl.python import Right  # noqa: E402
-from hydra.graph import TermCoder  # noqa: E402
+from hydra.dsl.python import FrozenDict as _FD, Nothing, Right  # noqa: E402
+from hydra.graph import Graph as _Graph, TermCoder  # noqa: E402
+from hydra.checking import types_effectively_equal as _types_equal  # noqa: E402
 
 import hydra.dsl.types as types  # noqa: E402
 
 from engine.parser import SortDecl as _SortDecl, SortCoercion as _SortCoercion  # noqa: E402
+
+
+def _graph_for_sorts(sort_types: dict) -> _Graph:
+    """Build a Hydra Graph with sort types registered as schema_types.
+
+    Registering sort types prevents types_effectively_equal from treating
+    sort TypeVariable names as free-variable wildcards.
+    """
+    scheme_map = {
+        Name("ua.sort." + k): TypeScheme(variables=(), type=v, constraints=Nothing())
+        for k, v in sort_types.items()
+        if isinstance(k, str)
+    }
+    return _Graph(
+        bound_terms=_FD({}),
+        bound_types=_FD({}),
+        class_constraints=_FD({}),
+        lambda_variables=frozenset(),
+        metadata=_FD({}),
+        primitives=_FD({}),
+        schema_types=_FD(scheme_map),
+        type_variables=frozenset(),
+    )
+
+
+_EMPTY_GRAPH = _Graph(
+    bound_terms=_FD({}),
+    bound_types=_FD({}),
+    class_constraints=_FD({}),
+    lambda_variables=frozenset(),
+    metadata=_FD({}),
+    primitives=_FD({}),
+    schema_types=_FD({}),
+    type_variables=frozenset(),
+)
+
+
+def _sort_types_match(graph: _Graph, t1: Type, t2: Type) -> bool:
+    """Check whether two sort types are compatible.
+
+    TypeVariable sorts are compared by name (nominal equality).
+    Structured record sorts use types_effectively_equal so typedef
+    aliases are normalized before comparison.
+    """
+    if isinstance(t1, _TypeVariable) or isinstance(t2, _TypeVariable):
+        return t1 == t2
+    return _types_equal(graph, t1, t2)
 
 
 # ---------------------------------------------------------------------------
@@ -89,19 +137,60 @@ def sort_to_type(
 # ---------------------------------------------------------------------------
 
 
+def _ndarray_encode(cx, g, t):
+    import numpy as np
+    from hydra.core import LiteralBinary, TermLiteral
+    raw = t.value.value  # TermLiteral -> LiteralBinary -> bytes
+    sep = raw.index(0)
+    sep2 = raw.index(0, sep + 1)
+    dtype = np.dtype(raw[:sep].decode())
+    shape = tuple(int(x) for x in raw[sep + 1:sep2].decode().split(",") if x)
+    data = raw[sep2 + 1:]
+    return Right(np.frombuffer(data, dtype=dtype).reshape(shape))
+
+
+def _ndarray_decode(cx, v):
+    from hydra.core import LiteralBinary, TermLiteral
+    import numpy as np
+    arr = np.asarray(v)
+    dtype_b = arr.dtype.str.encode()
+    shape_b = ",".join(str(s) for s in arr.shape).encode()
+    hdr = dtype_b + b"\x00" + shape_b + b"\x00"
+    return Right(TermLiteral(LiteralBinary(hdr + arr.tobytes())))
+
+
 def ndarray_coder() -> TermCoder:
     return TermCoder(
         type=types.variable("ua.tensor.NDArray"),
-        encode=lambda cx, g, t: Right(t),
-        decode=lambda cx, v: Right(v),
+        encode=_ndarray_encode,
+        decode=_ndarray_decode,
     )
+
+
+def _bundle_encode(cx, g, t):
+    import io
+    import numpy as np
+    raw = t.value.value  # TermLiteral -> LiteralBinary -> bytes
+    buf = io.BytesIO(raw)
+    buf.seek(0)
+    npz = np.load(buf, allow_pickle=False)
+    return Right(dict(npz))
+
+
+def _bundle_decode(cx, v):
+    import io
+    import numpy as np
+    from hydra.core import LiteralBinary, TermLiteral
+    buf = io.BytesIO()
+    np.savez(buf, **v)
+    return Right(TermLiteral(LiteralBinary(buf.getvalue())))
 
 
 def bundle_coder() -> TermCoder:
     return TermCoder(
         type=types.variable("ua.tensor.Bundle"),
-        encode=lambda cx, g, t: Right(t),
-        decode=lambda cx, v: Right(v),
+        encode=_bundle_encode,
+        decode=_bundle_decode,
     )
 
 
@@ -136,6 +225,8 @@ def morphism_type() -> Type:
         types.field("tgtSort", types.string()),
         types.field("arity", types.string()),
         types.field("templateParams", types.list_(types.string())),
+        types.field("semiring", types.string()),
+        types.field("equation", types.string()),
     ])
 
 
@@ -236,6 +327,7 @@ def grade_sorts(
     """
     errors: list[str] = []
     warnings: list[str] = []
+    _graph = _graph_for_sorts(sort_types)
     for i in range(1, len(names)):
         prev_tgt = morphism_specs[names[i - 1]].tgt_sort
         curr_src = morphism_specs[names[i]].src_sort
@@ -243,7 +335,7 @@ def grade_sorts(
             continue
         prev_type = sort_types.get(prev_tgt)
         curr_type = sort_types.get(curr_src)
-        if prev_type is not None and curr_type is not None and prev_type == curr_type:
+        if prev_type is not None and curr_type is not None and _sort_types_match(_graph, prev_type, curr_type):
             continue
         grade = coercion_grades.get((prev_tgt, curr_src), 0.0)
         msg = (
@@ -256,15 +348,3 @@ def grade_sorts(
         elif grade < threshold:
             warnings.append(f"{msg} (coercion grade {grade:.3f} < threshold {threshold:.3f})")
     return errors, warnings
-
-
-# ---------------------------------------------------------------------------
-# Hydra term bridge
-# ---------------------------------------------------------------------------
-
-
-def morphism_to_term(spec) -> "object":
-    """Map a MorphismSpec to a TTerm (Hydra bridging)."""
-    from engine.terms import morphism as _morphism_term
-    template_params = [spec.template_param] if getattr(spec, 'template_param', None) else []
-    return _morphism_term(spec.name, spec.src_sort, spec.tgt_sort, spec.arity, template_params).value

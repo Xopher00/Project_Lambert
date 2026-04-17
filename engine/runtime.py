@@ -69,6 +69,17 @@ NUMPY_BACKEND = Backend(
 )
 
 
+def _resolve(dotted: str, namespace: dict) -> object:
+    """Walk a dotted name through a namespace dict."""
+    parts = dotted.split('.')
+    obj = namespace.get(parts[0])
+    if obj is None:
+        raise NameError(f"Name {parts[0]!r} not found in provided namespace")
+    for attr in parts[1:]:
+        obj = getattr(obj, attr)
+    return obj
+
+
 # ---------------------------------------------------------------------------
 # CompiledMorphism — named callable wrapper for better tracebacks
 # ---------------------------------------------------------------------------
@@ -127,6 +138,8 @@ class MorphismSpec:
     arity:             str      = 'binary'  # 'binary' | 'unary' | 'pointwise' | 'ternary'
     accumulate:        str | None = None    # 'cat' | None — accumulation mode
     accumulate_fields: list[str] | None = None  # field names for field-level accumulate
+    src_type:          object | None = None  # hydra.core.Type, when declared
+    tgt_type:          object | None = None
 
 
 # ---------------------------------------------------------------------------

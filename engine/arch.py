@@ -233,7 +233,6 @@ class ArchDef:
     _fan_terms:        dict                            = field(default_factory=dict, repr=False)
     _hydra_primitives: dict                            = field(default_factory=dict, repr=False)
     _arch_terms:       dict                            = field(default_factory=dict, repr=False)
-    _arch_types:       dict                            = field(default_factory=dict, repr=False)
 
     def explain(self, name: str) -> str:
         if name in self._path_morphisms:

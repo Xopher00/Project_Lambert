@@ -1,11 +1,11 @@
 """
-Turns DSL source text into an abstract syntax tree.
+Turns DSL source text into a collection of plain dicts.
 
-Parses a flat, indentation-aware text format into a list of typed
-declarations (SemiringDecl, SortDecl, MorphismDecl, etc.) collected
-in a DSLSource object. The parser is line-oriented: each top-level
-keyword (semiring, sort, morphism, path, fan, arch) starts a new
-declaration. Morphism declarations support multi-line continuation
+Parses a flat, indentation-aware text format. Each top-level keyword
+(semiring, sort, morphism, path, fan, arch) produces a plain dict.
+SemiringDecl and SortDecl are the only remaining dataclasses; all other
+constructs are plain dicts collected in a DSLSource object. The parser
+is line-oriented; morphism declarations support multi-line continuation
 via indented sub-clauses.
 
 Key functions:
@@ -84,60 +84,6 @@ class SemiringDecl:
     one:      str | None = None  # multiplicative identity (value or dotted name)
 
 
-@dataclass
-class MorphismDecl:
-    name:      str
-    src_sort:  str
-    tgt_sort:  str
-    equation:  str
-    semiring:  str | None         # None = bridge; '_default' = no using-clause
-    op:        str | None = None  # dotted name; None = use semiring contract
-    transform: str | None = None  # dotted name: (x, y) -> (x', y')
-    compiler:  str | None = None  # dotted name: per-morphism equation compiler override
-    arity:     str = 'binary'     # 'binary' | 'unary' | 'pointwise' | 'ternary'
-    accumulate: str | None = None  # 'cat' | None — coalgebra state accumulation
-    accumulate_fields: list[str] | None = None  # field names for field-level accumulate
-    template_param: str | None = None    # parameter name for template morphisms
-
-
-@dataclass
-class PathDecl:
-    name:      str
-    morphisms: list[str]
-    residual:  bool = False
-    normed:    str | None = None   # morphism name to apply as norm after path
-
-
-@dataclass
-class FanDecl:
-    name:     str
-    branches: list[str]   # morphism/path names
-    merge:    str = 'dict' # 'dict', 'meet', 'join', or dotted.name
-
-
-@dataclass
-class CaseDecl:
-    name:      str
-    recursive: int
-    data:      int
-    output:    int = 0
-    cell:      str | None = None       # dotted name for per-case cell function
-    morphisms: list[str] | None = None  # DSL-derived cell: compose these morphisms
-    iterate:   str | None = None        # payload sequence name for iteration
-
-
-@dataclass
-class ArchDecl:
-    name:              str
-    cases:             list[CaseDecl] | None = None
-    algebra_cell:      str | None = None
-    observer_convergence: str | None = None
-    observer_loss:        str | None = None
-    state_fields:         dict[str, str] | None = None
-    step_enter:           str | None = None
-    step_emit:            str | None = None
-    step_compute:         str | None = None
-
 
 @dataclass
 class SortDecl:
@@ -174,10 +120,10 @@ class SortCoercion:
 class DSLSource:
     semirings:      list[SemiringDecl]
     sorts:          list[SortDecl]
-    morphisms:      list[MorphismDecl]
-    paths:          list[PathDecl]
-    fans:           list[FanDecl]
-    archs:          list[ArchDecl]  = field(default_factory=list)
+    morphisms:      list[dict]
+    paths:          list[dict]
+    fans:           list[dict]
+    archs:          list[dict]     = field(default_factory=list)
     coercions:      list           = field(default_factory=list)   # list[SortCoercion]
     sort_threshold: float          = 1.0
 
@@ -230,7 +176,7 @@ def _strip_comments(source: str) -> str:
     return '\n'.join(line.split('#')[0].rstrip() for line in source.splitlines())
 
 
-def _parse_case_line(inner: str) -> CaseDecl | None:
+def _parse_case_line(inner: str) -> dict | None:
     """Parse a case declaration, or return None if not a match.
 
     Accepts two forms:
@@ -286,11 +232,15 @@ def _parse_case_line(inner: str) -> CaseDecl | None:
         raise SyntaxError(
             f"case '{case_name}': must declare 'recursive' and 'data'"
         )
-    return CaseDecl(
-        case_name, attrs['recursive'], attrs['data'],
-        attrs.get('output', 0), case_cell, case_morphisms,
-        iterate=case_iterate,
-    )
+    return {
+        'name': case_name,
+        'recursive': attrs['recursive'],
+        'data': attrs['data'],
+        'output': attrs.get('output', 0),
+        'cell': case_cell,
+        'morphisms': case_morphisms,
+        'iterate': case_iterate,
+    }
 
 
 def _parse_sort_items(rhs: str) -> list[SortDecl]:
@@ -374,7 +324,7 @@ def _parse_semiring(lines: list[str], i: int) -> tuple[SemiringDecl, int]:
     ), i
 
 
-def _parse_morphism(line: str) -> MorphismDecl:
+def _parse_morphism(line: str) -> dict:
     """Parse a morphism declaration line.
 
     Accepts two forms:
@@ -456,15 +406,23 @@ def _parse_morphism(line: str) -> MorphismDecl:
             continue
         raise SyntaxError(f"morphism '{name}': unrecognised clause {clause!r}")
 
-    return MorphismDecl(
-        name, src_sort, tgt_sort, equation, semiring,
-        op_name, transform_name, compiler_name,
-        arity_val, accumulate_val, accumulate_fields_val,
-        template_param=template_param,
-    )
+    return {
+        'name': name,
+        'src_sort': src_sort,
+        'tgt_sort': tgt_sort,
+        'equation': equation,
+        'semiring': semiring,
+        'op': op_name,
+        'transform': transform_name,
+        'compiler': compiler_name,
+        'arity': arity_val,
+        'accumulate': accumulate_val,
+        'accumulate_fields': accumulate_fields_val,
+        'template_param': template_param,
+    }
 
 
-def _parse_path(line: str) -> PathDecl:
+def _parse_path(line: str) -> dict:
     """Parse a single 'path <n> = <morphisms...>  [residual]  [normed <m>]' line."""
     match_header = re.match(r'^path\s+(\w+)\s*=\s*(.+)$', line)
     path_name = match_header.group(1)
@@ -479,10 +437,10 @@ def _parse_path(line: str) -> PathDecl:
     if match_residual:
         residual_flag = True
         rhs = rhs[:match_residual.start()]
-    return PathDecl(path_name, rhs.split(), residual_flag, normed_name)
+    return {'name': path_name, 'morphisms': rhs.split(), 'residual': residual_flag, 'normed': normed_name}
 
 
-def _parse_fan(line: str) -> FanDecl:
+def _parse_fan(line: str) -> dict:
     """Parse a single 'fan <n> = <m> & <m> & ...  [merge <mode>]' line."""
     match_header = re.match(r'^fan\s+(\w+)\s*=\s*(.+)$', line)
     if not match_header:
@@ -501,14 +459,14 @@ def _parse_fan(line: str) -> FanDecl:
     branches = [b.strip() for b in rhs.split('&') if b.strip()]
     if not branches:
         raise SyntaxError(f"fan '{fan_name}': no branches declared")
-    return FanDecl(fan_name, branches, merge_mode)
+    return {'name': fan_name, 'branches': branches, 'merge': merge_mode}
 
 
-def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
+def _parse_arch(lines: list[str], i: int) -> tuple[dict, int]:
     """Parse an 'arch <n>:' block starting at line index i."""
     match_header = re.match(r'^arch\s+(\w+)\s*:', lines[i].strip())
     arch_name = match_header.group(1)
-    unified_cases: list[CaseDecl] | None = None
+    unified_cases: list[dict] | None = None
     alg_cell:        str | None = None
     obs_convergence: str | None = None
     obs_loss:        str | None = None
@@ -569,7 +527,7 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
         match_mode = re.match(r'^(cases|algebra)\s*:', inner)
         if match_mode:
             mode = match_mode.group(1)
-            cases: list[CaseDecl] = []
+            cases: list[dict] = []
             cell_name: str | None = None
             i += 1
             collected, i = _scan_sub_block(lines, i)
@@ -594,17 +552,17 @@ def _parse_arch(lines: list[str], i: int) -> tuple[ArchDecl, int]:
         raise SyntaxError(
             f"arch '{arch_name}' must declare cases or algebra"
         )
-    return ArchDecl(
-        name=arch_name,
-        cases=unified_cases,
-        algebra_cell=alg_cell,
-        observer_convergence=obs_convergence,
-        observer_loss=obs_loss,
-        state_fields=state_fields,
-        step_enter=step_enter,
-        step_emit=step_emit,
-        step_compute=step_compute,
-    ), i
+    return {
+        'name': arch_name,
+        'cases': unified_cases,
+        'algebra_cell': alg_cell,
+        'observer_convergence': obs_convergence,
+        'observer_loss': obs_loss,
+        'state_fields': state_fields,
+        'step_enter': step_enter,
+        'step_emit': step_emit,
+        'step_compute': step_compute,
+    }, i
 
 
 # ---------------------------------------------------------------------------
@@ -615,10 +573,10 @@ def parse(source: str) -> DSLSource:
     source = _strip_comments(source)
     semirings:      list[SemiringDecl]  = []
     sorts:          list[SortDecl]      = []
-    morphisms:      list[MorphismDecl]  = []
-    paths:          list[PathDecl]      = []
-    fans:           list[FanDecl]       = []
-    archs:          list[ArchDecl]      = []
+    morphisms:      list[dict]  = []
+    paths:          list[dict]  = []
+    fans:           list[dict]  = []
+    archs:          list[dict]  = []
     coercions:      list[SortCoercion]  = []
     sort_threshold: float               = 1.0
 

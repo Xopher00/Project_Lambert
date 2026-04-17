@@ -24,8 +24,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from engine.parser import SemiringDecl
 from engine.sorts import setup_hydra_path as _setup  # ensures Hydra on sys.path
+from engine.runtime import _resolve
 
 _setup()
 
@@ -41,17 +41,6 @@ NS = "ua.lib.tensor"
 def qname(namespace: str, local_name: str) -> Name:
     """Qualified Hydra Name following libraries.py convention."""
     return Name(f"{namespace}.{local_name}")
-
-
-def _resolve(dotted: str, namespace: dict) -> object:
-    """Walk a dotted name through a namespace dict."""
-    parts = dotted.split('.')
-    obj = namespace.get(parts[0])
-    if obj is None:
-        raise NameError(f"Name {parts[0]!r} not found in provided namespace")
-    for attr in parts[1:]:
-        obj = getattr(obj, attr)
-    return obj
 
 
 # ---------------------------------------------------------------------------
@@ -92,18 +81,24 @@ def register_primitives(
             ) from exc
 
         prim_name = qname(NS, m_name)
+        eq = compiled_equations.get(m_name, "")
 
         if m_decl['arity'] in ("unary", "pointwise"):
+            bound_op = lambda x, _op=op_fn, _eq=eq: _op(_eq, x, temp=0.0)
             primitives[prim_name] = prims.prim1(
-                prim_name, op_fn, [], nd, nd
+                prim_name, bound_op, [], nd, nd
             )
         else:
+            bound_op = lambda x, y, _op=op_fn, _eq=eq: _op(_eq, x, y, temp=0.0)
             primitives[prim_name] = prims.prim2(
-                prim_name, op_fn, [], nd, nd, nd
+                prim_name, bound_op, [], nd, nd, nd
             )
 
     # --- semiring-contract morphisms (equation baked in) ---------------------
     for morph_name, eq in compiled_equations.items():
+        # Skip morphisms already registered with an op override in group 1.
+        if qname(NS, morph_name) in primitives:
+            continue
         sr_name = morphism_to_semiring.get(morph_name)
         if sr_name is None or sr_name == '_bridge':
             continue

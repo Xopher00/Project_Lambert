@@ -46,8 +46,6 @@ from engine.sorts import (
     ndarray_coder, bundle_coder,
     morphism_type, path_type, fan_type, case_type, arch_type,
 )
-from engine.sorts import morphism_to_term
-from engine.terms import path_to_term, fan_to_term, arch_to_term
 from engine.primitives import (
     register_primitives, build_engine_graph, qname,
 )

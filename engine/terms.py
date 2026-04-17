@@ -37,6 +37,8 @@ _SRC_SORT = Name("srcSort")
 _TGT_SORT = Name("tgtSort")
 _ARITY = Name("arity")
 _TEMPLATE_PARAMS = Name("templateParams")
+_SEMIRING = Name("semiring")
+_EQUATION = Name("equation")
 _MORPHISMS = Name("morphisms")
 _RESIDUAL = Name("residual")
 _BRANCHES = Name("branches")
@@ -48,7 +50,8 @@ _STEP_EMIT = Name("stepEmit")
 
 
 def morphism(name: str, src: str, tgt: str, arity: str = "binary",
-             template_params: list[str] | None = None) -> TTerm:
+             template_params: list[str] | None = None,
+             semiring: str = "", equation: str = "") -> TTerm:
     """Construct a typed morphism term."""
     fields = [
         field(_NAME, string(name)),
@@ -56,6 +59,8 @@ def morphism(name: str, src: str, tgt: str, arity: str = "binary",
         field(_TGT_SORT, string(tgt)),
         field(_ARITY, string(arity)),
         field(_TEMPLATE_PARAMS, list_([string(p) for p in (template_params or [])])),
+        field(_SEMIRING, string(semiring)),
+        field(_EQUATION, string(equation)),
     ]
     return record(_MORPHISM, fields)
 
@@ -122,5 +127,5 @@ def fan_to_term(name: str, branches: list[str]) -> "TTerm":
 def arch_to_term(name: str, cases=None,
                  step_enter: str | None = None,
                  step_emit: str | None = None) -> "TTerm":
-    case_names = [c['name'] if isinstance(c, dict) else c.name for c in cases] if cases is not None else []
+    case_names = [c['name'] for c in cases] if cases is not None else []
     return arch(name, case_names, step_enter, step_emit).value
