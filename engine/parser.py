@@ -1,20 +1,20 @@
 """
-Turns DSL source text into a collection of plain dicts.
+Turns DSL source text into a collection of TTerms.
 
 Parses a flat, indentation-aware text format. Each top-level keyword
-(semiring, sort, morphism, path, fan, arch) produces a plain dict.
+(semiring, sort, morphism, path, fan, arch) produces a typed TTerm.
 SemiringDecl and SortDecl are the only remaining dataclasses; all other
-constructs are plain dicts collected in a DSLSource object. The parser
+constructs are TTerms collected in a DSLSource object. The parser
 is line-oriented; morphism declarations support multi-line continuation
 via indented sub-clauses.
 
 Key functions:
   parse           — entry point: source string → DSLSource AST
   _parse_semiring — block parser for 'semiring <n>:' declarations
-  _parse_morphism — single-line parser for morphism declarations
-  _parse_path     — single-line parser for path compositions
-  _parse_fan      — single-line parser for fan-out declarations
-  _parse_arch     — block parser for 'arch <n>:' declarations
+  _parse_morphism — single-line parser for morphism declarations → TTerm
+  _parse_path     — single-line parser for path compositions → TTerm
+  _parse_fan      — single-line parser for fan-out declarations → TTerm
+  _parse_arch     — block parser for 'arch <n>:' declarations → TTerm
 
 Syntax
 ------
@@ -120,12 +120,18 @@ class SortCoercion:
 class DSLSource:
     semirings:      list[SemiringDecl]
     sorts:          list[SortDecl]
-    morphisms:      list[dict]
-    paths:          list[dict]
-    fans:           list[dict]
-    archs:          list[dict]     = field(default_factory=list)
-    coercions:      list           = field(default_factory=list)   # list[SortCoercion]
-    sort_threshold: float          = 1.0
+    morphisms:      list  # list[TTerm] — ua.engine.Morphism records
+    paths:          list  # list[TTerm] — ua.engine.Path records
+    fans:           list  # list[TTerm] — ua.engine.Fan records
+    archs:          list = field(default_factory=list)  # list[TTerm] — ua.engine.Arch records
+    coercions:      list = field(default_factory=list)  # list[SortCoercion]
+    sort_threshold: float = 1.0
+
+
+# Deferred import: avoids circular dependency with engine.sorts
+# (sorts.py imports SortDecl/SortCoercion from here; terms.py imports from sorts)
+# SortDecl and SortCoercion are defined above, so this import is safe here.
+from . import terms as _terms  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -176,12 +182,14 @@ def _strip_comments(source: str) -> str:
     return '\n'.join(line.split('#')[0].rstrip() for line in source.splitlines())
 
 
-def _parse_case_line(inner: str) -> dict | None:
+def _parse_case_line(inner: str):
     """Parse a case declaration, or return None if not a match.
 
     Accepts two forms:
       case <name>: <attrs>     (original, with 'case' keyword)
       <name>: <attrs>          (compact, bare name)
+
+    Returns a TTerm (ua.engine.Case) or None.
     """
     match_case = re.match(r'^case\s+(\w+)\s*:\s*(.+)$', inner)
     if not match_case:
@@ -219,8 +227,8 @@ def _parse_case_line(inner: str) -> dict | None:
         attrs_str = attrs_str[:match_morphisms.start()] + attrs_str[match_morphisms.end():]
 
     attrs: dict[str, int] = {}
-    case_cell: str | None = None
-    case_iterate: str | None = None
+    case_cell: str = ""
+    case_iterate: str = ""
     for kv in re.findall(r'(\w+)\s*=\s*([\w.]+)', attrs_str):
         if kv[0] == 'cell':
             case_cell = kv[1]
@@ -232,15 +240,15 @@ def _parse_case_line(inner: str) -> dict | None:
         raise SyntaxError(
             f"case '{case_name}': must declare 'recursive' and 'data'"
         )
-    return {
-        'name': case_name,
-        'recursive': attrs['recursive'],
-        'data': attrs['data'],
-        'output': attrs.get('output', 0),
-        'cell': case_cell,
-        'morphisms': case_morphisms,
-        'iterate': case_iterate,
-    }
+    return _terms.case(
+        name=case_name,
+        recursive=attrs['recursive'],
+        data=attrs['data'],
+        output=attrs.get('output', 0),
+        cell=case_cell,
+        morphisms=case_morphisms,
+        iterate=case_iterate,
+    )
 
 
 def _parse_sort_items(rhs: str) -> list[SortDecl]:
@@ -324,8 +332,8 @@ def _parse_semiring(lines: list[str], i: int) -> tuple[SemiringDecl, int]:
     ), i
 
 
-def _parse_morphism(line: str) -> dict:
-    """Parse a morphism declaration line.
+def _parse_morphism(line: str):
+    """Parse a morphism declaration line, returning a TTerm.
 
     Accepts two forms:
       morphism <n> : <src> -> <tgt>  via "<eq>"  [clauses...]   (original)
@@ -351,7 +359,7 @@ def _parse_morphism(line: str) -> dict:
         )
     if not match_header:
         raise SyntaxError(f"Invalid morphism declaration: {line!r}")
-    template_param = match_header.group(2)  # None if no [param]
+    template_param = match_header.group(2) or ""  # "" if no [param]
     name     = match_header.group(1)
     src_sort = match_header.group(3)
     tgt_sort = match_header.group(4)
@@ -359,11 +367,11 @@ def _parse_morphism(line: str) -> dict:
     rest     = match_header.group(6).strip()
 
     semiring:       str | None = '_default'
-    op_name:        str | None = None
-    transform_name: str | None = None
-    compiler_name:  str | None = None
+    op_name:        str = ""
+    transform_name: str = ""
+    compiler_name:  str = ""
     arity_val:      str = 'binary'
-    accumulate_val:        str | None       = None
+    accumulate_val:        str = ""
     accumulate_fields_val: list[str] | None = None
 
     for clause in re.split(r'\s{2,}', rest):
@@ -406,29 +414,33 @@ def _parse_morphism(line: str) -> dict:
             continue
         raise SyntaxError(f"morphism '{name}': unrecognised clause {clause!r}")
 
-    return {
-        'name': name,
-        'src_sort': src_sort,
-        'tgt_sort': tgt_sort,
-        'equation': equation,
-        'semiring': semiring,
-        'op': op_name,
-        'transform': transform_name,
-        'compiler': compiler_name,
-        'arity': arity_val,
-        'accumulate': accumulate_val,
-        'accumulate_fields': accumulate_fields_val,
-        'template_param': template_param,
-    }
+    return _terms.morphism(
+        name=name,
+        src=src_sort,
+        tgt=tgt_sort,
+        arity=arity_val,
+        template_params=[template_param] if template_param else [],
+        semiring=semiring if semiring else "",
+        equation=equation,
+        op=op_name,
+        transform=transform_name,
+        compiler_name=compiler_name,
+        accumulate=accumulate_val,
+        accumulate_fields=accumulate_fields_val,
+        template_param=template_param,
+    )
 
 
-def _parse_path(line: str) -> dict:
-    """Parse a single 'path <n> = <morphisms...>  [residual]  [normed <m>]' line."""
+def _parse_path(line: str):
+    """Parse a single 'path <n> = <morphisms...>  [residual]  [normed <m>]' line.
+
+    Returns a TTerm (ua.engine.Path).
+    """
     match_header = re.match(r'^path\s+(\w+)\s*=\s*(.+)$', line)
     path_name = match_header.group(1)
     rhs = match_header.group(2).strip()
     residual_flag = False
-    normed_name = None
+    normed_name = ""
     match_normed = re.search(r'\s+normed\s+(\w+)\s*$', rhs)
     if match_normed:
         normed_name = match_normed.group(1)
@@ -437,11 +449,19 @@ def _parse_path(line: str) -> dict:
     if match_residual:
         residual_flag = True
         rhs = rhs[:match_residual.start()]
-    return {'name': path_name, 'morphisms': rhs.split(), 'residual': residual_flag, 'normed': normed_name}
+    return _terms.path(
+        name=path_name,
+        morphisms=rhs.split(),
+        residual=residual_flag,
+        normed=normed_name,
+    )
 
 
-def _parse_fan(line: str) -> dict:
-    """Parse a single 'fan <n> = <m> & <m> & ...  [merge <mode>]' line."""
+def _parse_fan(line: str):
+    """Parse a single 'fan <n> = <m> & <m> & ...  [merge <mode>]' line.
+
+    Returns a TTerm (ua.engine.Fan).
+    """
     match_header = re.match(r'^fan\s+(\w+)\s*=\s*(.+)$', line)
     if not match_header:
         # Extract name for the error message even when RHS is missing
@@ -459,21 +479,24 @@ def _parse_fan(line: str) -> dict:
     branches = [b.strip() for b in rhs.split('&') if b.strip()]
     if not branches:
         raise SyntaxError(f"fan '{fan_name}': no branches declared")
-    return {'name': fan_name, 'branches': branches, 'merge': merge_mode}
+    return _terms.fan(name=fan_name, branches=branches, merge=merge_mode)
 
 
-def _parse_arch(lines: list[str], i: int) -> tuple[dict, int]:
-    """Parse an 'arch <n>:' block starting at line index i."""
+def _parse_arch(lines: list[str], i: int):
+    """Parse an 'arch <n>:' block starting at line index i.
+
+    Returns (TTerm, new_i) where TTerm is a ua.engine.Arch record.
+    """
     match_header = re.match(r'^arch\s+(\w+)\s*:', lines[i].strip())
     arch_name = match_header.group(1)
-    unified_cases: list[dict] | None = None
-    alg_cell:        str | None = None
-    obs_convergence: str | None = None
-    obs_loss:        str | None = None
+    unified_cases: list | None = None  # list of case TTerms
+    alg_cell:        str = ""
+    obs_convergence: str = ""
+    obs_loss:        str = ""
     state_fields: dict[str, str] | None = None
-    step_enter:   str | None = None
-    step_emit:    str | None = None
-    step_compute: str | None = None
+    step_enter:   str = ""
+    step_emit:    str = ""
+    step_compute: str = ""
     i += 1
     while i < len(lines):
         inner = lines[i].strip()
@@ -527,8 +550,8 @@ def _parse_arch(lines: list[str], i: int) -> tuple[dict, int]:
         match_mode = re.match(r'^(cases|algebra)\s*:', inner)
         if match_mode:
             mode = match_mode.group(1)
-            cases: list[dict] = []
-            cell_name: str | None = None
+            cases: list = []
+            cell_name: str = ""
             i += 1
             collected, i = _scan_sub_block(lines, i)
             for sub in collected:
@@ -537,7 +560,7 @@ def _parse_arch(lines: list[str], i: int) -> tuple[dict, int]:
                     cell_name = match_cell.group(1).strip()
                     continue
                 cd = _parse_case_line(sub)
-                if cd:
+                if cd is not None:
                     cases.append(cd)
             if not cases:
                 raise SyntaxError(
@@ -552,17 +575,22 @@ def _parse_arch(lines: list[str], i: int) -> tuple[dict, int]:
         raise SyntaxError(
             f"arch '{arch_name}' must declare cases or algebra"
         )
-    return {
-        'name': arch_name,
-        'cases': unified_cases,
-        'algebra_cell': alg_cell,
-        'observer_convergence': obs_convergence,
-        'observer_loss': obs_loss,
-        'state_fields': state_fields,
-        'step_enter': step_enter,
-        'step_emit': step_emit,
-        'step_compute': step_compute,
-    }, i
+    # Derive state field name/type lists for the TTerm
+    state_field_names = list(state_fields.keys()) if state_fields else None
+    state_field_types = list(state_fields.values()) if state_fields else None
+    term = _terms.arch(
+        name=arch_name,
+        cases=unified_cases,
+        step_enter=step_enter if step_enter else None,
+        step_emit=step_emit if step_emit else None,
+        algebra_cell=alg_cell,
+        observer_convergence=obs_convergence,
+        observer_loss=obs_loss,
+        step_compute=step_compute,
+        state_field_names=state_field_names,
+        state_field_types=state_field_types,
+    )
+    return term, i
 
 
 # ---------------------------------------------------------------------------
@@ -571,14 +599,14 @@ def _parse_arch(lines: list[str], i: int) -> tuple[dict, int]:
 
 def parse(source: str) -> DSLSource:
     source = _strip_comments(source)
-    semirings:      list[SemiringDecl]  = []
-    sorts:          list[SortDecl]      = []
-    morphisms:      list[dict]  = []
-    paths:          list[dict]  = []
-    fans:           list[dict]  = []
-    archs:          list[dict]  = []
-    coercions:      list[SortCoercion]  = []
-    sort_threshold: float               = 1.0
+    semirings:      list[SemiringDecl] = []
+    sorts:          list[SortDecl]    = []
+    morphisms:      list              = []  # list of TTerm
+    paths:          list              = []  # list of TTerm
+    fans:           list              = []  # list of TTerm
+    archs:          list              = []  # list of TTerm
+    coercions:      list[SortCoercion] = []
+    sort_threshold: float              = 1.0
 
     lines = source.splitlines()
     i = 0

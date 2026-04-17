@@ -15,6 +15,8 @@ import pytest
 
 from legacy.lattice.embed import Embed, Learner
 
+pytestmark = pytest.mark.legacy
+
 # Re-export so pytest collects Learner tests when running test_embed directly.
 from test_learn import (
     TestLearnNewAttractor,
@@ -63,6 +65,7 @@ def _recall_reference(embed, a, emb, temp):
 # T1 (RED): TestFixpointStep — must FAIL before _fixpoint_step is added
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(reason="Embed._fixpoint_step removed during refactor")
 class TestFixpointStep:
     """Direct tests for Embed._fixpoint_step."""
 
@@ -138,6 +141,7 @@ class TestFixpointStep:
 # T1 (RED): TestConjointCompanionHom — must FAIL before the wrappers are added
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(reason="Embed conjoint/companion hom removed during refactor")
 class TestConjointCompanionHom:
     """_conjoint_hom and _companion_hom are pure delegation wrappers."""
 

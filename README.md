@@ -8,6 +8,26 @@ Every solution to this problem so far has been inadequate — something slapped 
 
 However, it may be possible to make these models transparent and auditable. By understanding the mathematics behind how models work, we can build a new framework from the ground up and incorporate provenance at the deepest level. This is what Project Lambert is trying to achieve.
 
+## Installation
+
+Requires Python 3.12+. Install with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv sync
+```
+
+Or with pip:
+
+```bash
+pip install -e .
+```
+
+Run the test suite:
+
+```bash
+uv run --python 3.12 pytest
+```
+
 ## The Math
 This project was initially inspired by the work of mathematician Eric Hehner. Hehner recognized that arithmetic and logic obey the same mathematical laws, and developed a notation system that reflects this and combines them into a single, [Unified Algebra](https://www.cs.utoronto.ca/~hehner/UA.pdf). The idea that math and logic are two sides of the same coin means we can theoretically build an AI not based on statistics and probability, but on logic itself. By incorporating logic at the model's deepest layer, we can make it easier to understand on an intuitive and interpretable level how a model reaches a decision or processes data.
 
@@ -65,17 +85,26 @@ core/
   tensor.py       — relational operations (Join, Residuate, Closure) built on top of Activations
 
 engine/                      — active development: architecture DSL and compiler
-  __init__.py     — public surface (Arch, Decl, compile, run)
+  __init__.py     — public surface (Arch, compile, run)
   arch.py         — Arch declaration: named cases, fan-outs, and augment combinators
-  compiler.py     — compiles Arch + Decl into an executable functor tree
-  decl.py         — sort and morphism declarations (SortDecl, MorphDecl)
+  compiler.py     — compiles Arch declarations into an executable functor tree
+  terms.py        — DSL term AST (Morphism, Sort, Arch node types)
+  sorts.py        — SortDecl: sort declarations and field schemas
+  runtime.py      — MorphismSpec and runtime execution structures
   functor.py      — algebra / coalgebra functor types; interpreter loop
+  primitives.py   — built-in primitive combinators available to the DSL
   parser.py       — S-expression parser for DSL source strings
 
 streamlined/
   __init__.py
   composer.py     — high-level composition helpers
   relational_einsum.py — einsum-style relational ops
+
+architectures/               — example .ua architecture files
+  mealy.ua        — Mealy machine (stateful transducer)
+  rnn_fold.ua     — RNN (algebra fold)
+  rnn_stream.ua   — RNN (coalgebra stream)
+  tree_rnn.ua     — tree-structured RNN
 
 legacy/
   lattice/
@@ -89,7 +118,7 @@ legacy/
   provenance/     — retired witness-based proof tree implementation
 ```
 
-The `tests/` directory contains Jupyter notebooks covering join operations, attention, embeddings, and domain-specific experiments (knowledge graphs, PyPI dependencies, countries). Research notes are in `research/`.
+The `tests/` directory contains Python test files (`test_core.py`, `test_embed.py`, `test_learn.py`, `test_multihop.py`, `test_query.py`, `engine/`) and Jupyter notebooks for exploratory experiments. Research notes are in `research/`.
 
 ## Status
 

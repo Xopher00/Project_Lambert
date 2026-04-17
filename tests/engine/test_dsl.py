@@ -4,13 +4,133 @@ import warnings
 import numpy as np
 import pytest
 from engine import parse, compile, DSLSource, ArchDef
+from engine.compiler import _tterm_fields, _str_val, _int_val, _str_list_val, _bool_val
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _dummy_op(eq, x, y=None, temp=0.0):
+def _tf(tterm) -> dict:
+    """Extract raw field dict from any parsed TTerm. Values are Python primitives."""
+    tf = _tterm_fields(tterm)
+    result = {}
+    for k, v in tf.items():
+        # Try string first, fall back to int, then bool
+        try:
+            s = _str_val(v)
+            result[k] = s if s != "" else None
+            continue
+        except Exception:
+            pass
+        try:
+            result[k] = _int_val(v)
+            continue
+        except Exception:
+            pass
+        try:
+            result[k] = _bool_val(v)
+            continue
+        except Exception:
+            pass
+        result[k] = v  # leave as-is for lists etc.
+    return result
+
+
+def _mf(m) -> dict:
+    """Extract morphism fields as Python dict with camelCase → snake_case mapping."""
+    tf = _tterm_fields(m)
+    return {
+        'name':            _str_val(tf['name']),
+        'src_sort':        _str_val(tf['srcSort']),
+        'tgt_sort':        _str_val(tf['tgtSort']),
+        'arity':           _str_val(tf['arity']),
+        'semiring':        _str_val(tf['semiring']) or None,
+        'equation':        _str_val(tf['equation']),
+        'op':              _str_val(tf['op']) or None,
+        'transform':       _str_val(tf['transform']) or None,
+        'compiler':        _str_val(tf['compiler']) or None,
+        'accumulate':      _str_val(tf['accumulate']) or None,
+        'accumulate_fields': _str_list_val(tf['accumulateFields']) or None,
+        'template_param':  _str_val(tf['templateParam']) or None,
+    }
+
+
+def _pf(p) -> dict:
+    """Extract path fields."""
+    tf = _tterm_fields(p)
+    return {
+        'name':      _str_val(tf['name']),
+        'morphisms': _str_list_val(tf['morphisms']),
+        'residual':  _bool_val(tf['residual']),
+        'normed':    _str_val(tf['normed']) or None,
+    }
+
+
+def _ff(f) -> dict:
+    """Extract fan fields."""
+    tf = _tterm_fields(f)
+    return {
+        'name':     _str_val(tf['name']),
+        'branches': _str_list_val(tf['branches']),
+        'merge':    _str_val(tf['merge']) or 'dict',
+    }
+
+
+def _opt_str(term) -> "str | None":
+    """Extract Python str from a TermMaybe(Just(string)) or return None for Nothing."""
+    from hydra.core import TermMaybe
+    from hydra.dsl.python import Just
+    if isinstance(term, TermMaybe):
+        if isinstance(term.value, Just):
+            return _str_val(term.value.value)
+        return None
+    return None
+
+
+def _af(a) -> dict:
+    """Extract arch fields (top-level only, not case internals)."""
+    from hydra.core import TermList
+    tf = _tterm_fields(a)
+    cases_term = tf['cases']
+    case_list = list(cases_term.value) if isinstance(cases_term, TermList) else []
+    return {
+        'name':                _str_val(tf['name']),
+        'cases':               [_cf(c) for c in case_list],
+        'step_enter':          _opt_str(tf['stepEnter']),
+        'step_emit':           _opt_str(tf['stepEmit']),
+        'algebra_cell':        _str_val(tf['algebraCell']) or None,
+        'observer_convergence': _str_val(tf['observerConvergence']) or None,
+        'observer_loss':       _str_val(tf['observerLoss']) or None,
+        'step_compute':        _str_val(tf['stepCompute']) or None,
+        'state_fields':        dict(zip(_str_list_val(tf['stateFieldNames']),
+                                        _str_list_val(tf['stateFieldTypes'])))
+                               if _str_list_val(tf['stateFieldNames']) else None,
+    }
+
+
+def _cf(c) -> dict:
+    """Extract case fields from a bare Term (as stored inside arch.cases list)."""
+    from hydra.core import TermRecord, Record
+    if isinstance(c, TermRecord):
+        rec = c.value
+    elif isinstance(c, Record):
+        rec = c
+    else:
+        raise TypeError(f"_cf: expected TermRecord or Record, got {type(c)}")
+    tf = {f.name.value: f.term for f in rec.fields}
+    return {
+        'name':      _str_val(tf['name']),
+        'recursive': _int_val(tf['recursive']),
+        'data':      _int_val(tf['data']),
+        'output':    _int_val(tf['output']),
+        'cell':      _str_val(tf['cell']) or None,
+        'morphisms': _str_list_val(tf['caseMorphisms']) or None,
+        'iterate':   _str_val(tf['iterate']) or None,
+    }
+
+
+def _dummy_op(eq, x, y=None):
     return x
 
 def _swap(x, y):
@@ -95,13 +215,13 @@ class TestParse:
         assert sorted(ast.sorts) == ['i', 'j']
         assert len(ast.morphisms) == 2
         assert len(ast.paths) == 1
-        realize = ast.morphisms[0]
+        realize = _mf(ast.morphisms[0])
         assert realize['name'] == 'realize'
         assert realize['src_sort'] == 'j'
         assert realize['tgt_sort'] == 'i'
         assert realize['equation'] == 'j,ji->i'
-        assert ast.paths[0]['name'] == 'attend'
-        assert ast.paths[0]['morphisms'] == ['realize', 'propagate']
+        assert _pf(ast.paths[0])['name'] == 'attend'
+        assert _pf(ast.paths[0])['morphisms'] == ['realize', 'propagate']
 
     def test_comments_stripped(self):
         src = """
@@ -133,8 +253,8 @@ morphism a : x -> x  via "x->x"
             "morphism b : j -> i  via \"j->i\"  using s2\n"
         )
         ast = parse(src)
-        assert ast.morphisms[0]['semiring'] == 's1'
-        assert ast.morphisms[1]['semiring'] == 's2'
+        assert _mf(ast.morphisms[0])['semiring'] == 's1'
+        assert _mf(ast.morphisms[1])['semiring'] == 's2'
 
     @pytest.mark.parametrize("src,obj,attr,expected", [
         (_dsl('morphism a : x -> x  via "x->x"  op ops.dummy\n'),
@@ -152,8 +272,8 @@ morphism a : x -> x  via "x->x"
     def test_morphism_clause_parsed(self, src, obj, attr, expected):
         ast = parse(src)
         node = getattr(ast, obj)[0]
-        if isinstance(node, dict):
-            assert node[attr] == expected
+        if obj == 'morphisms':
+            assert _mf(node)[attr] == expected
         else:
             assert getattr(node, attr) == expected
 
@@ -165,8 +285,8 @@ morphism a : x -> x  via "x->x"
     def test_auto_assign_single_semiring(self):
         """Legs without 'using' auto-assign when exactly one semiring exists."""
         ast = parse(BASIC_SOURCE)
-        assert ast.morphisms[0]['semiring'] == '_default'
-        assert ast.morphisms[1]['semiring'] == '_default'
+        assert _mf(ast.morphisms[0])['semiring'] == '_default'
+        assert _mf(ast.morphisms[1])['semiring'] == '_default'
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +304,7 @@ class TestCompile:
         assert arch.morphism_semiring['realize'] == 'join'
         assert arch.morphism_semiring['propagate'] == 'join'
         assert callable(arch.paths['realize'])
-        assert arch.paths['realize']('x', 'y', 0.0) == 'x'
+        assert arch.paths['realize']('x', 'y') == 'x'
         text = arch.explain('attend')
         assert 'realize' in text
         assert 'propagate' in text
@@ -204,7 +324,7 @@ class TestCompile:
     def test_transform_resolved(self):
         src = _dsl('morphism a : x -> x  via "x->x"  transform ops.swap\n')
         arch = compile(src, NAMESPACE)
-        result = arch.paths['a']('x', 'y', 0.0)
+        result = arch.paths['a']('x', 'y')
         assert result == 'y'
 
     def test_compiler_semiring_level(self):
@@ -261,8 +381,8 @@ def test_parse_fan_merge(merge_kw, expected_merge):
         f'fan ab = a{merge_kw}\n'
     )
     ast = parse(src)
-    assert ast.fans[0]['name'] == 'ab'
-    assert ast.fans[0]['merge'] == expected_merge
+    assert _ff(ast.fans[0])['name'] == 'ab'
+    assert _ff(ast.fans[0])['merge'] == expected_merge
 
 
 class TestFan:
@@ -274,7 +394,7 @@ class TestFan:
             'fan ab = a & b\n'
         )
         arch = compile(src, NAMESPACE)
-        result = arch.paths['ab']('hello', None, 0.0)
+        result = arch.paths['ab']('hello', None)
         assert isinstance(result, dict)
         assert set(result.keys()) == {'a', 'b'}
         assert result['a'] == 'hello'
@@ -291,7 +411,7 @@ class TestFan:
         )
         arch = compile(src, NAMESPACE)
         x = np.array([3.0, 1.0, 2.0])
-        result = arch.paths['ab'](x, None, 0.0)
+        result = arch.paths['ab'](x, None)
         np.testing.assert_array_equal(result, op(x, x))
 
     def test_compile_fan_custom_merge(self):
@@ -301,7 +421,7 @@ class TestFan:
             'morphism b : x -> x  via "x->x"\n\n'
             'fan ab = a & b  merge ops.sum_merge\n'
         )
-        assert compile(src, ns).paths['ab'](5, None, 0.0) == 10  # 5 + 5
+        assert compile(src, ns).paths['ab'](5, None) == 10  # 5 + 5
 
     def test_fan_unknown_branch_raises(self):
         src = _dsl(
@@ -321,11 +441,11 @@ class TestFan:
 # ---------------------------------------------------------------------------
 
 def _make_bridge_ns():
-    def _join(eq, x, y=None, temp=0.0):
+    def _join(eq, x, y=None):
         return f'J({x})'
-    def _res(eq, x, y=None, temp=0.0):
+    def _res(eq, x, y=None):
         return f'R({x})'
-    def _bridge(eq, x, y=None, temp=0.0):
+    def _bridge(eq, x, y=None):
         return f'B({x})'
     return {
         'ops': type('ns', (), {
@@ -355,7 +475,7 @@ class TestBridge:
 
     def test_cross_semiring_with_bridge(self):
         arch = compile(_CROSS_SEMIRING_SRC, _make_bridge_ns())
-        result = arch.paths['cross']('x', None, 0.0)
+        result = arch.paths['cross']('x', None)
         assert result == 'R(B(J(x)))'
 
     def test_cross_semiring_without_bridge_raises(self):
@@ -397,13 +517,13 @@ class TestAugment:
             'path p = f [kv] f\n'
         )
         ast = parse(src)
-        assert '[kv]' in ast.paths[0]['morphisms']
+        assert '[kv]' in _pf(ast.paths[0])['morphisms']
 
     def test_compile_augment(self):
         """Augment step merges fan output into y."""
         ns = _make_ns(
-            branch=lambda eq, x, y=None, temp=0.0: x * 2,
-            reader=lambda eq, x, y=None, temp=0.0: y.get('b1', -1),
+            branch=lambda eq, x, y=None: x * 2,
+            reader=lambda eq, x, y=None: y.get('b1', -1),
         )
         src = _dsl(
             'morphism f : x -> x  via "x->x"\n'
@@ -414,12 +534,12 @@ class TestAugment:
             'path p = f [kv] r\n'
         )
         arch = compile(src, ns)
-        result = arch.paths['p'](np.array([1.0]), {}, 0.0)
+        result = arch.paths['p'](np.array([1.0]), {})
         assert result != -1  # b1 key should exist in augmented y
 
     def test_augment_preserves_x(self):
         """Augment step does not modify x."""
-        ns = _make_ns(double=lambda eq, x, y=None, temp=0.0: x * 2)
+        ns = _make_ns(double=lambda eq, x, y=None: x * 2)
         src = _dsl(
             'morphism pre  : x -> x  via "x->x"  op ops.double\n'
             'morphism b1   : x -> x  via "x->x"\n'
@@ -429,13 +549,13 @@ class TestAugment:
         )
         arch = compile(src, ns)
         x = np.array([1.0])
-        result = arch.paths['p'](x, {}, 0.0)
+        result = arch.paths['p'](x, {})
         # pre doubles: 2.0, augment doesn't change x, post doubles: 4.0
         assert float(result[0]) == 4.0
 
     def test_augment_with_residual(self):
         """Augment works with residual combinator."""
-        ns = _make_ns(op=lambda eq, x, y=None, temp=0.0: x + 1.0)
+        ns = _make_ns(op=lambda eq, x, y=None: x + 1.0)
         src = _dsl(
             'morphism f : x -> x  via "x->x"  op ops.op\n'
             'morphism b : x -> x  via "x->x"  op ops.op\n\n'
@@ -443,7 +563,7 @@ class TestAugment:
             'path p = f [aug] f  residual\n'
         )
         arch = compile(src, ns)
-        result = arch.paths['p'](np.array([0.0]), {}, 0.0)
+        result = arch.paths['p'](np.array([0.0]), {})
         # f(0) = 1, augment no change to x, f(1) = 2, residual: 2 + 0 = 2
         assert float(result[0]) == 2.0
 
@@ -465,7 +585,7 @@ arch A:
         final: node  data=1  cell=identity
 """
         ast = parse(src)
-        cases = ast.archs[0]['cases']
+        cases = _af(ast.archs[0])['cases']
         assert cases[0]['iterate'] is None
         assert cases[1]['iterate'] == 'layers'
         assert cases[2]['iterate'] == 'layers'
@@ -478,7 +598,7 @@ arch A:
     ])
     def test_iterate_single_case_fold(self, layers, expected):
         """Single iterate case folds over layers."""
-        def _add(payload, child_results, params, temp):
+        def _add(payload, child_results, params):
             return child_results[0] + payload[0]
 
         ns = _iterate_ns(add=_add)
@@ -499,10 +619,10 @@ arch A:
     ])
     def test_iterate_with_epilogue(self, base, layers, expected):
         """Cases after iterate block are applied as epilogue; empty layers skips to epilogue."""
-        def _add(payload, child_results, params, temp):
+        def _add(payload, child_results, params):
             return child_results[0] + payload[0]
 
-        def _double(payload, child_results, params, temp):
+        def _double(payload, child_results, params):
             return child_results[0] * 2
 
         ns = _iterate_ns(add=_add, double=_double)
@@ -520,10 +640,10 @@ arch A:
 
     def test_iterate_two_case_group(self):
         """Two iterate cases form a block that repeats per layer."""
-        def _add(payload, child_results, params, temp):
+        def _add(payload, child_results, params):
             return child_results[0] + payload[0]
 
-        def _mul(payload, child_results, params, temp):
+        def _mul(payload, child_results, params):
             return child_results[0] * 2
 
         ns = _iterate_ns(add=_add, mul=_mul)
@@ -541,7 +661,7 @@ arch A:
 
     def test_iterate_with_extras(self):
         """extras dict is merged into each layer payload."""
-        def _reader(payload, child_results, params, temp):
+        def _reader(payload, child_results, params):
             return child_results[0] + payload[0].get('extra_val', 0)
 
         ns = _iterate_ns(reader=_reader)
@@ -558,7 +678,7 @@ arch A:
 
     def test_iterate_backward_compat_decompose(self):
         """Old decompose= calling convention still works."""
-        def _leaf(payload, child_results, params, temp):
+        def _leaf(payload, child_results, params):
             return payload[0]
 
         ns = _iterate_ns(leaf=_leaf)
@@ -594,7 +714,7 @@ class TestParameterizedMorphisms:
     ])
     def test_parse_template_param(self, src_suffix, attr, expected):
         ast = parse(_PARAM_PREAMBLE + src_suffix)
-        assert ast.morphisms[0][attr] == expected
+        assert _mf(ast.morphisms[0])[attr] == expected
 
     def test_parse_instantiation_in_path(self):
         """ln[ln1] appears as a token in path morphisms."""
@@ -605,11 +725,11 @@ class TestParameterizedMorphisms:
             + 'path p = ln[ln1] m\n'
         )
         ast = parse(src)
-        assert ast.paths[0]['morphisms'] == ['ln[ln1]', 'm']
+        assert _pf(ast.paths[0])['morphisms'] == ['ln[ln1]', 'm']
 
     def test_compile_template_instantiation(self):
         """Template instantiation creates a curried callable."""
-        ns = _param_ns(param_op=lambda eq, x, y=None, temp=0.0, prefix='default': f'{prefix}({x})')
+        ns = _param_ns(param_op=lambda eq, x, y=None, prefix='default': f'{prefix}({x})')
         src = (
             _PARAM_PREAMBLE
             + 'morphism t[prefix] : x -> x  "x->x"  ops.param_op\n\n'
@@ -617,19 +737,19 @@ class TestParameterizedMorphisms:
             + 'path p2 = t[beta]\n'
         )
         arch = compile(src, ns)
-        assert arch.paths['p1']('data', None, 0.0) == 'alpha(data)'
-        assert arch.paths['p2']('data', None, 0.0) == 'beta(data)'
+        assert arch.paths['p1']('data', None) == 'alpha(data)'
+        assert arch.paths['p2']('data', None) == 'beta(data)'
 
     def test_template_with_regular_morphisms(self):
         """Template and regular morphisms compose in a path."""
-        ns = _param_ns(tag=lambda eq, x, y=None, temp=0.0, label='?': f'{label}:{x}')
+        ns = _param_ns(tag=lambda eq, x, y=None, label='?': f'{label}:{x}')
         src = (
             _PARAM_PREAMBLE
             + 'morphism t[label] : x -> x  "x->x"  ops.tag\n'
             + 'morphism pass : x -> x  "x->x"  ops.dummy\n\n'
             + 'path p = t[hello] pass\n'
         )
-        assert compile(src, ns).paths['p']('world', None, 0.0) == 'hello:world'
+        assert compile(src, ns).paths['p']('world', None) == 'hello:world'
 
     def test_template_multiline_syntax(self):
         """Template morphism with multi-line declaration."""
@@ -638,12 +758,12 @@ class TestParameterizedMorphisms:
             + "morphism t[key] : x -> x\n    \"x->x\"\n    ops.dummy\n    arity unary\n"
         )
         ast = parse(src)
-        assert ast.morphisms[0]['template_param'] == 'key'
-        assert ast.morphisms[0]['arity'] == 'unary'
+        assert _mf(ast.morphisms[0])['template_param'] == 'key'
+        assert _mf(ast.morphisms[0])['arity'] == 'unary'
 
     def test_template_not_confused_with_augment(self):
         """ln[ln1] (template inst) and [kv] (augment) coexist in a path."""
-        ns = _param_ns(tag=lambda eq, x, y=None, temp=0.0, label='?': x)
+        ns = _param_ns(tag=lambda eq, x, y=None, label='?': x)
         src = (
             _PARAM_PREAMBLE
             + 'morphism t[label] : x -> x  "x->x"  ops.tag\n'
@@ -680,7 +800,7 @@ arch T:
         caches: list
 """
         ast = parse(src)
-        assert ast.archs[0]['state_fields'] == {'pos': 'int', 'caches': 'list'}
+        assert _af(ast.archs[0])['state_fields'] == {'pos': 'int', 'caches': 'list'}
 
     def test_state_compiles_to_hydra_type(self):
         src = _STATE_ARCH_BASE + "    state:\n        pos: int\n        caches: list\n"
@@ -710,8 +830,9 @@ def test_parse_step_protocol(step_body, enter, emit):
         + step_body
     )
     ast = parse(src)
-    assert ast.archs[0]['step_enter'] == enter
-    assert ast.archs[0]['step_emit'] == emit
+    arch_fields = _af(ast.archs[0])
+    assert arch_fields['step_enter'] == enter
+    assert arch_fields['step_emit'] == emit
 
 
 # ---------------------------------------------------------------------------
@@ -814,7 +935,7 @@ class TestAccumulateStateFeedback:
 
         seen_accumulated = []
 
-        def cell(state, token, params, temp):
+        def cell(state, token, params):
             seen_accumulated.append(dict(params.get('accumulated', {})))
             payload = token
             next_state = dict(state) if isinstance(state, dict) else state
@@ -839,7 +960,7 @@ class TestAccumulateStateFeedback:
 
         acc_sizes = []
 
-        def cell(state, token, params, temp):
+        def cell(state, token, params):
             acc = params.get('accumulated', {})
             key_val = acc.get('key')
             acc_sizes.append(len(key_val) if key_val is not None else 0)
@@ -867,7 +988,7 @@ class TestAccumulateStateFeedback:
 
         state_keys_per_step = []
 
-        def cell(state, token, params, temp):
+        def cell(state, token, params):
             state_keys_per_step.append(set(state.keys()) if isinstance(state, dict) else None)
             next_state = dict(state) if isinstance(state, dict) else state
             return UnfoldStep('step', [token], [next_state], output=token)
@@ -916,16 +1037,16 @@ fan fg = f & g  merge join
 """
 
         class Ops:
-            def f(self, eq, x, y=None, temp=0.0):
+            def f(self, x):
                 return x * 2.0
-            def g(self, eq, x, y=None, temp=0.0):
+            def g(self, x):
                 return x * 3.0
 
         source = parse(dsl)
         ad = compile(source, {'ops': Ops()}, backend=TORCH_BACKEND)
 
         x = torch.tensor([1.0, 2.0, 3.0])
-        result = ad.paths['fg'](x, {}, temp=0.0)
+        result = ad.paths['fg'](x, {})
         assert isinstance(result, torch.Tensor), f"expected Tensor, got {type(result)}"
         expected = torch.tensor([3.0, 6.0, 9.0])
         assert torch.allclose(result, expected)

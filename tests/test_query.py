@@ -13,6 +13,7 @@ import pytest
 
 from legacy.query import QueryResult, show
 
+pytestmark = pytest.mark.legacy
 
 # ---------------------------------------------------------------------------
 # QueryResult dataclass

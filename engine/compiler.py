@@ -24,9 +24,56 @@ from .parser import DSLSource, parse
 from .arch import ArchDef, _ArchData
 from .sorts import sort_to_type, sort_types_from_defs, _close_coercions, grade_sorts, _sort_types_match, _graph_for_sorts
 import hydra.dsl.types as _types
-from hydra.core import Name as _Name
-from .terms import path_to_term, fan_to_term, arch_to_term
+from hydra.core import Name as _Name, TermRecord as _HTermRecord, Record as _Record, TermList as _TermList
 from .primitives import register_primitives
+
+
+# ---------------------------------------------------------------------------
+# TTerm field access helpers
+# ---------------------------------------------------------------------------
+
+def _tterm_fields(tterm):
+    """Extract {field_name_str: Term} from a phantom TTerm record."""
+    raw = tterm.value
+    if isinstance(raw, _HTermRecord):
+        rec = raw.value
+    elif isinstance(raw, _Record):
+        rec = raw
+    else:
+        raise TypeError(f"Expected TermRecord or Record, got {type(raw)}")
+    return {f.name.value: f.term for f in rec.fields}
+
+
+def _str_val(term):
+    return term.value.value
+
+
+def _bool_val(term):
+    return term.value.value
+
+
+def _int_val(term) -> int:
+    # TermLiteral → LiteralInteger → IntegerValueInt32 → int
+    return term.value.value.value
+
+
+def _str_list_val(term):
+    if isinstance(term, _TermList):
+        return [_str_val(item) for item in term.value]
+    return []
+
+
+def _opt_str_val(term):
+    """Extract Python str from a TermMaybe(Just(...)) field, or None for Nothing."""
+    if term is None:
+        return None
+    from hydra.core import TermMaybe
+    from hydra.dsl.python import Just
+    if isinstance(term, TermMaybe):
+        if isinstance(term.value, Just):
+            return _str_val(term.value.value)
+        return None
+    return None
 
 
 
@@ -40,7 +87,7 @@ def _make_semiring_contract(plus_fn, times_fn):
     plus_fn must accept an axis= kwarg (reduction).
     times_fn must support elementwise broadcasting.
     """
-    def contract(compiled_eq, x, y, temp=0.0):
+    def contract(compiled_eq, x, y):
         lhs, rhs = compiled_eq.split('->')
         x_idx, y_idx = lhs.split(',')
         out_idx = rhs.strip()
@@ -149,22 +196,22 @@ def _build_step_cell(enter_fn, emit_fn, case_morphism_fn, case_name):
     """
     from .functor import UnfoldStep
 
-    def cell(state, token, params, temp,
+    def cell(state, token, params,
              _enter=enter_fn, _emit=emit_fn, _compute=case_morphism_fn,
              _case=case_name):
         # 1. Enter: bind input token using state as context
-        x = _enter(token, state, temp) if _enter is not None else token
+        x = _enter(token, state) if _enter is not None else token
 
         # 2. Main computation: same morphisms as algebra
         if _compute is not None:
-            x = _compute(x, state, temp)
+            x = _compute(x, state)
 
         # 3. Build next state (copy + accumulate updates)
         next_state = dict(state) if isinstance(state, dict) else state
 
         # 4. Emit or silent
         if _emit is not None:
-            output = _emit(x, state, temp)
+            output = _emit(x, state)
             return UnfoldStep(_case, [x], [next_state], output=output)
         else:
             return UnfoldStep(_case, [x], [next_state])
@@ -191,18 +238,31 @@ def _compile_morphisms(
     equations:      dict[str, str]          = {}
     morphism_terms: dict                    = {}
 
-    from .terms import morphism as _morphism_term
-
     for m in morphism_decls:
-        name = m['name']
+        # Read all fields from TTerm
+        tf = _tterm_fields(m)
+        name     = _str_val(tf['name'])
+        equation = _str_val(tf['equation'])
+        src_sort = _str_val(tf['srcSort'])
+        tgt_sort = _str_val(tf['tgtSort'])
+        arity    = _str_val(tf['arity'])
+        op_str       = _str_val(tf['op'])
+        transform    = _str_val(tf['transform'])
+        compiler_nm  = _str_val(tf['compiler'])
+        accumulate   = _str_val(tf['accumulate']) or None
+        accumulate_fields = _str_list_val(tf['accumulateFields'])
+
+        op = op_str if op_str else None
+        compiler_nm = compiler_nm if compiler_nm else None
+
         if name not in morphism_to_semiring:
             continue  # semiring resolution failed for this morphism; error already recorded
         group = morphism_to_semiring[name]
-        if m['op'] is not None:
+        if op is not None:
             try:
-                op_fn = _resolve(m['op'], namespace)
+                op_fn = _resolve(op, namespace)
             except (NameError, AttributeError) as e:
-                ctx.errors.append(f"Morphism '{name}': cannot resolve op '{m['op']}': {e}")
+                ctx.errors.append(f"Morphism '{name}': cannot resolve op '{op}': {e}")
                 continue
         elif group in semiring_contract:
             op_fn = semiring_contract[group]
@@ -213,19 +273,19 @@ def _compile_morphisms(
                 f"semiring contract."
             )
             continue
-        if m['transform']:
+        if transform:
             try:
-                transform_fn = _resolve(m['transform'], namespace)
+                transform_fn = _resolve(transform, namespace)
             except (NameError, AttributeError) as e:
-                ctx.errors.append(f"Morphism '{name}': cannot resolve transform '{m['transform']}': {e}")
+                ctx.errors.append(f"Morphism '{name}': cannot resolve transform '{transform}': {e}")
                 continue
         else:
             transform_fn = lambda x, y: (x, y)
-        if m['compiler'] is not None:
+        if compiler_nm is not None:
             try:
-                eq_compiler = _resolve(m['compiler'], namespace)
+                eq_compiler = _resolve(compiler_nm, namespace)
             except (NameError, AttributeError) as e:
-                ctx.errors.append(f"Morphism '{name}': cannot resolve compiler '{m['compiler']}': {e}")
+                ctx.errors.append(f"Morphism '{name}': cannot resolve compiler '{compiler_nm}': {e}")
                 continue
         elif group in semiring_compiler:
             eq_compiler = semiring_compiler[group]
@@ -233,27 +293,32 @@ def _compile_morphisms(
             eq_compiler = lambda eq: eq
 
         spec = MorphismSpec(
-            name=name, op=op_fn, equation=m['equation'],
-            src_sort=m['src_sort'], tgt_sort=m['tgt_sort'],
+            name=name, op=op_fn, equation=equation,
+            src_sort=src_sort, tgt_sort=tgt_sort,
             equation_compiler=eq_compiler, transform=transform_fn,
-            arity=m['arity'] if m['arity'] != 'binary' else semiring_arity.get(group, 'binary'),
-            accumulate=m['accumulate'],
-            accumulate_fields=m['accumulate_fields'],
+            arity=arity if arity != 'binary' else semiring_arity.get(group, 'binary'),
+            accumulate=accumulate,
+            accumulate_fields=accumulate_fields,
         )
         if sort_types:
-            spec.src_type = sort_types.get(m['src_sort'])
-            spec.tgt_type = sort_types.get(m['tgt_sort'])
+            spec.src_type = sort_types.get(src_sort)
+            spec.tgt_type = sort_types.get(tgt_sort)
         morphism_specs[name] = spec
-        equations[name] = m['equation']
+        equations[name] = equation
         compiled[name]  = compile_morphism(spec)
 
-        template_params = [m['template_param']] if m['template_param'] else []
-        morphism_terms[name] = _morphism_term(
-            spec.name, spec.src_sort, spec.tgt_sort, spec.arity,
-            template_params,
-            semiring=group,
-            equation=m['equation'],
-        ).value
+        # Rebuild TTerm with resolved semiring (parser uses '_default'; group is resolved)
+        from .terms import morphism as _mt
+        template_params = _str_list_val(tf['templateParams'])
+        template_param = _str_val(tf['templateParam'])
+        morphism_terms[name] = _mt(
+            name, src_sort, tgt_sort,
+            spec.arity, template_params, semiring=group, equation=equation,
+            op=op_str, transform=transform, compiler_name=_str_val(tf['compiler']),
+            accumulate=_str_val(tf['accumulate']),
+            accumulate_fields=accumulate_fields,
+            template_param=template_param,
+        )
 
     return compiled, morphism_specs, equations, morphism_terms
 
@@ -294,8 +359,8 @@ def _resolve_template_instance(
     if inst_name in compiled:
         return inst_name  # already instantiated
 
-    template_conf = templates[base_name]
-    param_name = template_conf['template_param']  # e.g. 'prefix'
+    template_conf = templates[base_name]  # a TTerm
+    param_name = _str_val(_tterm_fields(template_conf)['templateParam'])  # e.g. 'prefix'
     base_spec = morphism_specs[base_name]
 
     # Create curried op that binds the parameter
@@ -347,10 +412,11 @@ def _compile_paths(
     """
     path_morphisms: dict[str, list[str]] = {}
     for p in path_decls:
-        name      = p['name']
-        morphisms = p['morphisms']
-        residual  = p['residual']
-        normed    = p['normed']
+        tf        = _tterm_fields(p)
+        name      = _str_val(tf['name'])
+        morphisms = _str_list_val(tf['morphisms'])
+        residual  = _bool_val(tf['residual'])
+        normed    = _str_val(tf['normed']) or None
         # Resolve template instantiations (e.g. 'ln[ln1]' -> curried morphism)
         for m in morphisms:
             if not (m.startswith('[') and m.endswith(']')):  # skip augment brackets
@@ -446,12 +512,12 @@ def _compile_paths(
                 continue
             norm_fn = compiled[normed] if normed else None
             if residual:
-                fn = lambda x, y, temp, _b=base: _b(x, y, temp) + x
+                fn = lambda x, y, _b=base: _b(x, y) + x
             else:
                 fn = base
             if norm_fn is not None:
-                compiled[name] = lambda x, y, temp, _f=fn, _n=norm_fn: \
-                    _n(_f(x, y, temp), y, temp)
+                compiled[name] = lambda x, y, _f=fn, _n=norm_fn: \
+                    _n(_f(x, y), y)
             else:
                 compiled[name] = fn
         else:
@@ -470,10 +536,13 @@ def _compile_fans(fan_decls: list, compiled: dict, namespace: dict,
     if backend is None:
         backend = NUMPY_BACKEND
     for f in fan_decls:
-        name = f['name']
+        tf       = _tterm_fields(f)
+        name     = _str_val(tf['name'])
+        branches = _str_list_val(tf['branches'])
+        merge    = _str_val(tf['merge']) or 'dict'
         branch_callables = {}
         fan_ok = True
-        for b in f['branches']:
+        for b in branches:
             if b not in compiled:
                 ctx.errors.append(
                     f"Fan '{name}': branch '{b}' is not a declared morphism or path"
@@ -483,7 +552,6 @@ def _compile_fans(fan_decls: list, compiled: dict, namespace: dict,
                 branch_callables[b] = compiled[b]
         if not fan_ok:
             continue
-        merge = f['merge']
         if merge == 'dict':
             merge_fn = lambda results: results
         elif merge == 'meet':
@@ -495,6 +563,21 @@ def _compile_fans(fan_decls: list, compiled: dict, namespace: dict,
         compiled[name] = fan(branch_callables, merge_fn)
 
 
+def _case_tf(c) -> dict:
+    """Extract field dict from a case TTerm or bare Term."""
+    from hydra.phantoms import TTerm as _TTerm
+    if isinstance(c, _TTerm):
+        return _tterm_fields(c)
+    # Bare Term (already unwrapped by list_/un_tterm)
+    if isinstance(c, _HTermRecord):
+        rec = c.value
+    elif isinstance(c, _Record):
+        rec = c
+    else:
+        raise TypeError(f"_case_tf: expected TTerm or Record, got {type(c)}")
+    return {f.name.value: f.term for f in rec.fields}
+
+
 def _resolve_case_cells(
     case_list,
     context_name: str,
@@ -504,16 +587,17 @@ def _resolve_case_cells(
 ) -> dict[str, Callable]:
     """Resolve per-case cells (explicit cell= or morphisms= derived).
 
-    case_list is a list of CaseDecl objects.
+    case_list is a list of case TTerms.
     Returns case_cells dict.
     """
     case_cells = {}
     for c in case_list:
-        cname = c['name']
-        cell = c['cell']
-        morphisms = c['morphisms']
+        cf = _case_tf(c)
+        cname = _str_val(cf['name'])
+        cell = _str_val(cf['cell']) or None
+        morphisms = _str_list_val(cf['caseMorphisms']) or None
         if cell == 'identity':
-            case_cells[cname] = lambda payload, child_results, _params, _temp: \
+            case_cells[cname] = lambda payload, child_results, _params: \
                 payload[0] if payload else (child_results[0] if child_results else None)
         elif cell is not None:
             case_cells[cname] = _resolve(cell, namespace)
@@ -529,11 +613,10 @@ def _resolve_case_cells(
             if case_ok:
                 path_fn = chain([compiled[m] for m in morphisms]) \
                     if len(morphisms) > 1 else compiled[morphisms[0]]
-                case_cells[cname] = lambda payload, child_results, _params, temp, \
+                case_cells[cname] = lambda payload, child_results, _params, \
                     _fn=path_fn: _fn(
                         child_results[0] if child_results else None,
                         payload[0] if payload else None,
-                        temp,
                     )
     return case_cells
 
@@ -541,47 +624,62 @@ def _resolve_case_cells(
 def _build_functor_and_cells(
     arch_name: str,
     case_list: list,
-    algebra_cell,
+    algebra_cell: str,
     compiled: dict,
     namespace: dict,
     errors: list,
 ) -> tuple["Functor", Callable | None]:
     """Build the endofunctor F and resolve the algebra cell for an arch.
 
-    case_list is a list of CaseDecl objects.
+    case_list is a list of case TTerms.
     Returns (functor, alg_cell).
     """
     # Semantic validation: cell= and morphisms= are mutually exclusive
     for c in case_list:
-        if c['cell'] is not None and c['morphisms'] is not None:
+        cf = _case_tf(c)
+        cell = _str_val(cf['cell']) or None
+        morphisms = _str_list_val(cf['caseMorphisms']) or None
+        if cell is not None and morphisms is not None:
             errors.append(
-                f"Arch '{arch_name}' case '{c['name']}': "
+                f"Arch '{arch_name}' case '{_str_val(cf['name'])}': "
                 f"cannot specify both 'cell' and 'morphisms'"
             )
 
-    cases = [Case(c['name'], c['recursive'], c['data'], c['output']) for c in case_list]
+    cases = [
+        Case(
+            _str_val(_case_tf(c)['name']),
+            _int_val(_case_tf(c)['recursive']),
+            _int_val(_case_tf(c)['data']),
+            _int_val(_case_tf(c)['output']),
+        )
+        for c in case_list
+    ]
     functor = Functor(cases)
 
     alg_cell = None
-    if algebra_cell is not None:
+    if algebra_cell:
         alg_cell = _resolve(algebra_cell, namespace)
     else:
         case_cells = _resolve_case_cells(
             case_list, f"Arch '{arch_name}' algebra", compiled, namespace, errors
         )
         if case_cells:
-            missing = [c['name'] for c in case_list if c['name'] not in case_cells]
+            missing = [
+                _str_val(_case_tf(c)['name'])
+                for c in case_list
+                if _str_val(_case_tf(c)['name']) not in case_cells
+            ]
             if missing:
                 errors.append(
                     f"Arch '{arch_name}' algebra: per-case cell binding is "
                     f"incomplete. Missing cells for: {', '.join(missing)}"
                 )
             else:
-                def alg_cell(case_name, payload, child_results, params, temp,
+                def alg_cell(case_name, payload, child_results, params,
                              _cells=case_cells):
                     if case_name not in _cells:
                         raise KeyError(f"No cell bound for case '{case_name}'")
-                    return _cells[case_name](payload, child_results, params, temp)
+                    return _cells[case_name](payload, child_results, params)
 
     return functor, alg_cell
 
@@ -602,16 +700,24 @@ def _compile_archs(
         backend = NUMPY_BACKEND
     compiled_archs: dict[str, _ArchData] = {}
     for a in arch_decls:
-        name = a['name']
+        tf   = _tterm_fields(a)
+        name = _str_val(tf['name'])
         data = _ArchData()
         data.backend = backend
 
-        case_list = a['cases'] or []
+        # Cases are stored as a TermList of case TTerms
+        cases_term = tf['cases']
+        if isinstance(cases_term, _TermList):
+            case_list = list(cases_term.value)
+        else:
+            case_list = []
+
+        algebra_cell = _str_val(tf['algebraCell']) or ""
 
         # Resolve the unified endofunctor F and algebra cell
         if case_list:
             functor, alg_cell = _build_functor_and_cells(
-                name, case_list, a['algebra_cell'], compiled, namespace, ctx.errors
+                name, case_list, algebra_cell, compiled, namespace, ctx.errors
             )
             data.functor = functor
             data.algebra_cell = alg_cell
@@ -627,17 +733,20 @@ def _compile_archs(
             _epilogue_cases: list[str] = []
             _in_iterate = False
             for c in case_list:
-                if c['iterate'] is not None:
+                cf = _case_tf(c)
+                c_name = _str_val(cf['name'])
+                c_recursive = _int_val(cf['recursive'])
+                c_iterate = _str_val(cf['iterate']) or None
+                if c_iterate is not None:
                     _in_iterate = True
-                    _gname = c['iterate']
-                    if _gname not in _iterate_groups:
-                        _iterate_groups[_gname] = []
-                    _iterate_groups[_gname].append(c['name'])
-                elif c['recursive'] == 0 and not _in_iterate:
-                    _base_case = c['name']
+                    if c_iterate not in _iterate_groups:
+                        _iterate_groups[c_iterate] = []
+                    _iterate_groups[c_iterate].append(c_name)
+                elif c_recursive == 0 and not _in_iterate:
+                    _base_case = c_name
                 else:
                     if _in_iterate:
-                        _epilogue_cases.append(c['name'])
+                        _epilogue_cases.append(c_name)
             if _iterate_groups:
                 data.iterate_groups = _iterate_groups
                 data.iterate_base = _base_case
@@ -646,38 +755,43 @@ def _compile_archs(
         # Resolve observer paths
         convergence_fn = None
         loss_fn = None
-        if a['observer_convergence']:
-            if a['observer_convergence'] not in compiled:
+        obs_convergence = _str_val(tf['observerConvergence']) or None
+        obs_loss = _str_val(tf['observerLoss']) or None
+        if obs_convergence:
+            if obs_convergence not in compiled:
                 ctx.errors.append(
                     f"Arch '{name}': observer convergence path "
-                    f"'{a['observer_convergence']}' not found"
+                    f"'{obs_convergence}' not found"
                 )
             else:
-                convergence_fn = compiled[a['observer_convergence']]
-        if a['observer_loss']:
-            if a['observer_loss'] not in compiled:
+                convergence_fn = compiled[obs_convergence]
+        if obs_loss:
+            if obs_loss not in compiled:
                 ctx.errors.append(
                     f"Arch '{name}': observer loss path "
-                    f"'{a['observer_loss']}' not found"
+                    f"'{obs_loss}' not found"
                 )
             else:
-                loss_fn = compiled[a['observer_loss']]
+                loss_fn = compiled[obs_loss]
         if convergence_fn is not None:
             data.observer_convergence = convergence_fn
         if loss_fn is not None:
             data.observer_loss = loss_fn
 
-        # Compile state_fields into a Hydra TypeRecord
-        if a['state_fields'] is not None:
+        # Compile state_fields into a Hydra TypeRecord from stateFieldNames/stateFieldTypes
+        state_field_names = _str_list_val(tf['stateFieldNames'])
+        state_field_types = _str_list_val(tf['stateFieldTypes'])
+        if state_field_names:
             from .parser import SortDecl as _SD
+            state_fields = dict(zip(state_field_names, state_field_types))
             state_name = f"_state_{name}"
-            state_sort_defs = {state_name: _SD(state_name, a['state_fields'])}
+            state_sort_defs = {state_name: _SD(state_name, state_fields)}
             data.state_type = sort_to_type(state_name, state_sort_defs)
 
         # Step protocol: generate coalgebra cell from step declarations
-        step_enter = a['step_enter']
-        step_emit = a['step_emit']
-        step_compute = a['step_compute']
+        step_enter  = _opt_str_val(tf.get('stepEnter'))
+        step_emit   = _opt_str_val(tf.get('stepEmit'))
+        step_compute = _str_val(tf['stepCompute']) or None
         if step_enter is not None or step_emit is not None:
             step_ok = True
             if step_enter and step_enter not in compiled:
@@ -704,18 +818,24 @@ def _compile_archs(
                 else:
                     case_morphism_fn = None
                     for c in case_list:
-                        if c['morphisms']:
-                            case_morphism_fn = chain([compiled[m] for m in c['morphisms']]) \
-                                if len(c['morphisms']) > 1 else compiled[c['morphisms'][0]]
+                        cf = _case_tf(c)
+                        c_morphisms = _str_list_val(cf['caseMorphisms']) or None
+                        if c_morphisms:
+                            case_morphism_fn = chain([compiled[m] for m in c_morphisms]) \
+                                if len(c_morphisms) > 1 else compiled[c_morphisms[0]]
                             break
 
                 step_case_name = None
                 for c in case_list:
-                    if c['recursive'] > 0:
-                        step_case_name = c['name']
+                    cf = _case_tf(c)
+                    if _int_val(cf['recursive']) > 0:
+                        step_case_name = _str_val(cf['name'])
                         break
                 if step_case_name is None:
-                    step_case_name = case_list[0]['name'] if case_list else 'step'
+                    if case_list:
+                        step_case_name = _str_val(_case_tf(case_list[0])['name'])
+                    else:
+                        step_case_name = 'step'
 
                 data.coalgebra_cell = _build_step_cell(enter_fn, emit_fn, case_morphism_fn,
                                                         step_case_name)
@@ -808,19 +928,23 @@ def compile(source: str | Path | DSLSource, namespace: dict,
 
     sole = ast.semirings[0].name if len(ast.semirings) == 1 else None
     for m in ast.morphisms:
-        if m['semiring'] is None:
-            ctx.morphism_to_semiring[m['name']] = '_bridge'
-        elif m['semiring'] == '_default':
-            ctx.morphism_to_semiring[m['name']] = sole if sole else '_default'
-        elif m['semiring'] not in ctx.semiring_contract:
+        mtf = _tterm_fields(m)
+        m_name = _str_val(mtf['name'])
+        m_semiring = _str_val(mtf['semiring']) or None  # "" → None (bridge)
+        if m_semiring is None:
+            ctx.morphism_to_semiring[m_name] = '_bridge'
+        elif m_semiring == '_default':
+            ctx.morphism_to_semiring[m_name] = sole if sole else '_default'
+        elif m_semiring not in ctx.semiring_contract:
             ctx.errors.append(
-                f"Morphism '{m['name']}' references undeclared semiring '{m['semiring']}'"
+                f"Morphism '{m_name}' references undeclared semiring '{m_semiring}'"
             )
         else:
-            ctx.morphism_to_semiring[m['name']] = m['semiring']
+            ctx.morphism_to_semiring[m_name] = m_semiring
 
     # Build Hydra sort types for type-checked sort validation
-    morph_sorts = {s for m in ast.morphisms for s in (m['src_sort'], m['tgt_sort'])}
+    morph_sorts = {s for m in ast.morphisms for m_tf in [_tterm_fields(m)]
+                   for s in (_str_val(m_tf['srcSort']), _str_val(m_tf['tgtSort']))}
     ctx.sort_types = sort_types_from_defs(sort_defs, morph_sorts)
 
     # Phase 3: Compile morphisms
@@ -832,7 +956,9 @@ def compile(source: str | Path | DSLSource, namespace: dict,
 
     # Build template registry for parameterized morphisms
     ctx.templates = {
-        m['name']: m for m in ast.morphisms if m['template_param'] is not None
+        _str_val(_tterm_fields(m)['name']): m
+        for m in ast.morphisms
+        if _str_val(_tterm_fields(m)['templateParam'])
     }
 
     # Build Hydra primitives for tensor ops (skip if errors already accumulated —
@@ -842,7 +968,13 @@ def compile(source: str | Path | DSLSource, namespace: dict,
             ctx.semiring_contract,
             ctx.morphism_to_semiring,
             ctx.equations,
-            {m['name']: {'op': m['op'], 'arity': m['arity']} for m in ast.morphisms},
+            {
+                _str_val(_tterm_fields(m)['name']): {
+                    'op': _str_val(_tterm_fields(m)['op']) or None,
+                    'arity': _str_val(_tterm_fields(m)['arity']),
+                }
+                for m in ast.morphisms
+            },
             namespace,
         )
     else:
@@ -850,15 +982,14 @@ def compile(source: str | Path | DSLSource, namespace: dict,
 
     # Phase 4: Compile fans (pre-resolve template instances in branches first)
     for f in ast.fans:
-        for b in f['branches']:
+        ftf = _tterm_fields(f)
+        for b in _str_list_val(ftf['branches']):
             _resolve_template_instance(
                 b, ctx.templates, ctx.compiled, ctx.specs,
                 ctx.morphism_to_semiring, ctx.equations, namespace, ctx.semiring_arity,
             )
     _compile_fans(ast.fans, ctx.compiled, namespace, ctx, ctx.backend)
-    ctx.fan_terms = {
-        f['name']: fan_to_term(f['name'], f['branches']) for f in ast.fans
-    }
+    ctx.fan_terms = {_str_val(_tterm_fields(f)['name']): f.value for f in ast.fans}
 
     # Phase 5: Compile paths
     ctx.coercion_grades = _close_coercions(ast.coercions) if ast.coercions else None
@@ -867,10 +998,7 @@ def compile(source: str | Path | DSLSource, namespace: dict,
         ctx.templates, ctx.equations, namespace, ctx.semiring_arity,
         ctx, ctx.sort_types, ctx.coercion_grades, ast.sort_threshold,
     )
-    ctx.path_terms = {
-        p['name']: path_to_term(p['name'], ctx.path_morphisms.get(p['name'], p['morphisms']), p['residual'])
-        for p in ast.paths
-    }
+    ctx.path_terms = {_str_val(_tterm_fields(p)['name']): p.value for p in ast.paths}
 
     # Phase 6: Compile archs
     accumulate_specs = {
@@ -880,15 +1008,9 @@ def compile(source: str | Path | DSLSource, namespace: dict,
     }
     compiled_archs = _compile_archs(ast.archs, ctx.compiled, namespace, accumulate_specs, ctx, ctx.backend)
 
-    # Phase 7: Build Hydra arch terms and union types
+    # Phase 7: Collect arch terms
     for a in ast.archs:
-        cases = a['cases'] or []
-        ctx.arch_terms[a['name']] = arch_to_term(
-            a['name'],
-            cases=cases,
-            step_enter=a['step_enter'],
-            step_emit=a['step_emit'],
-        )
+        ctx.arch_terms[_str_val(_tterm_fields(a)['name'])] = a.value
     if ctx.errors:
         raise ValueError("\n".join(ctx.errors))
 

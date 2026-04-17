@@ -79,7 +79,7 @@ def _make_convergence_stop(conv_fn: Callable, user_stop: Callable | None,
 
     def effective_stop(step, state, outputs, _be=backend):
         if prev[0] is not None:
-            residual = conv_fn(state, prev[0], 0.0)
+            residual = conv_fn(state, prev[0])
             converged = bool(_be.max(_be.abs(residual)) < threshold)
         else:
             converged = False
@@ -243,21 +243,21 @@ class ArchDef:
             return f"Path: {name} (fan or cross-semiring — no morphism expansion)"
         raise KeyError(f"Unknown morphism or path: {name!r}")
 
-    def trace(self, name: str, x, y, temp: float = 0.0) -> list[tuple]:
+    def trace(self, name: str, x, y) -> list[tuple]:
         if name in self._path_morphisms:
-            return _trace(self._path_morphisms[name], self.paths, self._equations, x, y, temp)
+            return _trace(self._path_morphisms[name], self.paths, self._equations, x, y)
         if name in self._morphism_specs:
-            return _trace([name], self.paths, self._equations, x, y, temp)
+            return _trace([name], self.paths, self._equations, x, y)
         raise KeyError(f"Unknown morphism or path: {name!r}")
 
-    def loss(self, name: str, x, y, temp: float = 0.0):
+    def loss(self, name: str, x, y):
         """Compute the observer loss for a named arch."""
         if name not in self._archs:
             raise KeyError(f"Unknown arch: {name!r}")
         ad = self._archs[name]
         if ad.observer_loss is None:
             raise ValueError(f"Arch '{name}' has no observer loss path declared")
-        return ad.observer_loss(x, y, temp)
+        return ad.observer_loss(x, y)
 
     def interpreter(self, name: str, params=None, temp: float = 0.0):
         """Create an interpreter for a named arch or legacy functor."""

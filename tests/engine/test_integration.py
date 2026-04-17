@@ -34,15 +34,15 @@ EPS = 1e-5
 # Ops — simple numpy implementations
 # ---------------------------------------------------------------------------
 
-def proj_op(eq, x, bundle, temp=0.0):
+def proj_op(eq, x, bundle):
     """Linear projection: x @ W + b."""
     return np.einsum(eq, x, bundle['W']) + bundle['b']
 
-def score_op(eq, q, bundle, temp=0.0):
+def score_op(eq, q, bundle):
     """Attention scores: Q @ K^T * scale."""
     return np.einsum(eq, q, bundle['K']) * bundle['scale']
 
-def softmax_op(eq, x, bundle, temp=0.0):
+def softmax_op(eq, x, bundle):
     """Row-wise softmax with optional causal mask."""
     if bundle.get('mask') is not None:
         x = x + bundle['mask']
@@ -50,15 +50,15 @@ def softmax_op(eq, x, bundle, temp=0.0):
     e = np.exp(x)
     return e / e.sum(axis=-1, keepdims=True)
 
-def mix_op(eq, probs, bundle, temp=0.0):
+def mix_op(eq, probs, bundle):
     """Weighted mix: probs @ V."""
     return np.einsum(eq, probs, bundle['V'])
 
-def gelu_op(eq, x, bundle, temp=0.0):
+def gelu_op(eq, x, bundle):
     """GELU activation."""
     return 0.5 * x * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x + 0.044715 * x**3)))
 
-def identity_op(eq, x, y=None, temp=0.0):
+def identity_op(eq, x, y=None):
     return x
 
 def swap_xy(x, y):
@@ -69,28 +69,28 @@ def swap_xy(x, y):
 # Per-case cell functions (for DSL-driven interpreter tests)
 # ---------------------------------------------------------------------------
 
-def input_cell(payload, child_results, params, temp):
+def input_cell(payload, child_results, params):
     return payload[0]
 
 
-def attn_cell(payload, child_results, params, temp):
+def attn_cell(payload, child_results, params):
     paths, w, mask = params['paths'], payload[0], params['mask']
     x_norm = layer_norm(child_results[0], w['ln1_g'], w['ln1_b'])
-    q = paths['q_proj'](x_norm, {'W': w['Wq'], 'b': w['bq']}, 0.0)
-    K = paths['k_proj'](x_norm, {'W': w['Wk'], 'b': w['bk']}, 0.0)
-    V = paths['v_proj'](x_norm, {'W': w['Wv'], 'b': w['bv']}, 0.0)
-    scores = paths['score'](q, {'K': K, 'scale': H ** -0.5}, 0.0)
-    probs = paths['normalize'](scores, {'mask': mask}, 0.0)
-    mixed = paths['mix'](probs, {'V': V}, 0.0)
-    return child_results[0] + paths['out_proj'](mixed, {'W': w['Wo'], 'b': w['bo']}, 0.0)
+    q = paths['q_proj'](x_norm, {'W': w['Wq'], 'b': w['bq']})
+    K = paths['k_proj'](x_norm, {'W': w['Wk'], 'b': w['bk']})
+    V = paths['v_proj'](x_norm, {'W': w['Wv'], 'b': w['bv']})
+    scores = paths['score'](q, {'K': K, 'scale': H ** -0.5})
+    probs = paths['normalize'](scores, {'mask': mask})
+    mixed = paths['mix'](probs, {'V': V})
+    return child_results[0] + paths['out_proj'](mixed, {'W': w['Wo'], 'b': w['bo']})
 
 
-def ffn_cell(payload, child_results, params, temp):
+def ffn_cell(payload, child_results, params):
     paths, w = params['paths'], payload[0]
     x_norm = layer_norm(child_results[0], w['ln2_g'], w['ln2_b'])
-    h = paths['up'](x_norm, {'W': w['W1'], 'b': w['b1']}, 0.0)
-    h = paths['act'](h, {}, 0.0)
-    return child_results[0] + paths['down'](h, {'W': w['W2'], 'b': w['b2']}, 0.0)
+    h = paths['up'](x_norm, {'W': w['W1'], 'b': w['b1']})
+    h = paths['act'](h, {})
+    return child_results[0] + paths['down'](h, {'W': w['W2'], 'b': w['b2']})
 
 
 # ---------------------------------------------------------------------------
@@ -200,20 +200,20 @@ class TestTransformerIntegration:
         mask = causal_mask(S)
 
         def attn_fwd(x_norm, w):
-            kv = arch.paths['kv'](x_norm, {'W': w['Wk'], 'b': w['bk']}, 0.0)
-            K, V2 = kv['k_proj'], arch.paths['v_proj'](x_norm, {'W': w['Wv'], 'b': w['bv']}, 0.0)
-            q = arch.paths['q_proj'](x_norm, {'W': w['Wq'], 'b': w['bq']}, 0.0)
-            scores = arch.paths['score'](q, {'K': K, 'scale': H ** -0.5}, 0.0)
-            probs = arch.paths['normalize'](scores, {'mask': mask}, 0.0)
-            mixed = arch.paths['mix'](probs, {'V': V2}, 0.0)
-            return arch.paths['out_proj'](mixed, {'W': w['Wo'], 'b': w['bo']}, 0.0)
+            kv = arch.paths['kv'](x_norm, {'W': w['Wk'], 'b': w['bk']})
+            K, V2 = kv['k_proj'], arch.paths['v_proj'](x_norm, {'W': w['Wv'], 'b': w['bv']})
+            q = arch.paths['q_proj'](x_norm, {'W': w['Wq'], 'b': w['bq']})
+            scores = arch.paths['score'](q, {'K': K, 'scale': H ** -0.5})
+            probs = arch.paths['normalize'](scores, {'mask': mask})
+            mixed = arch.paths['mix'](probs, {'V': V2})
+            return arch.paths['out_proj'](mixed, {'W': w['Wo'], 'b': w['bo']})
 
         x = x0
         x = x + attn_fwd(layer_norm(x, block['ln1_g'], block['ln1_b']), block)
         x_n = layer_norm(x, block['ln2_g'], block['ln2_b'])
-        h = arch.paths['up'](x_n, {'W': block['W1'], 'b': block['b1']}, 0.0)
-        h = arch.paths['act'](h, {}, 0.0)
-        direct = x + arch.paths['down'](h, {'W': block['W2'], 'b': block['b2']}, 0.0)
+        h = arch.paths['up'](x_n, {'W': block['W1'], 'b': block['b1']})
+        h = arch.paths['act'](h, {})
+        direct = x + arch.paths['down'](h, {'W': block['W2'], 'b': block['b2']})
         direct_logits = direct @ tok_embed.T
 
         # Via arch.interpreter() — single arch, algebra side
@@ -234,13 +234,13 @@ class TestTransformerIntegration:
         """Coalgebra streaming via step: protocol."""
         from engine.compiler import compile as engine_compile
 
-        def embed_op(eq, token, state, temp=0.0):
+        def embed_op(eq, token, state):
             return state['tok_embed'][int(token)]
 
-        def proj_op(eq, x, y, temp=0.0):
+        def proj_op(eq, x, y):
             return x @ y['W']
 
-        def unembed_op(eq, x, state, temp=0.0):
+        def unembed_op(eq, x, state):
             return x @ state['tok_embed'].T
 
         ns = {
@@ -248,7 +248,7 @@ class TestTransformerIntegration:
                 'embed': staticmethod(embed_op),
                 'proj': staticmethod(proj_op),
                 'unembed': staticmethod(unembed_op),
-                'identity': staticmethod(lambda eq, x, y, temp=0.0: x),
+                'identity': staticmethod(lambda eq, x, y: x),
             })()
         }
 
@@ -298,7 +298,7 @@ arch Streamer:
         """Verify the kv fan returns a dict with expected keys."""
         x = np.random.randn(S, D)
         bundle = {'W': np.random.randn(D, H), 'b': np.zeros(H)}
-        result = arch.paths['kv'](x, bundle, 0.0)
+        result = arch.paths['kv'](x, bundle)
         assert isinstance(result, dict)
         assert 'k_proj' in result
         assert 'v_proj' in result
@@ -368,13 +368,13 @@ class TestNdarrayCoder:
         from hydra.context import Context
         from hydra.dsl.python import FrozenDict
 
-        def double_op(eq, x, temp=0.0):
+        def double_op(x):
             return x * 2.0
 
         ns = {
             'ops': type('ns', (), {
                 'double': staticmethod(double_op),
-                'identity': staticmethod(lambda eq, x, y=None, temp=0.0: x),
+                'identity': staticmethod(lambda eq, x, y=None: x),
             })()
         }
 
@@ -406,7 +406,7 @@ morphism f : tensor -> tensor  via "x"  arity unary  op ops.double
         from engine.sorts import _ndarray_encode
         recovered = _ndarray_encode(None, None, result.value)
         assert isinstance(recovered, Right)
-        expected = double_op("x", arr)
+        expected = double_op(arr)
         np.testing.assert_array_equal(recovered.value, expected)
 
 
@@ -420,20 +420,20 @@ class TestArchRewriting:
 
     @pytest.fixture
     def arch(self):
-        def noop(eq, x, y=None, temp=0.0):
+        def noop(eq, x, y=None):
             return x
 
         ns = {
             'ops': type('ns', (), {
-                'proj': staticmethod(lambda eq, x, y=None, temp=0.0: x),
-                'score': staticmethod(lambda eq, x, y=None, temp=0.0: x),
-                'softmax': staticmethod(lambda eq, x, y=None, temp=0.0: x),
-                'mix': staticmethod(lambda eq, x, y=None, temp=0.0: x),
-                'gelu': staticmethod(lambda eq, x, y=None, temp=0.0: x),
+                'proj': staticmethod(lambda eq, x, y=None: x),
+                'score': staticmethod(lambda eq, x, y=None: x),
+                'softmax': staticmethod(lambda eq, x, y=None: x),
+                'mix': staticmethod(lambda eq, x, y=None: x),
+                'gelu': staticmethod(lambda eq, x, y=None: x),
                 'identity': staticmethod(noop),
-                'input_cell': staticmethod(lambda payload, child_results, params, temp: None),
-                'attn_cell': staticmethod(lambda payload, child_results, params, temp: None),
-                'ffn_cell': staticmethod(lambda payload, child_results, params, temp: None),
+                'input_cell': staticmethod(lambda payload, child_results, params: None),
+                'attn_cell': staticmethod(lambda payload, child_results, params: None),
+                'ffn_cell': staticmethod(lambda payload, child_results, params: None),
             })(),
         }
         from engine.compiler import compile as engine_compile

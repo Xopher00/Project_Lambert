@@ -23,6 +23,7 @@ import pytest
 from legacy.lattice.embed import Embed
 from legacy.query import Query, QueryResult
 
+pytestmark = pytest.mark.legacy
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -110,6 +111,7 @@ def _build_two_hop_model():
 # Test: hop shape
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(reason="Embed.hop removed during refactor")
 class TestHopShape:
     """hop(q, EmbR, temp) returns a (k,) vector."""
 
@@ -131,6 +133,7 @@ class TestHopShape:
 # Test: hop reachability
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(reason="Embed.hop removed during refactor")
 class TestHopReachability:
     """hop propagates through a nonzero path."""
 
@@ -163,6 +166,7 @@ class TestHopReachability:
 # Test: multihop entity space
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(reason="Embed.hop removed during refactor")
 class TestMultihopEntitySpace:
     """multihop returns QueryResult with mode='multihop' and entity labels."""
 
@@ -196,6 +200,7 @@ class TestMultihopEntitySpace:
 # Test: multihop 2-hop chain
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(reason="Embed.hop removed during refactor")
 class TestMultihopChain2Hop:
     """2-hop chain A→B→C returns C as reachable from A."""
 

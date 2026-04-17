@@ -35,7 +35,7 @@ class TestAlgebra:
 
     def test_leaf_only(self):
         """Algebra on a single leaf node."""
-        def cell(case_name, payload, child_results, params, temp):
+        def cell(case_name, payload, child_results, params):
             if case_name == 'leaf':
                 return payload[0]
             raise ValueError(case_name)
@@ -46,7 +46,7 @@ class TestAlgebra:
 
     def test_tree_sum(self):
         """Sum all leaf values in a binary tree."""
-        def cell(case_name, payload, child_results, params, temp):
+        def cell(case_name, payload, child_results, params):
             if case_name == 'leaf':
                 return payload[0]
             if case_name == 'node':
@@ -67,7 +67,7 @@ class TestAlgebra:
 
     def test_linear_fold(self):
         """Fold a linear chain: base(1) -> step(2) -> step(3) = 1+2+3 = 6."""
-        def cell(case_name, payload, child_results, params, temp):
+        def cell(case_name, payload, child_results, params):
             if case_name == 'base':
                 return payload[0]
             if case_name == 'step':
@@ -86,7 +86,7 @@ class TestAlgebra:
 
     def test_params_passed(self):
         """Verify params dict reaches the cell."""
-        def cell(case_name, payload, child_results, params, temp):
+        def cell(case_name, payload, child_results, params):
             return payload[0] * params['scale']
 
         interp = Interpreter(
@@ -97,9 +97,9 @@ class TestAlgebra:
         assert result == 50
 
     def test_temp_passed(self):
-        """Verify temp reaches the cell."""
-        def cell(case_name, payload, child_results, params, temp):
-            return temp
+        """Verify temp reaches the cell via params['_temp']."""
+        def cell(case_name, payload, child_results, params):
+            return params.get('_temp', 0.0)
 
         interp = Interpreter(
             Functor([Case('leaf', 0, 0)]),
@@ -109,7 +109,7 @@ class TestAlgebra:
         assert result == 0.5
 
     def test_wrong_payload_count_raises(self):
-        def cell(case_name, payload, child_results, params, temp):
+        def cell(case_name, payload, child_results, params):
             return 0
 
         interp = Interpreter(
@@ -120,7 +120,7 @@ class TestAlgebra:
             interp.run_algebra(('leaf', [1], []), lambda n: n)
 
     def test_wrong_children_count_raises(self):
-        def cell(case_name, payload, child_results, params, temp):
+        def cell(case_name, payload, child_results, params):
             return 0
 
         interp = Interpreter(
@@ -141,7 +141,7 @@ class TestCoalgebra:
         """Coalgebra stops when tokens run out."""
         counter = [0]
 
-        def cell(state, token, params, temp):
+        def cell(state, token, params):
             counter[0] += 1
             return UnfoldStep(
                 case_name='silent',
@@ -157,7 +157,7 @@ class TestCoalgebra:
 
     def test_emit_case(self):
         """Coalgebra emits output when case has output=1."""
-        def cell(state, token, params, temp):
+        def cell(state, token, params):
             return UnfoldStep(
                 case_name='emit',
                 payload=[],
@@ -172,7 +172,7 @@ class TestCoalgebra:
 
     def test_case_variation(self):
         """Mix of silent and emit cases."""
-        def cell(state, token, params, temp):
+        def cell(state, token, params):
             if token == 'emit':
                 return UnfoldStep(
                     case_name='emit',
@@ -195,7 +195,7 @@ class TestCoalgebra:
 
     def test_stop_callback(self):
         """Coalgebra stops when stop() returns True."""
-        def cell(state, token, params, temp):
+        def cell(state, token, params):
             return UnfoldStep(
                 case_name='silent',
                 payload=[],
@@ -216,7 +216,7 @@ class TestCoalgebra:
             Case('branch', recursive=2, data=0),
         ])
 
-        def cell(state, token, params, temp):
+        def cell(state, token, params):
             return UnfoldStep(
                 case_name='branch',
                 payload=[],
@@ -233,7 +233,7 @@ class TestCoalgebra:
             Case('step', recursive=1, data=2),
         ])
 
-        def cell(state, token, params, temp):
+        def cell(state, token, params):
             return UnfoldStep(
                 case_name='step',
                 payload=[1],  # declared data=2, only 1 given
@@ -246,7 +246,7 @@ class TestCoalgebra:
 
     def test_output_mismatch_raises(self):
         """Coalgebra validates output presence matches case declaration."""
-        def cell(state, token, params, temp):
+        def cell(state, token, params):
             # silent case (output=0) but we provide an output
             return UnfoldStep(
                 case_name='silent',
@@ -261,7 +261,7 @@ class TestCoalgebra:
 
     def test_empty_tokens(self):
         """Coalgebra with empty token_iter returns immediately."""
-        def cell(state, token, params, temp):
+        def cell(state, token, params):
             raise AssertionError("Should not be called")
 
         interp = Interpreter(StepF, cell, params={})

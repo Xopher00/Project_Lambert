@@ -92,8 +92,8 @@ class CompiledMorphism:
         self.name = name
         self.equation = equation
 
-    def __call__(self, x, y, temp=0.0):
-        return self._fn(x, y, temp)
+    def __call__(self, x, y):
+        return self._fn(x, y)
 
     def __repr__(self):
         if self.equation:
@@ -147,17 +147,17 @@ class MorphismSpec:
 # ---------------------------------------------------------------------------
 
 def compile_morphism(spec: MorphismSpec) -> CompiledMorphism:
-    """Compile a MorphismSpec into a ``(x, y, temp) -> result`` callable."""
+    """Compile a MorphismSpec into a ``(x, y) -> result`` callable."""
     compiled_eq = spec.equation_compiler(spec.equation)
     op, transform_fn = spec.op, spec.transform
     if spec.arity == 'unary':
-        fn = lambda x, _, temp: op(compiled_eq, x, temp=temp)
+        fn = lambda x, _: op(x)
     elif spec.arity == 'pointwise':
-        fn = lambda x, y, temp: op(compiled_eq, x, y, temp=temp)
+        fn = lambda x, y: op(compiled_eq, x, y)
     elif spec.arity == 'ternary':
-        fn = lambda x, y, temp: op(compiled_eq, x, y[0], y[1], temp=temp)
+        fn = lambda x, y: op(compiled_eq, x, y[0], y[1])
     else:
-        fn = lambda x, y, temp: op(compiled_eq, *transform_fn(x, y), temp=temp)
+        fn = lambda x, y: op(compiled_eq, *transform_fn(x, y))
     return CompiledMorphism(fn, name=spec.name, equation=spec.equation)
 
 
@@ -175,10 +175,10 @@ def chain(callables: list[Callable]) -> Callable:
     if len(callables) == 1:
         return callables[0]
     names = [getattr(c, 'name', repr(c)) for c in callables]
-    def prog(x, y, temp, fns=callables):
+    def prog(x, y, fns=callables):
         z = x
         for f in fns:
-            z = f(z, y, temp)
+            z = f(z, y)
         return z
     return CompiledMorphism(prog, name=f"chain({' >> '.join(names)})")
 
@@ -196,15 +196,15 @@ def chain_with_augments(steps: list[tuple[str, Callable]]) -> Callable:
     29, 823–858.  cite{shen2021}
     """
     names = [getattr(fn, 'name', repr(fn)) for _, fn in steps]
-    def prog(x, y, temp, _steps=steps):
+    def prog(x, y, _steps=steps):
         z = x
         y_cur = y
         for kind, fn in _steps:
             if kind == 'augment':
-                aug = fn(z, y_cur, temp)
+                aug = fn(z, y_cur)
                 y_cur = {**y_cur, **aug}
             else:
-                z = fn(z, y_cur, temp)
+                z = fn(z, y_cur)
         return z
     return CompiledMorphism(prog, name=f"chain({' >> '.join(names)})")
 
@@ -220,8 +220,8 @@ def fan(branches: dict[str, Callable], merge: Callable) -> Callable:
     *Rendiconti del Seminario Matematico e Fisico di Milano*, XLIII, 135–166.  cite{lawvere1973}
     """
     branch_names = list(branches.keys())
-    def prog(x, y, temp, branches=branches, merge=merge):
-        return merge({name: fn(x, y, temp) for name, fn in branches.items()})
+    def prog(x, y, branches=branches, merge=merge):
+        return merge({name: fn(x, y) for name, fn in branches.items()})
     return CompiledMorphism(prog, name=f"fan({' & '.join(branch_names)})")
 
 
@@ -236,12 +236,12 @@ def explain(path_name: str, names: list[str],
 
 
 def trace(names: list[str], morphism_callables: dict[str, Callable],
-          equations: dict[str, str], x, y, temp: float = 0.0) -> list[tuple]:
+          equations: dict[str, str], x, y) -> list[tuple]:
     """Execute step-by-step, returning ``(name, equation, shape, value)`` rows."""
     rows = [("input", None, getattr(x, "shape", None), x)]
     z = x
     for name in names:
-        z = morphism_callables[name](z, y, temp)
+        z = morphism_callables[name](z, y)
         rows.append((name, equations.get(name), getattr(z, "shape", None), z))
     return rows
 

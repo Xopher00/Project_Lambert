@@ -84,12 +84,12 @@ def register_primitives(
         eq = compiled_equations.get(m_name, "")
 
         if m_decl['arity'] in ("unary", "pointwise"):
-            bound_op = lambda x, _op=op_fn, _eq=eq: _op(_eq, x, temp=0.0)
+            bound_op = lambda x, _op=op_fn: _op(x)
             primitives[prim_name] = prims.prim1(
                 prim_name, bound_op, [], nd, nd
             )
         else:
-            bound_op = lambda x, y, _op=op_fn, _eq=eq: _op(_eq, x, y, temp=0.0)
+            bound_op = lambda x, y, _op=op_fn, _eq=eq: _op(_eq, x, y)
             primitives[prim_name] = prims.prim2(
                 prim_name, bound_op, [], nd, nd, nd
             )
@@ -110,7 +110,7 @@ def register_primitives(
 
         primitives[prim_name] = prims.prim3(
             prim_name,
-            lambda eq_str, x, y, _c=contract: _c(eq_str, x, y, temp=0.0),
+            lambda eq_str, x, y, _c=contract: _c(eq_str, x, y),
             [],
             prims.string(), nd, nd, nd,
         )

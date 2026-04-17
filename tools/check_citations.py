@@ -53,6 +53,7 @@ def collect_py_files(roots: list[str]) -> list[Path]:
     self_path = Path(__file__).resolve()
     return [p for p in paths
             if "venv" not in p.parts
+            and ".venv" not in p.parts
             and "__pycache__" not in p.parts
             and p.resolve() != self_path]
 

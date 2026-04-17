@@ -18,6 +18,8 @@ import pytest
 
 from legacy.lattice.embed import Learner
 
+pytestmark = pytest.mark.legacy
+
 
 # ---------------------------------------------------------------------------
 # Helpers

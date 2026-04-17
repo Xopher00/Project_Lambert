@@ -183,8 +183,11 @@ class Interpreter:
     def __init__(self, functor: Functor, cell: Callable, params, temp=0.0):
         self.functor = functor
         self.cell    = cell
-        self.params  = params
         self.temp    = temp
+        if temp != 0.0:
+            self.params = {'_temp': temp, **params}
+        else:
+            self.params = params
 
     def run_algebra(self, data, decompose: Callable):
         """Fold a tree via catamorphism (initial algebra evaluation).
@@ -209,7 +212,7 @@ class Interpreter:
             )
 
         child_results = [self.run_algebra(c, decompose) for c in children]
-        return self.cell(case_name, payload, child_results, self.params, self.temp)
+        return self.cell(case_name, payload, child_results, self.params)
 
     def run_coalgebra(self, state, token_iter=None, stop: Callable = None,
                       accumulate_specs: dict | None = None,
@@ -250,7 +253,7 @@ class Interpreter:
                     break
 
             params = acc.inject_into_params(self.params)
-            result = self.cell(state, token, params, self.temp)
+            result = self.cell(state, token, params)
             case   = self.functor[result.case_name]
 
             if case.recursive != 1:
