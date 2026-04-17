@@ -19,7 +19,7 @@ from core.tensor import Tensor
 from core.activations import Activations
 from core.algebra import Bottom, Top
 
-pytestmark = pytest.mark.engine
+pytestmark = pytest.mark.core
 
 # A single shared Tensor instance (stateless for these tests).
 T = Tensor(temp=0.0)
