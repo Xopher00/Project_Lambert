@@ -227,6 +227,12 @@ def morphism_type() -> Type:
         types.field("templateParams", types.list_(types.string())),
         types.field("semiring", types.string()),
         types.field("equation", types.string()),
+        types.field("op", types.string()),
+        types.field("transform", types.string()),
+        types.field("compiler", types.string()),
+        types.field("accumulate", types.string()),
+        types.field("accumulateFields", types.list_(types.string())),
+        types.field("templateParam", types.string()),
     ])
 
 
@@ -239,6 +245,7 @@ def path_type() -> Type:
         types.field("name", types.string()),
         types.field("morphisms", types.list_(types.string())),
         types.field("residual", types.boolean()),
+        types.field("normed", types.string()),
     ])
 
 
@@ -250,6 +257,7 @@ def fan_type() -> Type:
     return types.record_with_name(Name("ua.engine.Fan"), [
         types.field("name", types.string()),
         types.field("branches", types.list_(types.string())),
+        types.field("merge", types.string()),
     ])
 
 
@@ -263,6 +271,10 @@ def case_type() -> Type:
         types.field("name", types.string()),
         types.field("recursive", types.int32()),
         types.field("data", types.int32()),
+        types.field("output", types.int32()),
+        types.field("cell", types.string()),
+        types.field("caseMorphisms", types.list_(types.string())),
+        types.field("iterate", types.string()),
     ])
 
 
@@ -274,9 +286,15 @@ def arch_type() -> Type:
     """
     return types.record_with_name(Name("ua.engine.Arch"), [
         types.field("name", types.string()),
-        types.field("cases", types.maybe(types.list_(types.string()))),
+        types.field("cases", types.list_(types.string())),
         types.field("stepEnter", types.maybe(types.string())),
         types.field("stepEmit", types.maybe(types.string())),
+        types.field("algebraCell", types.string()),
+        types.field("observerConvergence", types.string()),
+        types.field("observerLoss", types.string()),
+        types.field("stepCompute", types.string()),
+        types.field("stateFieldNames", types.list_(types.string())),
+        types.field("stateFieldTypes", types.list_(types.string())),
     ])
 
 

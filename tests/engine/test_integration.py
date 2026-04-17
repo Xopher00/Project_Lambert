@@ -409,6 +409,126 @@ morphism f : tensor -> tensor  via "x"  arity unary  op ops.double
         expected = double_op(arr)
         np.testing.assert_array_equal(recovered.value, expected)
 
+    def test_reduce_binary_morphism(self):
+        """reduce_term evaluates a binary (prim2) op-override morphism end-to-end."""
+        from engine.compiler import compile as engine_compile
+        from engine.sorts import _ndarray_decode, _ndarray_encode, _bundle_decode
+        from hydra.reduction import reduce_term
+        from hydra.core import TermApplication, Application, TermVariable
+        from hydra.context import Context
+        from hydra.dsl.python import FrozenDict
+
+        def proj_op(eq, x, bundle):
+            return np.einsum(eq, x, bundle['W']) + bundle['b']
+
+        ns = {
+            'ops': type('ns', (), {
+                'proj': staticmethod(proj_op),
+                'identity': staticmethod(lambda eq, x, y=None: x),
+            })()
+        }
+
+        src = """
+semiring s:
+    contract = ops.identity
+
+sort a, b
+
+morphism proj : a -> b via "ij,jk->ik" op ops.proj
+"""
+        arch = engine_compile(src, ns)
+        assert arch._hydra_primitives, "No primitives registered"
+
+        prim_name = next(iter(arch._hydra_primitives.keys()))
+        graph = arch.graph
+
+        rng = np.random.default_rng(0)
+        x = rng.standard_normal((2, 3)).astype(np.float32)
+        bundle = {
+            'W': rng.standard_normal((3, 4)).astype(np.float32),
+            'b': np.zeros(4, dtype=np.float32),
+        }
+
+        x_term_result = _ndarray_decode(None, x)
+        assert isinstance(x_term_result, Right)
+        x_term = x_term_result.value
+
+        bundle_term_result = _bundle_decode(None, bundle)
+        assert isinstance(bundle_term_result, Right)
+        bundle_term = bundle_term_result.value
+
+        cx = Context(trace=(), messages=(), other=FrozenDict({}))
+        application = TermApplication(Application(
+            TermApplication(Application(TermVariable(prim_name), x_term)),
+            bundle_term,
+        ))
+
+        result = reduce_term(cx, graph, True, application)
+        assert isinstance(result, Right), f"reduce_term failed: {result}"
+
+        recovered = _ndarray_encode(None, None, result.value)
+        assert isinstance(recovered, Right)
+        expected = proj_op("ij,jk->ik", x, bundle)
+        np.testing.assert_allclose(recovered.value, expected, rtol=1e-5)
+
+    def test_reduce_semiring_contract_morphism(self):
+        """reduce_term evaluates a prim3 semiring-contract morphism end-to-end."""
+        from engine.compiler import compile as engine_compile
+        from engine.sorts import _ndarray_decode, _ndarray_encode, _bundle_decode
+        from hydra.reduction import reduce_term
+        from hydra.core import TermApplication, Application, TermVariable, TermLiteral, LiteralString
+        from hydra.context import Context
+        from hydra.dsl.python import FrozenDict
+
+        def matmul_contract(eq, x, y):
+            return np.einsum(eq, x, y['W'])
+
+        ns = {
+            'ops': type('ns', (), {
+                'matmul_contract': staticmethod(matmul_contract),
+            })(),
+        }
+
+        src = """
+semiring s:
+    contract = ops.matmul_contract
+
+sort a, b
+
+morphism proj : a -> b via "ij,jk->ik"
+"""
+        arch = engine_compile(src, ns)
+        assert arch._hydra_primitives, "No prim3 primitives registered"
+
+        prim_name = next(iter(arch._hydra_primitives.keys()))
+        graph = arch.graph
+
+        x = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+        bundle = {'W': np.array([[0.5, 0.0], [0.0, 0.5]], dtype=np.float32)}
+
+        eq_term = TermLiteral(LiteralString("ij,jk->ik"))
+
+        x_result = _ndarray_decode(None, x)
+        assert isinstance(x_result, Right)
+        x_term = x_result.value
+
+        bundle_result = _bundle_decode(None, bundle)
+        assert isinstance(bundle_result, Right)
+        bundle_term = bundle_result.value
+
+        app1 = TermApplication(Application(TermVariable(prim_name), eq_term))
+        app2 = TermApplication(Application(app1, x_term))
+        app3 = TermApplication(Application(app2, bundle_term))
+
+        cx = Context(trace=(), messages=(), other=FrozenDict({}))
+        result = reduce_term(cx, graph, True, app3)
+        assert isinstance(result, Right), f"reduce_term failed: {result}"
+
+        recovered = _ndarray_encode(None, None, result.value)
+        assert isinstance(recovered, Right)
+        expected = matmul_contract("ij,jk->ik", x, bundle)
+        np.testing.assert_allclose(recovered.value, expected, atol=1e-6)
+
 
 # ---------------------------------------------------------------------------
 # TestArchRewriting
@@ -501,3 +621,84 @@ class TestArchRewriting:
         # Equation should be unchanged
         rewritten_eq = rewritten_fields['equation']
         assert rewritten_eq.value.value == 'sd,dh->sh'
+
+
+# ---------------------------------------------------------------------------
+# TestGraphSwap
+# ---------------------------------------------------------------------------
+
+class TestGraphSwap:
+    """Verify closure execution and Hydra reduction agree for a binary morphism.
+
+    Tests the graph-swap backend pattern: swapping numpy for torch (or any
+    backend) must not change semantics.  Both paths must return the same
+    numerical result.
+    """
+
+    @pytest.fixture
+    def compiled(self):
+        from engine.compiler import compile as engine_compile
+
+        def _proj_op(eq, x, bundle):
+            return np.einsum(eq, x, bundle['W']) + bundle['b']
+
+        def _identity_contract(eq, x, y):
+            return x
+
+        ns = {
+            'ops': type('ns', (), {
+                'proj_op': staticmethod(_proj_op),
+                'identity_contract': staticmethod(_identity_contract),
+            })(),
+        }
+
+        src = """
+semiring s:
+    contract = ops.identity_contract
+
+sort a, b
+
+morphism proj : a -> b via "ij,jk->ik" op ops.proj_op
+"""
+        return engine_compile(src, ns)
+
+    def test_closure_and_reduction_agree(self, compiled):
+        from engine.sorts import _ndarray_decode, _ndarray_encode, _bundle_decode
+        from hydra.reduction import reduce_term
+        from hydra.core import TermApplication, Application, TermVariable
+
+        np.random.seed(42)
+        x = np.random.randn(2, 3).astype(np.float32)
+        bundle = {
+            'W': np.random.randn(3, 4).astype(np.float32),
+            'b': np.zeros(4, dtype=np.float32),
+        }
+
+        # Path A: Python closure
+        result_closure = compiled.paths['proj'](x, bundle)
+
+        # Path B: Hydra reduction
+        assert compiled._hydra_primitives, "No Hydra primitives registered"
+        prim_name = next(iter(compiled._hydra_primitives.keys()))
+
+        x_result = _ndarray_decode(None, x)
+        assert isinstance(x_result, Right), f"_ndarray_decode failed: {x_result}"
+        x_term = x_result.value
+
+        bundle_result = _bundle_decode(None, bundle)
+        assert isinstance(bundle_result, Right), f"_bundle_decode failed: {bundle_result}"
+        bundle_term = bundle_result.value
+
+        # prim2 is curried: prim_name(x)(bundle)
+        inner = TermApplication(Application(TermVariable(prim_name), x_term))
+        application = TermApplication(Application(inner, bundle_term))
+
+        cx = Context(trace=(), messages=(), other=FrozenDict({}))
+        result = reduce_term(cx, compiled.graph, True, application)
+        assert isinstance(result, Right), f"reduce_term failed: {result}"
+
+        recovered = _ndarray_encode(None, None, result.value)
+        assert isinstance(recovered, Right), f"_ndarray_encode failed: {recovered}"
+        result_reduction = recovered.value
+
+        np.testing.assert_allclose(result_closure, result_reduction, rtol=1e-5)

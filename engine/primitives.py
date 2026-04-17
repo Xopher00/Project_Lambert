@@ -63,11 +63,12 @@ def register_primitives(
     Green, T. J., Karvounarakis, G., & Tannen, V. (2007). Provenance semirings.
     PODS 2007, pp. 31–40.  cite{green2007}
     """
-    from engine.sorts import ndarray_coder
+    from engine.sorts import ndarray_coder, bundle_coder
     from hydra.dsl import prims
 
     primitives: dict = {}
     nd = ndarray_coder()
+    bc = bundle_coder()
 
     # --- morphism op overrides -----------------------------------------------
     for m_name, m_decl in morphism_decls.items():
@@ -91,7 +92,7 @@ def register_primitives(
         else:
             bound_op = lambda x, y, _op=op_fn, _eq=eq: _op(_eq, x, y)
             primitives[prim_name] = prims.prim2(
-                prim_name, bound_op, [], nd, nd, nd
+                prim_name, bound_op, [], nd, bc, nd
             )
 
     # --- semiring-contract morphisms (equation baked in) ---------------------
@@ -112,7 +113,7 @@ def register_primitives(
             prim_name,
             lambda eq_str, x, y, _c=contract: _c(eq_str, x, y),
             [],
-            prims.string(), nd, nd, nd,
+            prims.string(), nd, bc, nd,
         )
 
     return primitives

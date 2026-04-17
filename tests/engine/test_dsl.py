@@ -4,37 +4,12 @@ import warnings
 import numpy as np
 import pytest
 from engine import parse, compile, DSLSource, ArchDef
-from engine.compiler import _tterm_fields, _str_val, _int_val, _str_list_val, _bool_val
+from engine.compiler import _tterm_fields, _str_val, _int_val, _str_list_val, _bool_val, _opt_str_val
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _tf(tterm) -> dict:
-    """Extract raw field dict from any parsed TTerm. Values are Python primitives."""
-    tf = _tterm_fields(tterm)
-    result = {}
-    for k, v in tf.items():
-        # Try string first, fall back to int, then bool
-        try:
-            s = _str_val(v)
-            result[k] = s if s != "" else None
-            continue
-        except Exception:
-            pass
-        try:
-            result[k] = _int_val(v)
-            continue
-        except Exception:
-            pass
-        try:
-            result[k] = _bool_val(v)
-            continue
-        except Exception:
-            pass
-        result[k] = v  # leave as-is for lists etc.
-    return result
 
 
 def _mf(m) -> dict:
@@ -77,17 +52,6 @@ def _ff(f) -> dict:
     }
 
 
-def _opt_str(term) -> "str | None":
-    """Extract Python str from a TermMaybe(Just(string)) or return None for Nothing."""
-    from hydra.core import TermMaybe
-    from hydra.dsl.python import Just
-    if isinstance(term, TermMaybe):
-        if isinstance(term.value, Just):
-            return _str_val(term.value.value)
-        return None
-    return None
-
-
 def _af(a) -> dict:
     """Extract arch fields (top-level only, not case internals)."""
     from hydra.core import TermList
@@ -97,8 +61,8 @@ def _af(a) -> dict:
     return {
         'name':                _str_val(tf['name']),
         'cases':               [_cf(c) for c in case_list],
-        'step_enter':          _opt_str(tf['stepEnter']),
-        'step_emit':           _opt_str(tf['stepEmit']),
+        'step_enter':          _opt_str_val(tf['stepEnter']),
+        'step_emit':           _opt_str_val(tf['stepEmit']),
         'algebra_cell':        _str_val(tf['algebraCell']) or None,
         'observer_convergence': _str_val(tf['observerConvergence']) or None,
         'observer_loss':       _str_val(tf['observerLoss']) or None,
