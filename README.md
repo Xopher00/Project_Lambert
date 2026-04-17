@@ -83,58 +83,22 @@ core/
   activations.py  — temperature-controlled smooth operators (LogSumExp, SmoothMax, SmoothMin, SoftMax)
   fixpoint.py     — FixpointIterator: iterates any operator to convergence with energy-derived temperature annealing
   tensor.py       — relational operations (Join, Residuate, Closure) built on top of Activations
-
-engine/                      — active development: architecture DSL and compiler
-  __init__.py     — public surface (Arch, compile, run)
-  arch.py         — Arch declaration: named cases, fan-outs, and augment combinators
-  compiler.py     — compiles Arch declarations into an executable functor tree
-  terms.py        — DSL term AST (Morphism, Sort, Arch node types)
-  sorts.py        — SortDecl: sort declarations and field schemas
-  runtime.py      — MorphismSpec and runtime execution structures
-  functor.py      — algebra / coalgebra functor types; interpreter loop
-  primitives.py   — built-in primitive combinators available to the DSL
-  parser.py       — S-expression parser for DSL source strings
-
-streamlined/
-  __init__.py
-  composer.py     — high-level composition helpers
-  relational_einsum.py — einsum-style relational ops
-
-architectures/               — example .ua architecture files
-  mealy.ua        — Mealy machine (stateful transducer)
-  rnn_fold.ua     — RNN (algebra fold)
-  rnn_stream.ua   — RNN (coalgebra stream)
-  tree_rnn.ua     — tree-structured RNN
-
-legacy/
-  lattice/
-    embed.py      — concept embedding: selects representative formal concepts from a relation matrix
-    attention.py  — single-head and multi-head retrieval over concept embeddings via fixpoint iteration
-    explorer.py   — CategoryExplorer: systematic discovery and closure of the full concept lattice
-  model.py        — Lambert: top-level pipeline (chunking, embedding, exploration, feature mapping)
-  query.py        — Query: high-level interface for entity and feature retrieval with provenance
-  lattice.py      — earlier Concept/Lattice utilities, superseded by lattice/
-  language.py     — LLM-based category labeller (not currently wired into the pipeline)
-  provenance/     — retired witness-based proof tree implementation
 ```
 
-The `tests/` directory contains Python test files (`test_core.py`, `test_embed.py`, `test_learn.py`, `test_multihop.py`, `test_query.py`, `engine/`) and Jupyter notebooks for exploratory experiments. Research notes are in `research/`.
+`tests/test_core.py` verifies Join, Residuate, Closure, and SoftMax against known
+correct values. `tests/` also contains Jupyter notebooks for exploratory experiments.
+
+## Related repositories
+
+- [unified-algebra](https://github.com/Xopher00/unified-algebra) — Hydra-first DSL engine for expressing any ML architecture over a semiring
+- [research-library](https://github.com/Xopher00/research-library) — papers, bibliography, and theoretical foundations
 
 ## Status
 
-Active development is focused on the **engine DSL** (`engine/`): a domain-specific language for expressing arbitrary AI architectures over semirings, compiled to a functor/coalgebra tree and interpreted by a fixpoint loop. The DSL can express relational composition, concept embedding, multi-head attention, and KV-cache streaming as declarative algebra and coalgebra cases, eliminating hand-written Python cells for most architecture patterns.
+The core stack (`core/`) is stable and tested. It implements the foundational
+relational algebra — Join, Residuate, Closure — with temperature-controlled smooth
+approximations and fixpoint convergence. This is the mathematical layer that everything
+else builds on.
 
-The original lattice pipeline — relational algebra, concept embedding, multi-head attention, lattice exploration, and the `Lambert`/`Query` interface — is preserved in `legacy/` as a reference implementation. It is functional and documents the design that the engine DSL is intended to generalise.
-
-**Known gaps (engine DSL):**
-
-- Final layer norm: the algebra path uses identity gamma/beta; the coalgebra `stream_cell` uses learned parameters. They agree only when parameters are initialised to identity. Fix requires a `ln_final` binary morphism passing final LN params as the case payload.
-- `stream_cell` is the last remaining hand-written Python cell (coalgebra). It handles token embedding, per-layer KV cache iteration, final LN, and unembed. The per-layer loop is the blocking case for full DSL elimination.
-- Structured sorts (`SortDecl` with named fields) are parsed and compiled but no compilation phase consumes the field info yet.
-
-**Active research directions:**
-
-- Eliminating `stream_cell` via a DSL construct for stateful iteration over layers with persistent KV cache
-- Scaling the engine DSL to express multi-hop inference chains across relation types (`EmbR` Tucker core)
-- Connecting Lambert's max-min algebra to standard transformer arithmetic — characterising what transformers approximate in max-min terms and what is lost
-- Scaling to large medical and scientific knowledge graphs
+Active development has moved to [unified-algebra](https://github.com/Xopher00/unified-algebra):
+a Hydra-first DSL for expressing arbitrary ML architectures over semirings declaratively.
