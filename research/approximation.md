@@ -84,11 +84,11 @@ Put directly: you can have a smooth operation, or an idempotent one, but not bot
 - Fuzzy $\max$ and $\min$ are idempotent. They are not differentiable at $a = b$.
 
 | Operation | Idempotent | Differentiable everywhere |
-|-----------|-----------|--------------------------|
-| $+$ | No | Yes |
-| $\times$ | No | Yes |
-| $\max$ | Yes | No |
-| $\min$ | Yes | No |
+| --------- | ---------- | ------------------------- |
+| $+$       | No         | Yes                       |
+| $\times$  | No         | Yes                       |
+| $\max$    | Yes        | No                        |
+| $\min$    | Yes        | No                        |
 
 ### The consequence
 
